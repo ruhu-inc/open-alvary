@@ -26,7 +26,7 @@ import httpx
 from fastapi import HTTPException, Request
 
 from ingestion import settings
-from workbench.store import Store
+from workbench.store import Store, session_max_age
 
 COOKIE = "oa_review_session"
 FLOW_COOKIE = "oa_review_flow"  # binds a sign-in to the browser that started it
@@ -155,11 +155,16 @@ def current(request: Request, store: Store, *, write: bool = False, role: str | 
     return found
 
 
-def cookie_options(request: Request) -> dict:
+def cookie_options(request: Request, max_age: int | None = None) -> dict:
     return {
         "httponly": True,
         "samesite": "strict",
         "secure": not is_loopback(request),
         "path": "/",
-        "max_age": 12 * 3600,
+        "max_age": 12 * 3600 if max_age is None else int(max_age),
     }
+
+
+def cookie_max_age(operator: dict | None) -> int:
+    """Session cookie max_age in seconds for this operator (7 days for agents, 12h otherwise)."""
+    return session_max_age(operator)

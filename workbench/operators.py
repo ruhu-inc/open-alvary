@@ -66,8 +66,42 @@ def install(app: FastAPI, store: Store, relying: RelyingParty | None) -> None:
         existing = next((o for o in store.operators() if o["email"] == email), None)
         if existing and ROLE in existing["roles"] and ROLE not in roles and not other_admins(email):
             refuse(409, "last_admin", "This is the last administrator: make someone else one first.")
-        store.add_operator(email, name, roles, actor=found["email"])
+        agent = bool(body["agent"]) if "agent" in body else None
+        may_change_approved = bool(body["may_change_approved"]) if "may_change_approved" in body else None
+        try:
+            store.add_operator(
+                email,
+                name,
+                roles,
+                actor=found["email"],
+                agent=agent,
+                may_change_approved=may_change_approved,
+            )
+        except ValueError as error:
+            refuse(409, "invalid_agent_roles", str(error))
         return {"ok": True, "added": existing is None}
+
+    @app.get("/api/operators/{email}/sessions")
+    def sessions(request: Request, email: str):
+        """Live sessions for an operator; requires admin role and a fresh passkey check."""
+        fresh(administrator(request))
+        person = target(email)
+        return {"email": person["email"], "sessions": store.list_sessions(person["email"])}
+
+    @app.post("/api/operators/{email}/sessions/end-all")
+    def end_all_sessions(request: Request, email: str):
+        found = administrator(request, write=True)
+        person = target(email)
+        ended = store.end_all_sessions(person["email"], actor=found["email"])
+        return {"ok": True, "ended": ended}
+
+    @app.post("/api/operators/{email}/sessions/{short_id}/end")
+    def end_session(request: Request, email: str, short_id: str):
+        found = administrator(request, write=True)
+        person = target(email)
+        if not store.end_session_by_id(person["email"], short_id, actor=found["email"]):
+            refuse(404, "not_found", "No active session with that id.")
+        return {"ok": True}
 
     @app.post("/api/operators/{email}/active")
     def activation(request: Request, email: str, body: dict = JSON_BODY):

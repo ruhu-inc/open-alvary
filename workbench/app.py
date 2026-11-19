@@ -10,9 +10,11 @@ import hmac
 import html
 import os
 import re
-from datetime import UTC, datetime
+import threading
+import time
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from urllib.parse import parse_qs, quote, urlsplit
+from urllib.parse import parse_qs, quote, unquote, urlsplit
 
 from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.responses import (
@@ -24,6 +26,8 @@ from fastapi.responses import (
     Response,
 )
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import func, select, update
+from sqlalchemy import text as sql_text
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from ingestion import cited_names, render, settings
@@ -34,6 +38,7 @@ from workbench import (
     akn,
     auth,
     citations,
+    claims,
     content,
     details,
     editorial,
@@ -43,16 +48,32 @@ from workbench import (
     record_view,
     serialize,
 )
+from workbench import audit as audit_mod
 from workbench import operators as operators_section
 from workbench import publishing as publishing_section
 from workbench import traffic as traffic_section
-from workbench.review import Review, blind, to_do
-from workbench.store import Conflict, Store, engine_from_environment
+from workbench.review import Review, blind, status_research_pending, to_do
+from workbench.store import (
+    Conflict,
+    Store,
+    _aware,
+    approval,
+    blocked_label,
+    detail_revision,
+    digest,
+    engine_from_environment,
+    page_revision,
+    review_audit,
+    work_claim,
+    work_release,
+)
+from workbench.store import now as store_now
 
 STATIC = Path(__file__).with_name("static")
 DECISIONS = {"keep", "use_check", "edited", "dismissed"}
 SENTENCE_END = re.compile(r"[.;:!?—–]['’”\")\]]*$")  # a page ending here finishes its paragraph
 JSON_BODY = Body(...)
+OPTIONAL_JSON_BODY = Body(default=None)
 # In place of a page image for a document published as a web page (a National Industrial Court judgment),
 # which has none: the reviewer compares the text with the official page itself.
 WEB_PAGE_IMAGE = (
@@ -93,6 +114,19 @@ def create_app(
     @app.middleware("http")
     async def headers(request: Request, call_next):
         response = await call_next(request)
+        if (
+            response.status_code < 400
+            and request.url.path.startswith("/api/documents/")
+            and request.headers.get("X-Claim-Token")
+            and request.cookies.get(auth.COOKIE)
+        ):
+            parts = request.url.path.split("/")
+            if len(parts) >= 4 and parts[3]:
+                _touch_claim_on_activity(
+                    unquote(parts[3]),
+                    request.cookies[auth.COOKIE],
+                    request.headers["X-Claim-Token"],
+                )
         for name, value in SECURITY_HEADERS.items():
             response.headers.setdefault(name, value)
         if request.url.scheme == "https":
@@ -156,12 +190,15 @@ def create_app(
             )
             return back_to_sign_in(reason)
         token, _ = store.start_session(email)
+        operator = store.operator(email)
         # A same-site navigation home, so the strict session cookie is sent with it.
         response = HTMLResponse(
             "<!doctype html><meta charset='utf-8'><meta http-equiv='refresh' content='0;url=/'>"
             "<p>Signed in. <a href='/'>Continue</a></p>"
         )
-        response.set_cookie(auth.COOKIE, token, **auth.cookie_options(request))
+        response.set_cookie(
+            auth.COOKIE, token, **auth.cookie_options(request, max_age=auth.cookie_max_age(operator))
+        )
         response.delete_cookie(auth.FLOW_COOKIE, path="/auth")
         return response
 
@@ -170,11 +207,14 @@ def create_app(
         if not dev_login or not auth.is_loopback(request):
             raise HTTPException(404, "Not available")
         email = str(body.get("email", "")).strip().lower()
-        if not store.operator(email):
+        operator = store.operator(email)
+        if not operator:
             raise HTTPException(403, "Not an operator")
         token, _ = store.start_session(email)
         response = JSONResponse({"ok": True})
-        response.set_cookie(auth.COOKIE, token, **auth.cookie_options(request))
+        response.set_cookie(
+            auth.COOKIE, token, **auth.cookie_options(request, max_age=auth.cookie_max_age(operator))
+        )
         return response
 
     @app.post("/auth/logout")
@@ -254,6 +294,233 @@ def create_app(
     review = Review(store, library, profiles)
     details_key, described, built, state = review.details_key, review.described, review.built, review.state
     shown_title = review.shown_title
+
+    def work_documents(work_id: str) -> list[dict]:
+        return [d for d in library.documents() if details_key(d) == work_id]
+
+    def sibling_act_ids(act: dict) -> set[str]:
+        work_id = details_key(act)
+        ids = {act["id"]} | {d["id"] for d in work_documents(work_id)}
+        for other in (act.get("versions") or {}).values():
+            if other:
+                ids.add(str(other))
+        return ids
+
+    def current_claim(work_id: str) -> dict | None:
+        with store.engine.connect() as db:
+            cutoff = sql_text("CURRENT_TIMESTAMP") if db.dialect.name == "postgresql" else store_now()
+            row = db.execute(
+                select(work_claim).where(work_claim.c.work_id == work_id, work_claim.c.expires_at > cutoff)
+            ).first()
+        if row is None:
+            return None
+        return {
+            "work_id": row.work_id,
+            "account": row.account,
+            "label": row.label,
+            "task": row.task,
+            "claimed_at": _aware(row.claimed_at).isoformat(),
+            "renewed_at": _aware(row.renewed_at).isoformat(),
+            "expires_at": _aware(row.expires_at).isoformat(),
+        }
+
+    def _touch_claim_on_activity(act_id: str, session_cookie: str, claim_token: str) -> None:
+        """Renew an active claim on signed-in /api/documents/{act_id}/... activity (at most once/min)."""
+        if not claim_token or not library.has(act_id):
+            return
+        who = store.resume(session_cookie)
+        if not who:
+            return
+        account = who["email"].strip().lower()
+        work_id = details_key(library.listed(act_id))
+        token_hash = digest(claim_token)
+        minutes = claims.claim_minutes()
+        with store.engine.begin() as db:
+            row = db.execute(select(work_claim).where(work_claim.c.work_id == work_id)).first()
+            if row is None or row.account != account or not hmac.compare_digest(row.token_hash, token_hash):
+                return
+            if claims.is_label_blocked(db, account, row.label):
+                return
+            moment = store_now()
+            if _aware(row.expires_at) > moment and moment - _aware(row.renewed_at) < timedelta(seconds=60):
+                return
+            if db.dialect.name == "postgresql":
+                db.execute(
+                    sql_text(
+                        "UPDATE work_claim "
+                        "   SET renewed_at = CURRENT_TIMESTAMP, "
+                        "       expires_at = CURRENT_TIMESTAMP + make_interval(mins => :minutes) "
+                        " WHERE work_id = :work_id AND token_hash = :token_hash"
+                    ),
+                    {"minutes": minutes, "work_id": work_id, "token_hash": token_hash},
+                )
+            else:
+                db.execute(
+                    update(work_claim)
+                    .where(work_claim.c.work_id == work_id, work_claim.c.token_hash == token_hash)
+                    .values(renewed_at=moment, expires_at=moment + timedelta(minutes=minutes))
+                )
+
+    work_cache_lock = threading.Lock()
+    work_cache: dict = {"at": 0.0, "snapshot": None, "evicted": set()}
+
+    def _invalidate_work_cache() -> None:
+        with work_cache_lock:
+            work_cache["at"] = 0.0
+            work_cache["snapshot"] = None
+            work_cache["evicted"] = set()
+
+    def _evict_work(work_id: str) -> None:
+        with work_cache_lock:
+            work_cache["evicted"].add(work_id)
+
+    work_index_cache: dict = {"key": None, "index": None}
+
+    def _work_index() -> tuple[dict, dict]:
+        """The collection's works, each with its documents, size and place in the queue: made once for
+        a list of documents, from their manifest entries alone. No reading is opened here. Opening
+        each document's reading to count its pages, on every call, took 0.4 s for 160 documents and
+        would take minutes for a collection of tens of thousands (load test, 2026-11-19)."""
+        documents = library.documents()
+        key = (id(documents), len(documents))
+        with work_cache_lock:
+            if work_index_cache["key"] == key:
+                return work_index_cache["index"]
+        grouped: dict[str, list[dict]] = {}
+        doc_to_work: dict[str, str] = {}
+        for doc in documents:
+            wid = details_key(doc)
+            grouped.setdefault(wid, []).append(doc)
+            doc_to_work[doc["id"]] = wid
+        works_by_id: dict[str, dict] = {}
+        for wid, docs in grouped.items():
+            docs.sort(key=lambda d: d["id"])
+            known = [d.get("page_count") for d in docs]
+            works_by_id[wid] = {
+                "work_id": wid,
+                "docs": docs,
+                # None where a manifest entry gives no count: counted once, when a limit asks (_work_pages).
+                "total_pages": sum(int(n) for n in known) if all(n is not None for n in known) else None,
+                "jurisdictions": {str(d.get("jurisdiction") or "").lower() for d in docs},
+                "kinds": {str(d.get("type") or d.get("document_type") or "").lower() for d in docs},
+                "importance": min(queue.importance(d) for d in docs),
+            }
+        with work_cache_lock:
+            work_index_cache["key"], work_index_cache["index"] = key, (works_by_id, doc_to_work)
+        return works_by_id, doc_to_work
+
+    def _work_pages(work: dict) -> int:
+        """A work's pages in all its documents; read from the readings once where the manifest is silent."""
+        if work["total_pages"] is None:
+            total = 0
+            for d in work["docs"]:
+                count = d.get("page_count")
+                if count is None:
+                    try:
+                        count = len(library.reading(d["id"])["pages"])
+                    except Exception:  # noqa: BLE001 - a reading that cannot be opened has no pages to count
+                        count = 0
+                total += int(count or 0)
+            work["total_pages"] = total
+        return work["total_pages"]
+
+    def _cached_work_snapshot() -> tuple[dict, set[str]]:
+        """10-second cached work index, stamps, live claims, approved/parked sets for claim-next (§4.6)."""
+        now_mono = time.monotonic()
+        with work_cache_lock:
+            if work_cache["snapshot"] is not None and now_mono - work_cache["at"] < 10.0:
+                return work_cache["snapshot"], set(work_cache["evicted"])
+
+        works_by_id, doc_to_work = _work_index()
+
+        activity = store.activity_stamps()
+        details_stamps = store.detail_stamps()
+        live_claims = {c["work_id"] for c in claims.list_claims(store, include_expired=False)}
+
+        with store.engine.connect() as db:
+            latest_app = (
+                select(approval.c.act_id, func.max(approval.c.revision).label("rev"))
+                .group_by(approval.c.act_id)
+                .subquery()
+            )
+            approved_acts = {
+                row.act_id
+                for row in db.execute(
+                    select(approval.c.act_id)
+                    .join(
+                        latest_app,
+                        (approval.c.act_id == latest_app.c.act_id)
+                        & (approval.c.revision == latest_app.c.rev),
+                    )
+                    .where(approval.c.decision == "approved")
+                )
+            }
+            approved_works = {doc_to_work[a] for a in approved_acts if a in doc_to_work}
+
+            latest_rel = (
+                select(work_release.c.work_id, func.max(work_release.c.id).label("id"))
+                .group_by(work_release.c.work_id)
+                .subquery()
+            )
+            parked_works = {
+                row.work_id
+                for row in db.execute(
+                    select(work_release.c.work_id)
+                    .join(
+                        latest_rel,
+                        (work_release.c.work_id == latest_rel.c.work_id)
+                        & (work_release.c.id == latest_rel.c.id),
+                    )
+                    .where(work_release.c.outcome == "parked")
+                )
+            }
+
+        snapshot = {
+            "works_by_id": works_by_id,
+            "doc_to_work": doc_to_work,
+            "activity": activity,
+            "details_stamps": details_stamps,
+            "live_claims": live_claims,
+            "approved_works": approved_works,
+            "parked_works": parked_works,
+        }
+        with work_cache_lock:
+            work_cache["at"] = time.monotonic()
+            work_cache["snapshot"] = snapshot
+            work_cache["evicted"] = set()
+            return snapshot, set()
+
+    def _claim_response(claimed: dict, *, pages_drawn_by_doc: dict[str, list[int]] | None = None) -> dict:
+        wid = claimed["work_id"]
+        out_docs = []
+        for doc in work_documents(wid):
+            pages_count = doc.get("page_count")
+            if pages_count is None:
+                try:
+                    pages_count = len(library.reading(doc["id"])["pages"])
+                except Exception:
+                    pages_count = 0
+            entry = {
+                "id": doc["id"],
+                "pages": int(pages_count or 0),
+                "address": f"#/doc/{doc['id']}",
+            }
+            if pages_drawn_by_doc is not None:
+                entry["pages_drawn"] = pages_drawn_by_doc.get(doc["id"], [])
+            out_docs.append(entry)
+        result = {
+            "work_id": wid,
+            "task": claimed["task"],
+            "token": claimed["token"],
+            "expires_at": claimed["expires_at"],
+            "documents": out_docs,
+        }
+        if "rotated" in claimed:
+            result["rotated"] = claimed["rotated"]
+        return result
+
+    def _serialize_audit_row(row: dict) -> dict:
+        return {k: (_aware(v).isoformat() if isinstance(v, datetime) else v) for k, v in row.items()}
 
     def document_summary(document: dict) -> dict:
         now = state(library.act(document["id"]))
@@ -457,12 +724,18 @@ def create_app(
         }
         chosen = queue.ordered([t for t in tasks if not kind or t["kind"] == kind])
         limit, offset, moment = max(1, min(limit, 500)), max(0, offset), datetime.now(UTC)
+        live_claims = {c["work_id"]: c for c in claims.list_claims(store, include_expired=False)}
+
+        def _with_claim(item: dict) -> dict:
+            wid = details_key(library.listed(item["id"])) if library.has(item["id"]) else item["id"]
+            return {**queue.shown(item, moment), "claim": live_claims.get(wid)}
+
         return {
             "total": len(chosen),
             "offset": offset,
             "limit": limit,
             "counts": counts,
-            "tasks": [queue.shown(t, moment) for t in chosen[offset : offset + limit]],
+            "tasks": [_with_claim(t) for t in chosen[offset : offset + limit]],
         }
 
     @app.get("/api/documents")
@@ -586,6 +859,7 @@ def create_app(
             "approvals": [recorded(a) for a in now["approvals"]],
             "materials": content.materials_for(act, withheld=wording is not None),
             "withheld_wording": wording,
+            "claim": current_claim(details_key(act)),
             "publication": publishing_section.standing(
                 act,
                 now,
@@ -666,7 +940,7 @@ def create_app(
     @app.post("/api/documents/{act_id}/pages/{page}")
     def save_page(request: Request, act_id: str, page: int, body: dict = JSON_BODY):
         who = auth.current(request, store, write=True, role="reviewer")
-        act_or_404(act_id)
+        act = act_or_404(act_id)
         _, found = reading_page(act_id, page)
         try:
             units = content.validate_units(body.get("units"))
@@ -697,20 +971,98 @@ def create_app(
                 "note": str(value.get("note", ""))[:500],
             }
         comment = str(body.get("comment", ""))[:2000]
-        try:
-            revision = store.save_page(
-                act_id,
-                page,
-                int(body.get("expected_revision", -1)),
-                who["email"],
-                reading_sha256=content.reading_sha256(found),
-                units=units,
-                status=status,
-                resolutions=clean,
-                comment=comment,
+        token = request.headers.get("X-Claim-Token")
+        with store.engine.begin() as db:
+            claim_info = claims.guard(
+                db,
+                act,
+                who,
+                token=token,
+                write=True,
+                act_id=act_id,
+                approved_act_ids=[act_id],
             )
-        except Conflict as error:
-            raise HTTPException(409, str(error)) from error
+            if claim_info and claim_info.get("task") == "audit":
+                open_audit = db.execute(
+                    select(review_audit)
+                    .where(
+                        review_audit.c.work_id == details_key(act),
+                        review_audit.c.act_id == act_id,
+                        review_audit.c.page == page,
+                        review_audit.c.audited_at.is_(None),
+                    )
+                    .order_by(review_audit.c.id.asc())
+                    .limit(1)
+                ).first()
+                if open_audit is None:
+                    raise HTTPException(404, "No open audit draw for this page.")
+                rev_row = db.execute(
+                    select(page_revision.c.units).where(
+                        page_revision.c.act_id == act_id,
+                        page_revision.c.page == page,
+                        page_revision.c.revision == open_audit.reviewer_revision,
+                    )
+                ).first()
+                reviewer_units = (
+                    list(rev_row.units) if rev_row and rev_row.units else content.units_from(found)
+                )
+                diff = audit_mod.audit_diff(reviewer_units, units)
+                try:
+                    store.save_audit_submission(
+                        open_audit.id,
+                        auditor=who["email"],
+                        auditor_label=claim_info["label"],
+                        units=units,
+                        resolutions=clean,
+                        status=status,
+                        paragraphs_changed=diff["paragraphs_changed"],
+                        words_changed=diff["words_changed"],
+                        other_changes=diff["other_changes"],
+                        verdict=diff["verdict"],
+                        db=db,
+                    )
+                except ValueError as error:
+                    raise HTTPException(403, str(error)) from error
+                except Conflict as error:
+                    raise HTTPException(409, str(error)) from error
+                return {
+                    "audit_id": open_audit.id,
+                    "audited": True,
+                    "verdict": diff["verdict"],
+                    "diff": diff,
+                }
+            label = claim_info.get("label") if claim_info else None
+            task = claim_info.get("task") if claim_info else None
+            try:
+                revision = store.save_page(
+                    act_id,
+                    page,
+                    int(body.get("expected_revision", -1)),
+                    who["email"],
+                    label=label,
+                    task=task,
+                    db=db,
+                    reading_sha256=content.reading_sha256(found),
+                    units=units,
+                    status=status,
+                    resolutions=clean,
+                    comment=comment,
+                )
+            except Conflict as error:
+                raise HTTPException(409, str(error)) from error
+        if claim_info and claim_info.get("implicit") and claim_info.get("claim_token"):
+            wid = details_key(act)
+            _evict_work(wid)
+            return JSONResponse(
+                {
+                    "revision": revision,
+                    "claim_token": claim_info["claim_token"],
+                    "claim_expires_at": claim_info["claim_expires_at"],
+                    "claim_work_id": wid,
+                    "claim_documents": sorted(sibling_act_ids(act)),
+                },
+                headers={"X-Claim-Token": claim_info["claim_token"]},
+            )
         return {"revision": revision}
 
     @app.post("/api/documents/{act_id}/approval")
@@ -728,9 +1080,20 @@ def create_app(
         if decision == "approved":
             ready = now["readiness"]
             if not ready["ready"]:
+                only_status_pending = (
+                    ready.get("status_pending")
+                    and not ready.get("unchecked_pages")
+                    and not ready.get("open_high_flags")
+                    and not ready.get("stale_pages")
+                    and not ready.get("unresolved_flag_pages")
+                    and not ready.get("missing_checks")
+                    and (ready.get("details") or {}).get("confirmed")
+                    and not (ready.get("text") or {}).get("errors")
+                )
+                message = ready["status_pending_message"] if only_status_pending else "Not ready for approval"
                 # Blind, as everywhere else: an approver may review pages too (one person may do both),
                 # so the refusal names what is left to do, never which pages are the audit sample.
-                raise HTTPException(409, {"message": "Not ready for approval", "readiness": blind(ready)})
+                raise HTTPException(409, {"message": message, "readiness": blind(ready)})
             if wording is not None and wording["names_left"]:
                 raise HTTPException(
                     409,
@@ -786,6 +1149,7 @@ def create_app(
             )
         except Conflict as error:
             raise HTTPException(409, str(error)) from error
+        _invalidate_work_cache()
         return {"revision": revision}
 
     @app.get("/api/documents/{act_id}/export")
@@ -827,7 +1191,7 @@ def create_app(
     def replace(request: Request, act_id: str, body: dict = JSON_BODY):
         """Replace across the pages the reviewer confirmed; each changed page is a new revision."""
         who = auth.current(request, store, write=True, role="reviewer")
-        act_or_404(act_id)
+        act = act_or_404(act_id)
         reading, latest = library.reading(act_id), store.latest_pages(act_id)
         pages = {p["page"]: p for p in reading["pages"]}
         final = {p["page"]: p for p in content.final_pages(reading, latest)}
@@ -836,7 +1200,7 @@ def create_app(
             raise HTTPException(422, "pages must map page numbers to the revisions shown in the preview")
         find, replacement = str(body.get("find", "")), str(body.get("replace", ""))
         case, word = bool(body.get("case")), bool(body.get("word"))
-        changed, conflicts = [], []
+        planned = []
         for key, expected in targets.items():
             number = int(key)
             if number not in pages:
@@ -847,31 +1211,65 @@ def create_app(
                 units = content.validate_units(units) if count else units
             except ValueError as error:
                 raise HTTPException(422, f"page {number}: {error}") from error
-            if not count:
-                continue
-            previous = latest.get(number)
-            reading = content.reading_sha256(pages[number])
-            # A page checked against an earlier reading is not checked against this one: a replace saves it
-            # unchecked, so "the reading changed, check again" stays until someone looks (findings
-            # 2026-11-16, item 23). A page checked against this reading keeps its status.
-            stale = previous is not None and previous["reading_sha256"] != reading
-            try:
-                revision = store.save_page(
-                    act_id,
-                    number,
-                    int(expected),
-                    who["email"],
-                    reading_sha256=reading,
-                    units=units,
-                    status="edited" if stale or not previous else previous["status"],
-                    resolutions=content.standing(pages[number], previous["resolutions"]) if previous else {},
-                    comment=f"Replaced {find!r} with {replacement!r} ({count}×) across the Act"[:2000],
-                )
-            except Conflict:
-                conflicts.append(number)
-                continue
-            changed.append({"page": number, "revision": revision, "replacements": count})
-        return {"changed": changed, "conflicts": conflicts}
+            if count:
+                planned.append((number, int(expected), units, count))
+        changed, conflicts = [], []
+        token = request.headers.get("X-Claim-Token")
+        with store.engine.begin() as db:
+            claim_info = claims.guard(
+                db,
+                act,
+                who,
+                token=token,
+                write=True,
+                act_id=act_id,
+                approved_act_ids=[act_id],
+            )
+            if claim_info and claim_info.get("task") == "audit":
+                raise HTTPException(403, "Find-and-replace is not available during an audit.")
+            label = claim_info.get("label") if claim_info else None
+            task = claim_info.get("task") if claim_info else None
+            for number, expected, units, count in planned:
+                previous = latest.get(number)
+                reading_sha = content.reading_sha256(pages[number])
+                # A page checked against an earlier reading is not checked against this one: a replace saves it
+                # unchecked, so "the reading changed, check again" stays until someone looks (findings
+                # 2026-11-16, item 23). A page checked against this reading keeps its status.
+                stale = previous is not None and previous["reading_sha256"] != reading_sha
+                try:
+                    with db.begin_nested():
+                        revision = store.save_page(
+                            act_id,
+                            number,
+                            expected,
+                            who["email"],
+                            label=label,
+                            task=task,
+                            db=db,
+                            reading_sha256=reading_sha,
+                            units=units,
+                            status="edited" if stale or not previous else previous["status"],
+                            resolutions=content.standing(pages[number], previous["resolutions"])
+                            if previous
+                            else {},
+                            comment=f"Replaced {find!r} with {replacement!r} ({count}×) across the Act"[
+                                :2000
+                            ],
+                        )
+                except Conflict:
+                    conflicts.append(number)
+                    continue
+                changed.append({"page": number, "revision": revision, "replacements": count})
+        payload: dict = {"changed": changed, "conflicts": conflicts}
+        if claim_info and claim_info.get("implicit") and claim_info.get("claim_token"):
+            wid = details_key(act)
+            _evict_work(wid)
+            payload["claim_token"] = claim_info["claim_token"]
+            payload["claim_expires_at"] = claim_info["claim_expires_at"]
+            payload["claim_work_id"] = wid
+            payload["claim_documents"] = sorted(sibling_act_ids(act))
+            return JSONResponse(payload, headers={"X-Claim-Token": claim_info["claim_token"]})
+        return payload
 
     @app.get("/api/documents/{act_id}/stream")
     def stream(request: Request, act_id: str, start: int = 1, count: int = 8):
@@ -1127,18 +1525,51 @@ def create_app(
                 record_view.to_record(given, absent, place, profile, record_view.slugify(act_id[3:]))
             except ValueError as error:
                 raise HTTPException(422, {"message": f"The record does not validate: {error}"}) from error
-        try:
-            revision = store.save_details(
-                details_key(act),
-                int(body.get("expected_revision", -1)),
-                who["email"],
-                details=given,
-                absent=absent,
-                status=status,
-                comment=str(body.get("comment", ""))[:2000],
+        token = request.headers.get("X-Claim-Token")
+        with store.engine.begin() as db:
+            claim_info = claims.guard(
+                db,
+                act,
+                who,
+                token=token,
+                write=True,
+                act_id=act_id,
+                approved_act_ids=sibling_act_ids(act),
             )
-        except Conflict as error:
-            raise HTTPException(409, str(error)) from error
+            if claim_info and claim_info.get("task") == "audit":
+                raise HTTPException(
+                    403, "Audit claims may only submit page audits, not change document details."
+                )
+            label = claim_info.get("label") if claim_info else None
+            task = claim_info.get("task") if claim_info else None
+            try:
+                revision = store.save_details(
+                    details_key(act),
+                    int(body.get("expected_revision", -1)),
+                    who["email"],
+                    label=label,
+                    task=task,
+                    db=db,
+                    details=given,
+                    absent=absent,
+                    status=status,
+                    comment=str(body.get("comment", ""))[:2000],
+                )
+            except Conflict as error:
+                raise HTTPException(409, str(error)) from error
+        if claim_info and claim_info.get("implicit") and claim_info.get("claim_token"):
+            wid = details_key(act)
+            _evict_work(wid)
+            return JSONResponse(
+                {
+                    "revision": revision,
+                    "claim_token": claim_info["claim_token"],
+                    "claim_expires_at": claim_info["claim_expires_at"],
+                    "claim_work_id": wid,
+                    "claim_documents": sorted(sibling_act_ids(act)),
+                },
+                headers={"X-Claim-Token": claim_info["claim_token"]},
+            )
         return {"revision": revision}
 
     @app.get("/api/documents/{act_id}/original.pdf")
@@ -1267,6 +1698,526 @@ def create_app(
     def audit(request: Request, act: str | None = None):
         auth.current(request, store)
         return [{**e, "at": e["at"].isoformat()} for e in store.events(act_id=act, limit=300)]
+
+    # --- multi-agent claims, labels, audits & admin report (§4, §7, §8, §10, §16) ----------------
+
+    @app.post("/api/queue/claim-next")
+    def claim_next_work(request: Request, body: dict = JSON_BODY):
+        """Claim the next eligible work for review, status research, or audit (§4.6)."""
+        who = auth.current(request, store, write=True, role="reviewer")
+        account = who["email"].strip().lower()
+        label = str(body.get("label") or "")
+        task = str(body.get("task") or "review").strip().lower()
+        if task not in claims.TASKS:
+            raise HTTPException(422, f"task must be one of {sorted(claims.TASKS)}")
+        jurisdiction = str(body.get("jurisdiction") or "").strip().lower()
+        kind = str(body.get("kind") or "").strip().lower()
+        raw_max_pages = body.get("max_pages")
+        max_pages: int | None = None
+        if raw_max_pages not in (None, ""):
+            try:
+                max_pages = int(raw_max_pages)
+            except (TypeError, ValueError) as error:
+                raise HTTPException(422, "max_pages must be a positive integer") from error
+            if max_pages <= 0:
+                raise HTTPException(422, "max_pages must be a positive integer")
+
+        snapshot, evicted = _cached_work_snapshot()
+        works_by_id = snapshot["works_by_id"]
+        doc_to_work = snapshot["doc_to_work"]
+        activity = snapshot["activity"]
+        details_stamps = snapshot["details_stamps"]
+        live_claims = snapshot["live_claims"]
+        approved_works = snapshot["approved_works"]
+        parked_works = snapshot["parked_works"]
+
+        def matches(work: dict) -> bool:
+            if jurisdiction and jurisdiction not in work["jurisdictions"]:
+                return False
+            if kind and kind not in work["kinds"]:
+                return False
+            return not (max_pages is not None and _work_pages(work) > max_pages)
+
+        own_lapsed: list[str] = []
+        candidates: list[str] = []
+        drawn_by_work: dict[str, dict[str, list[int]]] = {}
+
+        if task == "review":
+            excluded = approved_works | parked_works | live_claims | evicted
+            # Priority 1: caller's own lapsed work (§4.6).
+            with store.engine.connect() as db:
+                caller_page_acts = {
+                    row.act_id
+                    for row in db.execute(
+                        select(page_revision.c.act_id)
+                        .where(
+                            page_revision.c.author == account,
+                            page_revision.c.label == label,
+                            page_revision.c.task == "review",
+                        )
+                        .distinct()
+                    )
+                }
+                caller_detail_works = {
+                    row.act_id
+                    for row in db.execute(
+                        select(detail_revision.c.act_id)
+                        .where(
+                            detail_revision.c.author == account,
+                            detail_revision.c.label == label,
+                            detail_revision.c.task == "review",
+                        )
+                        .distinct()
+                    )
+                }
+                caller_works = {doc_to_work[a] for a in caller_page_acts if a in doc_to_work} | (
+                    caller_detail_works & set(works_by_id)
+                )
+                for wid in sorted(caller_works):
+                    if wid in excluded or not matches(works_by_id[wid]):
+                        continue
+                    closed = db.execute(
+                        select(work_release.c.id)
+                        .where(
+                            work_release.c.work_id == wid,
+                            work_release.c.outcome.in_(("done", "parked")),
+                        )
+                        .limit(1)
+                    ).first()
+                    if closed is not None:
+                        continue
+                    doc_ids = [d["id"] for d in works_by_id[wid]["docs"]]
+                    other_page = db.execute(
+                        select(page_revision.c.act_id)
+                        .where(
+                            page_revision.c.act_id.in_(doc_ids),
+                            (page_revision.c.author != account)
+                            | (page_revision.c.label != label)
+                            | (page_revision.c.label.is_(None)),
+                        )
+                        .limit(1)
+                    ).first()
+                    if other_page is not None:
+                        continue
+                    other_detail = db.execute(
+                        select(detail_revision.c.act_id)
+                        .where(
+                            detail_revision.c.act_id == wid,
+                            (detail_revision.c.author != account)
+                            | (detail_revision.c.label != label)
+                            | (detail_revision.c.label.is_(None)),
+                        )
+                        .limit(1)
+                    ).first()
+                    if other_detail is not None:
+                        continue
+                    own_lapsed.append(wid)
+            own_lapsed.sort(key=lambda wid: works_by_id[wid]["importance"])
+
+            # Priority 2: fresh works in queue.importance order.
+            fresh_works = [
+                wid
+                for wid, work in works_by_id.items()
+                if wid not in excluded
+                and wid not in own_lapsed
+                and matches(work)
+                and all(activity.get(d["id"]) is None for d in work["docs"])
+                and details_stamps.get(wid) is None
+            ]
+            fresh_works.sort(key=lambda wid: works_by_id[wid]["importance"])
+            candidates = fresh_works
+
+            # Priority 3: others' lapsed works (only when enabled, and after 2h without a save).
+            if os.environ.get("ALVARY_REVIEW_HAND_ON_LAPSED", "off").strip().lower() == "on":
+                two_hours_ago = store_now() - timedelta(hours=2)
+                seen_set = excluded | set(own_lapsed) | set(fresh_works)
+                others_lapsed = []
+                with store.engine.connect() as db:
+                    for wid, work in works_by_id.items():
+                        if wid in seen_set or not matches(work):
+                            continue
+                        latest_rel = db.execute(
+                            select(work_release.c.outcome)
+                            .where(work_release.c.work_id == wid)
+                            .order_by(work_release.c.id.desc())
+                            .limit(1)
+                        ).scalar()
+                        if latest_rel in ("done", "parked"):
+                            continue
+                        doc_ids = [d["id"] for d in work["docs"]]
+                        last_page = db.execute(
+                            select(func.max(page_revision.c.created_at)).where(
+                                page_revision.c.act_id.in_(doc_ids)
+                            )
+                        ).scalar()
+                        last_det = db.execute(
+                            select(func.max(detail_revision.c.created_at)).where(
+                                detail_revision.c.act_id == wid
+                            )
+                        ).scalar()
+                        stamps = [_aware(t) for t in (last_page, last_det) if t is not None]
+                        if stamps and max(stamps) <= two_hours_ago:
+                            others_lapsed.append(wid)
+                others_lapsed.sort(key=lambda wid: works_by_id[wid]["importance"])
+                candidates.extend(others_lapsed)
+
+        elif task == "status":
+            may_change_approved = bool(who["operator"].get("may_change_approved"))
+            excluded = (
+                live_claims | evicted | parked_works | (set() if may_change_approved else approved_works)
+            )
+            with store.engine.connect() as db:
+                latest_det = (
+                    select(detail_revision.c.act_id, func.max(detail_revision.c.revision).label("rev"))
+                    .group_by(detail_revision.c.act_id)
+                    .subquery()
+                )
+                rows = db.execute(
+                    select(detail_revision)
+                    .join(
+                        latest_det,
+                        (detail_revision.c.act_id == latest_det.c.act_id)
+                        & (detail_revision.c.revision == latest_det.c.rev),
+                    )
+                    .where(detail_revision.c.status == "confirmed")
+                ).all()
+            eligible = []
+            for row in rows:
+                wid = row.act_id
+                if wid not in works_by_id or wid in excluded or not matches(works_by_id[wid]):
+                    continue
+                if status_research_pending(dict(row._mapping), works_by_id[wid]["docs"][0]):
+                    eligible.append(wid)
+            eligible.sort(key=lambda wid: works_by_id[wid]["importance"])
+            candidates = eligible
+
+        else:  # task == "audit"
+            excluded = approved_works | live_claims | evicted
+            open_audits = store.list_audits(open_only=True, limit=2000)
+            for row in open_audits:
+                if row["reviewer"] == account:
+                    continue
+                wid = row["work_id"]
+                if wid not in works_by_id or wid in excluded or not matches(works_by_id[wid]):
+                    continue
+                drawn_by_work.setdefault(wid, {}).setdefault(row["act_id"], []).append(int(row["page"]))
+            for per_doc in drawn_by_work.values():
+                for aid in per_doc:
+                    per_doc[aid] = sorted(set(per_doc[aid]))
+            candidates = sorted(drawn_by_work, key=lambda wid: works_by_id[wid]["importance"])
+
+        claimed = claims.claim_next(
+            store,
+            candidates,
+            account,
+            label,
+            task=task,
+            own_lapsed=own_lapsed,
+            on_evict=_evict_work,
+        )
+        return _claim_response(
+            claimed,
+            pages_drawn_by_doc=drawn_by_work.get(claimed["work_id"]) if task == "audit" else None,
+        )
+
+    @app.post("/api/claims/{work_id}")
+    def claim_named_work(request: Request, work_id: str, body: dict = JSON_BODY):
+        """Claim one named work, or rotate/re-issue the token if the same (account, label) holds it."""
+        who = auth.current(request, store, write=True, role="reviewer")
+        if not work_documents(work_id):
+            raise HTTPException(404, "No such work")
+        label = str(body.get("label") or "")
+        task = str(body.get("task") or "review").strip().lower()
+        claimed = claims.claim_work(store, work_id, who["email"], label, task=task)
+        _evict_work(work_id)
+        pages_drawn: dict[str, list[int]] | None = None
+        if claimed["task"] == "audit":
+            pages_drawn = {}
+            for row in store.list_audits(work_id=work_id, open_only=True, limit=500):
+                pages_drawn.setdefault(row["act_id"], []).append(int(row["page"]))
+            for aid in pages_drawn:
+                pages_drawn[aid] = sorted(set(pages_drawn[aid]))
+        return _claim_response(claimed, pages_drawn_by_doc=pages_drawn)
+
+    @app.post("/api/claims/{work_id}/renew")
+    def renew_work_claim(request: Request, work_id: str, body: dict | None = OPTIONAL_JSON_BODY):
+        """Renew or revive a claim lease; refuses blocked labels with 403."""
+        who = auth.current(request, store, write=True, role="reviewer")
+        token = request.headers.get("X-Claim-Token") or str((body or {}).get("token") or "")
+        return claims.renew_claim(store, work_id, who["email"], token)
+
+    @app.post("/api/claims/{work_id}/release")
+    def release_work_claim(request: Request, work_id: str, body: dict = JSON_BODY):
+        """Release a work claim (done | parked | abandoned) and draw audit pages on review done."""
+        who = auth.current(request, store, write=True)
+        if not (who["operator"]["roles"] & {"reviewer", "approver", "admin"}):
+            raise HTTPException(403, "This needs the reviewer, approver, or admin role")
+        outcome = str(body.get("outcome") or "done").strip().lower()
+        reason = str(body.get("reason") or "")
+        token = request.headers.get("X-Claim-Token") or body.get("token")
+        label = body.get("label")
+        released = claims.release_claim(
+            store, work_id, who, outcome=outcome, reason=reason, token=token, label=label
+        )
+        _invalidate_work_cache()
+
+        if released["outcome"] == "done" and released["task"] == "review":
+            docs = work_documents(work_id)
+            doc_ids = [d["id"] for d in docs]
+            has_approved = False
+            if doc_ids:
+                with store.engine.connect() as db:
+                    for aid in doc_ids:
+                        dec = db.execute(
+                            select(approval.c.decision)
+                            .where(approval.c.act_id == aid)
+                            .order_by(approval.c.revision.desc())
+                            .limit(1)
+                        ).scalar()
+                        if dec == "approved":
+                            has_approved = True
+                            break
+            cfg = audit_mod.audit_config()
+            if not has_approved and cfg["rate"] > 0 and cfg["salt"] and docs:
+                with store.engine.connect() as db:
+                    release_number = (
+                        db.execute(
+                            select(func.count(work_release.c.id)).where(
+                                work_release.c.work_id == work_id,
+                                work_release.c.outcome == "done",
+                            )
+                        ).scalar()
+                        or 1
+                    )
+                doc_pages: dict[str, list[int]] = {}
+                latest_by_doc: dict[str, dict[int, dict]] = {}
+                for doc in docs:
+                    if doc.get("text_held"):
+                        continue
+                    reading = library.reading(doc["id"])
+                    page_nums = [int(p["page"]) for p in reading["pages"]]
+                    if page_nums:
+                        doc_pages[doc["id"]] = page_nums
+                        latest_by_doc[doc["id"]] = store.latest_pages(doc["id"])
+                drawn = audit_mod.draw_pages(
+                    work_id,
+                    doc_pages,
+                    salt=cfg["salt"],
+                    rate=cfg["rate"],
+                    minimum=cfg["minimum"],
+                    release_number=int(release_number),
+                )
+                for aid, page_num in drawn:
+                    rev = (latest_by_doc.get(aid, {}).get(page_num) or {}).get("revision", 0)
+                    store.create_audit_draw(
+                        work_id=work_id,
+                        act_id=aid,
+                        page=page_num,
+                        release_id=released["release_id"],
+                        reviewer=released["account"],
+                        reviewer_label=released["label"],
+                        reviewer_revision=int(rev),
+                    )
+        return released
+
+    @app.get("/api/claims")
+    def active_claims(request: Request):
+        """List all live claims (admin only)."""
+        auth.current(request, store, role="admin")
+        return {"claims": claims.list_claims(store, include_expired=False)}
+
+    @app.post("/api/labels/block")
+    def block_agent_label(request: Request, body: dict = JSON_BODY):
+        """Pause a specific agent label (admin + fresh passkey)."""
+        who = privileged.fresh(auth.current(request, store, write=True, role="admin"))
+        account = str(body.get("account") or "").strip().lower()
+        label = str(body.get("label") or "").strip()
+        reason = str(body.get("reason") or "")
+        if not account:
+            raise HTTPException(422, "account is required")
+        return claims.block_label(store, account, label, blocked_by=who["email"], reason=reason)
+
+    @app.post("/api/labels/unblock")
+    def unblock_agent_label(request: Request, body: dict = JSON_BODY):
+        """Unpause a previously blocked agent label (admin + fresh passkey)."""
+        who = privileged.fresh(auth.current(request, store, write=True, role="admin"))
+        account = str(body.get("account") or "").strip().lower()
+        label = str(body.get("label") or "").strip()
+        if not account or not label:
+            raise HTTPException(422, "account and label are required")
+        unblocked = claims.unblock_label(store, account, label, actor=who["email"])
+        return {"ok": True, "unblocked": unblocked}
+
+    @app.post("/api/audits/{audit_id}/resolve")
+    def resolve_review_audit(request: Request, audit_id: int, body: dict = JSON_BODY):
+        """Resolve a submitted review audit (accepted_auditor | kept_reviewer); admin/approver + passkey."""
+        who = auth.current(request, store, write=True)
+        if not (who["operator"]["roles"] & {"admin", "approver"}):
+            raise HTTPException(403, "This needs the approver or admin role")
+        privileged.fresh(who)
+        decision = str(body.get("decision") or "").strip()
+        comment = str(body.get("comment") or "")[:2000]
+        try:
+            resolved = store.resolve_audit(
+                audit_id, decision=decision, decided_by=who["email"], comment=comment
+            )
+        except KeyError as error:
+            raise HTTPException(404, str(error)) from error
+        except ValueError as error:
+            raise HTTPException(422, str(error)) from error
+        except Conflict as error:
+            raise HTTPException(409, str(error)) from error
+        return _serialize_audit_row(resolved)
+
+    @app.post("/api/agents/pause-all")
+    def pause_all_agent_accounts(request: Request):
+        """Deactivate every active agent account and end all of their live sessions (admin + passkey)."""
+        who = privileged.fresh(auth.current(request, store, write=True, role="admin"))
+        paused = store.pause_all_agents(actor=who["email"])
+        return {"ok": True, "paused": paused, "count": len(paused)}
+
+    @app.get("/api/agents/report")
+    def agents_report(request: Request, days: int = 7):
+        """Admin dashboard report: live claims, page counts, pace, parked, audit windows & material diffs."""
+        auth.current(request, store, role="admin")
+        days = max(1, min(days, 90))
+        moment = store_now()
+        since = moment - timedelta(days=days)
+        today_start = moment.replace(hour=0, minute=0, second=0, microsecond=0)
+
+        live_claims = claims.list_claims(store, include_expired=False)
+
+        with store.engine.connect() as db:
+            blocked_rows = db.execute(select(blocked_label).order_by(blocked_label.c.blocked_at.desc())).all()
+            blocked_labels = [
+                {
+                    "account": r.account,
+                    "label": r.label,
+                    "blocked_at": _aware(r.blocked_at).isoformat(),
+                    "blocked_by": r.blocked_by,
+                    "reason": r.reason,
+                }
+                for r in blocked_rows
+            ]
+
+            rev_rows = db.execute(
+                select(
+                    page_revision.c.act_id,
+                    page_revision.c.page,
+                    page_revision.c.author,
+                    page_revision.c.label,
+                    page_revision.c.task,
+                    page_revision.c.units,
+                    page_revision.c.created_at,
+                )
+                .where(page_revision.c.created_at >= since)
+                .order_by(page_revision.c.created_at.asc())
+            ).all()
+
+            parked_rows = db.execute(
+                select(work_release)
+                .where(work_release.c.outcome == "parked", work_release.c.released_at >= since)
+                .order_by(work_release.c.released_at.desc())
+            ).all()
+
+            completed_audits = db.execute(
+                select(
+                    review_audit.c.reviewer,
+                    review_audit.c.reviewer_label,
+                    review_audit.c.verdict,
+                )
+                .where(
+                    review_audit.c.audited_at.is_not(None),
+                    review_audit.c.verdict.is_not(None),
+                )
+                .order_by(review_audit.c.audited_at.asc(), review_audit.c.id.asc())
+            ).all()
+
+        revisions = [
+            {
+                "act_id": r.act_id,
+                "page": r.page,
+                "author": r.author,
+                "label": r.label or "",
+                "task": r.task,
+                "units": r.units or [],
+                "created_at": _aware(r.created_at),
+            }
+            for r in rev_rows
+        ]
+        counts_map: dict[tuple[str, str], dict] = {}
+        for rev in revisions:
+            if rev["task"] == "audit":
+                continue
+            key = (rev["author"], rev["label"])
+            bucket = counts_map.setdefault(
+                key,
+                {"account": rev["author"], "label": rev["label"], "pages_saved": 0, "today_pages_saved": 0},
+            )
+            bucket["pages_saved"] += 1
+            if rev["created_at"] >= today_start:
+                bucket["today_pages_saved"] += 1
+        page_counts = sorted(counts_map.values(), key=lambda c: (c["account"], c["label"]))
+
+        pace = audit_mod.pace_report(revisions)
+
+        parked_counts_map: dict[tuple[str, str], int] = {}
+        parked_recent = []
+        for r in parked_rows:
+            key = (r.account, r.label)
+            parked_counts_map[key] = parked_counts_map.get(key, 0) + 1
+            parked_recent.append(
+                {
+                    "id": r.id,
+                    "work_id": r.work_id,
+                    "account": r.account,
+                    "label": r.label,
+                    "task": r.task,
+                    "reason": r.reason,
+                    "released_at": _aware(r.released_at).isoformat(),
+                }
+            )
+        parked_counts = [
+            {"account": acc, "label": lbl, "count": cnt}
+            for (acc, lbl), cnt in sorted(parked_counts_map.items())
+        ]
+
+        verdicts_by_label: dict[tuple[str, str], list[str]] = {}
+        for r in completed_audits:
+            verdicts_by_label.setdefault((r.reviewer, r.reviewer_label), []).append(r.verdict)
+        audit_windows = [
+            {"account": acc, "label": lbl, **audit_mod.evaluate_window(verdicts)}
+            for (acc, lbl), verdicts in sorted(verdicts_by_label.items())
+        ]
+
+        open_material_raw = store.list_audits(verdict="material", unresolved_only=True, limit=200)
+        open_material = []
+        with store.engine.connect() as db:
+            for item in open_material_raw:
+                rev_units = db.execute(
+                    select(page_revision.c.units).where(
+                        page_revision.c.act_id == item["act_id"],
+                        page_revision.c.page == item["page"],
+                        page_revision.c.revision == item["reviewer_revision"],
+                    )
+                ).scalar()
+                serialized = _serialize_audit_row(item)
+                serialized["reviewer_units"] = rev_units or []
+                open_material.append(serialized)
+
+        return {
+            "days": days,
+            "claims": live_claims,
+            "blocked_labels": blocked_labels,
+            "page_counts": page_counts,
+            "pace": pace,
+            "parked": {
+                "counts": parked_counts,
+                "recent": parked_recent[:100],
+            },
+            "audit_windows": audit_windows,
+            "open_material_audits": open_material,
+        }
 
     editorial.install(app, store, library, review)
     citations.install(app, store, library, review)

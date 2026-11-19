@@ -44,6 +44,7 @@ OPERATIONS = ("substitute", "insert", "repeal", "renumber", "amend_words")
 NOT_PROVISIONS = {"document", "contents", "contents_entry"}  # left out of the provision picker
 INSTRUCTION_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,79}")
 PLACEHOLDER_URL = "https://example.invalid/"  # stands in for a proposal's missing evidence address
+AGENT_WRITE_REFUSED = "Agent accounts may not change legal events, amendment instructions, or citations."
 JSON_BODY = Body(...)
 
 
@@ -286,6 +287,8 @@ def install(app: FastAPI, store, library, review) -> None:
     def propose_events(request: Request, act_id: str):
         """Record, as proposals, the events the work's text states that are not recorded yet."""
         who = auth.current(request, store, write=True, role="reviewer")
+        if who["operator"].get("agent"):
+            raise HTTPException(403, AGENT_WRITE_REFUSED)
         act = document(act_id)
         work = review.details_key(act)
         recorded = {r["proposed_from"] for r in store.legal_event_revisions(work) if r["proposed_from"]}
@@ -312,6 +315,8 @@ def install(app: FastAPI, store, library, review) -> None:
         or rejected by an approver."""
         status = body.get("status")
         who = auth.current(request, store, write=True, role=EVENT_STATUSES.get(status, "reviewer"))
+        if who["operator"].get("agent"):
+            raise HTTPException(403, AGENT_WRITE_REFUSED)
         if status not in EVENT_STATUSES:
             raise HTTPException(422, "status must be proposed, reviewed or rejected")
         act = document(act_id)
@@ -389,6 +394,8 @@ def install(app: FastAPI, store, library, review) -> None:
         approver other than the editor who reviewed it, confirming it unchanged; or rejected."""
         status = body.get("status")
         who = auth.current(request, store, write=True, role=INSTRUCTION_STATUSES.get(status, "reviewer"))
+        if who["operator"].get("agent"):
+            raise HTTPException(403, AGENT_WRITE_REFUSED)
         if status not in INSTRUCTION_STATUSES:
             raise HTTPException(422, f"status must be one of {', '.join(INSTRUCTION_STATUSES)}")
         act = document(act_id)

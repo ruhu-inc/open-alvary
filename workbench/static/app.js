@@ -82,6 +82,191 @@ const BACKGROUND = { "X-Requested-With": "XMLHttpRequest" };
 const RENEW_URL = "/?gcp-iap-mode=DO_SESSION_REFRESH";
 const proxy = { renewed: null, resolve: null, poll: null, window: null };
 
+// --- multi-agent tab label, claim tokens, and lease heartbeat (§3.2, §4.5, §4.8) ----------------
+
+const TAB_LABEL_KEY = "oa-tab-label";
+const CLAIM_PREFIX = "oa-claim:";
+const CLAIM_GRACE_MS = 24 * 60 * 60 * 1000;
+const HEARTBEAT_MS = 5 * 60 * 1000;
+
+function parseHash(hash = location.hash) {
+  const raw = String(hash || "").replace(/^#\/?/, "");
+  const qIndex = raw.indexOf("?");
+  const path = qIndex >= 0 ? raw.slice(0, qIndex) : raw;
+  const query = new URLSearchParams(qIndex >= 0 ? raw.slice(qIndex + 1) : "");
+  const parts = path ? path.split("/").map(decodeURIComponent) : [""];
+  return { path, parts, query };
+}
+
+function getTabLabel() {
+  try { return (sessionStorage.getItem(TAB_LABEL_KEY) || "").trim(); } catch { return ""; }
+}
+
+function setTabLabel(label) {
+  const cleaned = String(label || "").trim();
+  try {
+    if (cleaned) sessionStorage.setItem(TAB_LABEL_KEY, cleaned);
+    else sessionStorage.removeItem(TAB_LABEL_KEY);
+  } catch { /* ignore unavailable sessionStorage */ }
+  return cleaned;
+}
+
+function captureTabLabel(hash = location.hash, search = location.search) {
+  const fromHash = parseHash(hash).query.get("label");
+  const fromSearch = new URLSearchParams(search || "").get("label");
+  const found = (fromHash || fromSearch || "").trim();
+  if (found) return setTabLabel(found);
+  return getTabLabel();
+}
+
+function formatClock(iso) {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return String(iso).slice(11, 16);
+  return `${String(date.getUTCHours()).padStart(2, "0")}:${String(date.getUTCMinutes()).padStart(2, "0")}`;
+}
+
+function pruneClaimTokens(nowMs = Date.now()) {
+  try {
+    const keys = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(CLAIM_PREFIX)) keys.push(k);
+    }
+    for (const key of keys) {
+      let entry = null;
+      try { entry = JSON.parse(localStorage.getItem(key) || "null"); } catch { entry = null; }
+      if (!entry || typeof entry !== "object" || !entry.token) {
+        localStorage.removeItem(key);
+        continue;
+      }
+      const exp = Date.parse(entry.expires_at);
+      if (!Number.isNaN(exp) && nowMs - exp > CLAIM_GRACE_MS) {
+        localStorage.removeItem(key);
+      }
+    }
+  } catch { /* ignore unavailable localStorage */ }
+}
+
+function storeClaimTokens({ work_id, token, label, expires_at, documents } = {}) {
+  if (!token) return;
+  pruneClaimTokens();
+  const ids = [];
+  for (const doc of documents || []) {
+    const id = typeof doc === "string" ? doc : doc && doc.id;
+    if (id) ids.push(String(id));
+  }
+  if (!ids.length && work_id) ids.push(String(work_id));
+  const payload = JSON.stringify({
+    token: String(token),
+    work_id: String(work_id || ids[0] || ""),
+    label: String(label || getTabLabel() || "unlabelled"),
+    expires_at: expires_at || "",
+  });
+  try {
+    for (const id of ids) localStorage.setItem(CLAIM_PREFIX + id, payload);
+  } catch { /* ignore unavailable localStorage */ }
+}
+
+function updateClaimExpiry(workId, expiresAt) {
+  if (!workId || !expiresAt) return;
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key || !key.startsWith(CLAIM_PREFIX)) continue;
+      let entry = null;
+      try { entry = JSON.parse(localStorage.getItem(key) || "null"); } catch { continue; }
+      if (entry && (entry.work_id === workId || key === CLAIM_PREFIX + workId)) {
+        entry.expires_at = expiresAt;
+        localStorage.setItem(key, JSON.stringify(entry));
+      }
+    }
+  } catch { /* ignore unavailable localStorage */ }
+}
+
+function removeClaimTokensForWork(workId) {
+  if (!workId) return;
+  try {
+    const remove = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key || !key.startsWith(CLAIM_PREFIX)) continue;
+      if (key === CLAIM_PREFIX + workId) { remove.push(key); continue; }
+      try {
+        const entry = JSON.parse(localStorage.getItem(key) || "null");
+        if (entry && entry.work_id === workId) remove.push(key);
+      } catch { /* skip malformed */ }
+    }
+    for (const key of remove) localStorage.removeItem(key);
+  } catch { /* ignore unavailable localStorage */ }
+}
+
+function getClaimForDoc(actId) {
+  if (!actId) return null;
+  try {
+    const entry = JSON.parse(localStorage.getItem(CLAIM_PREFIX + actId) || "null");
+    return entry && entry.token ? entry : null;
+  } catch { return null; }
+}
+
+function getClaimForWork(workId) {
+  if (!workId) return null;
+  const direct = getClaimForDoc(workId);
+  if (direct) return direct;
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key || !key.startsWith(CLAIM_PREFIX)) continue;
+      try {
+        const entry = JSON.parse(localStorage.getItem(key) || "null");
+        if (entry && entry.token && entry.work_id === workId) return entry;
+      } catch { /* skip malformed */ }
+    }
+  } catch { /* ignore unavailable localStorage */ }
+  return null;
+}
+
+function claimTokenForPath(path) {
+  const clean = String(path || "");
+  const docMatch = /^\/api\/documents\/([^/?#]+)/.exec(clean);
+  if (docMatch) {
+    const claim = getClaimForDoc(decodeURIComponent(docMatch[1]));
+    return claim ? claim.token : null;
+  }
+  const claimMatch = /^\/api\/claims\/([^/?#]+)/.exec(clean);
+  if (claimMatch) {
+    const claim = getClaimForWork(decodeURIComponent(claimMatch[1]));
+    return claim ? claim.token : null;
+  }
+  return null;
+}
+
+function stopClaimHeartbeat() {
+  if (app.heartbeatTimer) {
+    clearInterval(app.heartbeatTimer);
+    app.heartbeatTimer = null;
+  }
+  app.heartbeatWorkId = null;
+}
+
+function startClaimHeartbeat(workId, onRenew) {
+  stopClaimHeartbeat();
+  if (!workId) return;
+  app.heartbeatWorkId = workId;
+  app.heartbeatTimer = setInterval(async () => {
+    if (app.heartbeatWorkId !== workId) return stopClaimHeartbeat();
+    try {
+      const result = await api(`/api/claims/${encodeURIComponent(workId)}/renew`, { method: "POST", body: {} });
+      if (result.ok && result.data && result.data.expires_at) {
+        updateClaimExpiry(workId, result.data.expires_at);
+        if (onRenew) onRenew(result.data.expires_at);
+      } else if (result.status === 403 || result.status === 404 || result.status === 409) {
+        stopClaimHeartbeat();
+      }
+    } catch { /* transient network error: retry next interval */ }
+  }, HEARTBEAT_MS);
+}
+
 async function api(path, { method = "GET", body } = {}) {
   const options = { method, credentials: "same-origin", headers: { ...BACKGROUND } };
   if (body !== undefined) {
@@ -89,6 +274,8 @@ async function api(path, { method = "GET", body } = {}) {
     options.body = JSON.stringify(body);
   }
   if (method !== "GET") options.headers["X-CSRF-Token"] = app.csrf;
+  const claimToken = claimTokenForPath(path);
+  if (claimToken) options.headers["X-Claim-Token"] = claimToken;
   let response;
   try {
     response = await fetch(path, options);
@@ -110,6 +297,26 @@ async function api(path, { method = "GET", body } = {}) {
     app.me = null;
     await showSignIn();
     throw new Error("signed out");
+  }
+  if (response.ok && data && typeof data === "object") {
+    if (data.claim_token) {
+      const docMatch = /^\/api\/documents\/([^/?#]+)/.exec(String(path || ""));
+      const actId = docMatch ? decodeURIComponent(docMatch[1]) : "";
+      const workId = data.claim_work_id || data.work_id || actId;
+      const docs = (data.claim_documents && data.claim_documents.length)
+        ? data.claim_documents
+        : (data.documents && data.documents.length ? data.documents : (actId ? [actId] : []));
+      storeClaimTokens({
+        work_id: workId,
+        token: data.claim_token,
+        label: data.claim_label || data.label || getTabLabel() || "unlabelled",
+        expires_at: data.claim_expires_at || data.expires_at || "",
+        documents: docs,
+      });
+    } else if (data.expires_at) {
+      const renewMatch = /^\/api\/claims\/([^/?#]+)\/renew/.exec(String(path || ""));
+      if (renewMatch) updateClaimExpiry(decodeURIComponent(renewMatch[1]), data.expires_at);
+    }
   }
   return { ok: response.ok, status: response.status, data };
 }
@@ -228,9 +435,11 @@ async function loadMe() {
   app.me = result.data;
   app.csrf = result.data.csrf;
   const who = document.getElementById("who");
+  const isAdmin = Boolean(result.data.agents || (result.data.roles || []).includes("admin"));
   who.replaceChildren(
     el("a", { class: "nav-link", href: "#/", text: "Documents" }),
     el("a", { class: "nav-link", href: "#/queue", text: "Work queue" }),
+    isAdmin ? el("a", { class: "nav-link", href: "#/agents", text: "Agents" }) : "",
     result.data.access ? el("a", { class: "nav-link", href: "#/access", text: "Access" }) : "",
     result.data.operators ? el("a", { class: "nav-link", href: "#/operators", text: "Operators" }) : "",
     result.data.traffic ? el("a", { class: "nav-link", href: "#/traffic", text: "Traffic" }) : "",
@@ -564,6 +773,108 @@ async function dashboard() {
     el("aside", { class: "home-side" }, activity)));
 }
 
+// --- claim banner and release UI (§4.5, §4.8) ----------------------------------------------------
+
+function resolveClaimState(actId, serverClaim) {
+  const local = getClaimForDoc(actId);
+  const myEmail = app.me && app.me.email;
+  const tabLabel = getTabLabel();
+  if (local) {
+    const serverMatches = !serverClaim
+      || (serverClaim.work_id === local.work_id
+        && (!myEmail || serverClaim.account === myEmail)
+        && serverClaim.label === local.label);
+    if (serverMatches) {
+      return {
+        mine: true,
+        workId: (serverClaim && serverClaim.work_id) || local.work_id || actId,
+        label: (serverClaim && serverClaim.label) || local.label,
+        account: (serverClaim && serverClaim.account) || myEmail || "",
+        expiresAt: (serverClaim && serverClaim.expires_at) || local.expires_at,
+      };
+    }
+  }
+  if (serverClaim && myEmail && serverClaim.account === myEmail && tabLabel && serverClaim.label === tabLabel) {
+    return {
+      mine: true,
+      workId: serverClaim.work_id || actId,
+      label: serverClaim.label,
+      account: serverClaim.account,
+      expiresAt: serverClaim.expires_at,
+    };
+  }
+  if (serverClaim) {
+    return {
+      mine: false,
+      workId: serverClaim.work_id || actId,
+      label: serverClaim.label,
+      account: serverClaim.account,
+      expiresAt: serverClaim.expires_at,
+    };
+  }
+  return null;
+}
+
+function claimBanner(actId, serverClaim, onReleased) {
+  const state = resolveClaimState(actId, serverClaim);
+  if (!state) return null;
+  const expiresSpan = el("span", { class: "claim-expires", text: formatClock(state.expiresAt), title: state.expiresAt || "" });
+  const roles = (app.me && app.me.roles) || [];
+  const canForceRelease = !state.mine && (roles.includes("admin") || roles.includes("approver"));
+  const banner = el("div", { class: `claim-banner ${state.mine ? "mine" : "other"}` });
+  const releaseForm = el("div", { class: "claim-release-form", hidden: true });
+  const outcome = el("select", { "aria-label": "Release outcome" },
+    el("option", { value: "done", text: "done — finished reviewing" }),
+    el("option", { value: "parked", text: "parked — left for the owner" }),
+    el("option", { value: "abandoned", text: "abandoned — return to queue" }));
+  const reason = el("input", { type: "text", placeholder: "Reason (required when parked)", "aria-label": "Release reason" });
+  const confirmBtn = el("button", { class: "small primary", text: "Confirm release", on: { click: async () => {
+    const selected = outcome.value;
+    const why = reason.value.trim();
+    if (selected === "parked" && !why) return toast("Give a short reason why this work is parked.");
+    confirmBtn.disabled = true;
+    try {
+      const result = await api(`/api/claims/${encodeURIComponent(state.workId)}/release`, {
+        method: "POST",
+        body: { outcome: selected, reason: why, label: state.label },
+      });
+      if (!result.ok) return toast(message(result));
+      stopClaimHeartbeat();
+      removeClaimTokensForWork(state.workId);
+      toast(`Released (${selected})`);
+      banner.remove();
+      if (onReleased) onReleased();
+    } finally {
+      confirmBtn.disabled = false;
+    }
+  } } });
+  const cancelBtn = el("button", { class: "small", text: "Cancel", on: { click: () => { releaseForm.hidden = true; } } });
+  releaseForm.append(outcome, reason, confirmBtn, cancelBtn);
+
+  const releaseBtn = (state.mine || canForceRelease)
+    ? el("button", { class: "small", text: "Release", on: { click: () => { releaseForm.hidden = !releaseForm.hidden; if (!releaseForm.hidden) outcome.focus(); } } })
+    : null;
+
+  if (state.mine) {
+    banner.append(
+      el("div", { class: "claim-line" },
+        el("span", {}, "You hold this work until ", expiresSpan, ` (${state.label})`),
+        releaseBtn),
+      releaseForm);
+    startClaimHeartbeat(state.workId, (nextExpires) => {
+      expiresSpan.textContent = formatClock(nextExpires);
+      expiresSpan.title = nextExpires;
+    });
+  } else {
+    banner.append(
+      el("div", { class: "claim-line" },
+        el("span", {}, `Held by ${state.label} (${state.account}) until `, expiresSpan),
+        releaseBtn),
+      canForceRelease ? releaseForm : null);
+  }
+  return banner;
+}
+
 // --- one document: progress, pages, approval ------------------------------------------------------------
 
 async function actView(actId) {
@@ -588,6 +899,7 @@ async function actView(actId) {
   main(
     el("div", { class: "card" },
       el("h2", { text: act.title }),
+      claimBanner(actId, data.claim, () => actView(actId)),
       el("p", { class: "muted", text: readingDescription(data) }),
       act.text_held ? el("div", { class: "notice warn" },
         el("strong", { text: "Text held: review the details only. " }),
@@ -1300,6 +1612,7 @@ async function detailsView(actId) {
       el("div", { class: "details-form" },
         el("div", { class: "card details-head" },
           el("h2", { text: `${title}: details` }),
+          claimBanner(actId, doc.data.claim, () => detailsView(actId)),
           el("p", { class: "muted", text: "Each detail was read from the document where it is printed; the page and words are shown beside it. Check each against the original beside the form (a page number opens that page there), correct it, or say why it is not given. Legal facts (what each language version is worth as law, when it commences, whether it is current, the laws it affects) are only suggested: none is filled in until you use the suggestion or give it yourself, and an authority left empty is published as unknown. Confirmed details are approved with the text and shown to the public." }),
           el("p", {}, pill(record.status === "confirmed" ? "ok" : record.status === "draft" ? "warn" : "medium", DETAIL_STATUS[record.status] + (record.revision ? ` · revision ${record.revision} by ${record.author}` : "")), " ", counter),
           ...(data.notices || []).map((notice) => el("div", { class: "hint", text: notice })),
@@ -1498,6 +1811,125 @@ function taskLine(t) {
   return el("a", { href: `#/doc/${id}/instructions`, text: t.step === "second_review" ? `${t.count} instruction${s} awaiting a second editor` : `${t.count} instruction${s} to review` });
 }
 
+function claimNextPanel({ standalone = false } = {}) {
+  const { query } = parseHash(location.hash);
+  const initialLabel = captureTabLabel();
+  const initialTask = ["review", "status", "audit"].includes(query.get("task")) ? query.get("task") : "review";
+  const labelInput = el("input", {
+    type: "text",
+    name: "label",
+    value: initialLabel,
+    placeholder: "e.g. claude-m1-07",
+    maxlength: "40",
+    "aria-label": "Agent label",
+    on: { input: () => setTabLabel(labelInput.value) },
+  });
+  const taskSelect = el("select", { name: "task", "aria-label": "Task" },
+    el("option", { value: "review", text: "review — pages and printed details" }),
+    el("option", { value: "status", text: "status — legal status research" }),
+    el("option", { value: "audit", text: "audit — second-reviewer sample" }));
+  taskSelect.value = initialTask;
+  const jurisdictionInput = el("input", {
+    type: "text",
+    name: "jurisdiction",
+    value: query.get("jurisdiction") || "",
+    placeholder: "Jurisdiction (optional, e.g. rw, ng)",
+    "aria-label": "Jurisdiction",
+  });
+  const kindInput = el("input", {
+    type: "text",
+    name: "kind",
+    value: query.get("kind") || "",
+    placeholder: "Document kind (optional)",
+    "aria-label": "Document kind",
+  });
+  const maxPagesInput = el("input", {
+    type: "number",
+    name: "max_pages",
+    min: "1",
+    value: query.get("max_pages") || "",
+    placeholder: "Max pages (optional)",
+    "aria-label": "Maximum pages",
+  });
+  const statusLine = el("p", { class: "muted claim-status", role: "status", hidden: true });
+  const submitBtn = el("button", { type: "submit", class: "primary", text: "Claim next" });
+
+  const formNode = el("form", {
+    class: "claim-form",
+    on: {
+      submit: async (event) => {
+        event.preventDefault();
+        const label = setTabLabel(labelInput.value);
+        if (!label) {
+          statusLine.textContent = "Enter your label (3 to 40 letters, digits, or hyphens) before claiming.";
+          statusLine.className = "claim-status warn";
+          statusLine.hidden = false;
+          labelInput.focus();
+          return;
+        }
+        const payload = {
+          label,
+          task: taskSelect.value || "review",
+          jurisdiction: jurisdictionInput.value.trim(),
+          kind: kindInput.value.trim(),
+        };
+        if (maxPagesInput.value.trim()) payload.max_pages = Number(maxPagesInput.value.trim());
+        submitBtn.disabled = true;
+        statusLine.hidden = true;
+        try {
+          const result = await api("/api/queue/claim-next", { method: "POST", body: payload });
+          if (!result.ok) {
+            const msg = message(result);
+            statusLine.textContent = msg;
+            statusLine.className = "claim-status warn";
+            statusLine.hidden = false;
+            toast(msg);
+            return;
+          }
+          const claimed = result.data;
+          storeClaimTokens({
+            work_id: claimed.work_id,
+            token: claimed.token,
+            label: claimed.label || label,
+            expires_at: claimed.expires_at,
+            documents: claimed.documents,
+          });
+          const first = (claimed.documents || [])[0];
+          const target = first ? (first.address || `#/doc/${encodeURIComponent(first.id)}`) : `#/doc/${encodeURIComponent(claimed.work_id)}`;
+          toast(`Claimed ${claimed.work_id}`);
+          location.hash = target;
+        } finally {
+          submitBtn.disabled = false;
+        }
+      },
+    },
+  },
+  el("div", { class: "claim-fields" },
+    el("label", { class: "editor-field" }, el("span", { class: "editor-label", text: "Label" }), labelInput),
+    el("label", { class: "editor-field" }, el("span", { class: "editor-label", text: "Task" }), taskSelect),
+    el("label", { class: "editor-field" }, el("span", { class: "editor-label", text: "Jurisdiction" }), jurisdictionInput),
+    el("label", { class: "editor-field" }, el("span", { class: "editor-label", text: "Kind" }), kindInput),
+    el("label", { class: "editor-field" }, el("span", { class: "editor-label", text: "Max pages" }), maxPagesInput)),
+  el("p", { class: "claim-actions" },
+    submitBtn,
+    standalone ? el("a", { href: "#/queue", class: "muted small", text: "Open full work queue" }) : null),
+  statusLine);
+
+  return el("div", { class: "card claim-panel" },
+    el("h3", { text: standalone ? "Claim next work" : "Claim next" }),
+    el("p", { class: "muted", text: "Claims one whole work (every language version and its shared Details) for your label, so no two reviewers edit the same law." }),
+    formNode);
+}
+
+async function claimView() {
+  ++app.turn;
+  setCrumbs("Claim next");
+  if (!app.me.roles.includes("reviewer")) {
+    return main(el("div", { class: "card" }, el("h2", { text: "Claim next" }), el("p", { class: "muted", text: "Claiming work needs the reviewer role." })));
+  }
+  main(claimNextPanel({ standalone: true }));
+}
+
 async function queueView() {
   ++app.turn;
   setCrumbs("Work queue");
@@ -1513,11 +1945,16 @@ async function queueView() {
     const { data } = await api(`/api/queue?${new URLSearchParams({ kind: kind.value, offset: String(offset), limit: String(PAGE) })}`);
     const c = data.counts;
     for (const option of kind.options) option.textContent = `${TASK_KINDS.find(([v]) => v === option.value)[1]}${option.value ? ` (${c[option.value]})` : ""}`;
-    rows.replaceChildren(...(data.tasks.length ? data.tasks.map((t) => el("tr", {},
-      el("td", {}, pill(...TASK_PRIORITY[t.priority])),
-      el("td", {}, taskLine(t)),
-      el("td", {}, el("a", { href: `#/doc/${encodeURIComponent(t.id)}`, text: t.title })),
-      el("td", { class: "muted", text: t.since ? ago(t.since) : "not started", title: t.since ? new Date(t.since).toLocaleString() : "" })))
+    rows.replaceChildren(...(data.tasks.length ? data.tasks.map((t) => {
+      const claimPill = t.claim
+        ? el("span", { class: "pill medium", title: t.claim.account || "", text: `held by ${t.claim.label} until ${formatClock(t.claim.expires_at)}` })
+        : null;
+      return el("tr", {},
+        el("td", {}, pill(...TASK_PRIORITY[t.priority])),
+        el("td", {}, taskLine(t), claimPill ? " " : null, claimPill),
+        el("td", {}, el("a", { href: `#/doc/${encodeURIComponent(t.id)}`, text: t.title })),
+        el("td", { class: "muted", text: t.since ? ago(t.since) : "not started", title: t.since ? new Date(t.since).toLocaleString() : "" }));
+    })
       : [el("tr", {}, el("td", { colspan: 4, class: "muted", text: "Nothing waiting." }))]));
     const last = Math.min(data.offset + data.tasks.length, data.total);
     pager.replaceChildren(
@@ -1526,11 +1963,13 @@ async function queueView() {
       el("button", { class: "small", text: "Next →", disabled: last >= data.total, on: { click: () => { offset += PAGE; load(); } } }));
   };
   kind.addEventListener("input", () => { offset = 0; load(); });
-  main(el("div", { class: "card" },
-    el("div", { class: "doc-tools" }, el("h3", { text: "Work queue" }), kind),
-    summary,
-    el("table", { class: "list queue" }, el("thead", {}, el("tr", {}, ["Priority", "Task", "Document", "Waiting since"].map((h) => el("th", { text: h })))), rows),
-    pager));
+  main(
+    app.me.roles.includes("reviewer") ? claimNextPanel() : null,
+    el("div", { class: "card" },
+      el("div", { class: "doc-tools" }, el("h3", { text: "Work queue" }), kind),
+      summary,
+      el("table", { class: "list queue" }, el("thead", {}, el("tr", {}, ["Priority", "Task", "Document", "Waiting since"].map((h) => el("th", { text: h })))), rows),
+      pager));
   await load();
 }
 
@@ -2135,6 +2574,8 @@ function renderPage(view) {
   );
   const viewer = buildViewer(view);
   const right = el("div");
+  const heldBanner = claimBanner(actId, detail.claim, () => pageView(actId, pageNumber));
+  if (heldBanner) right.append(heldBanner);
   const draft = loadDraft(view);
   if (draft && !view.draftHandled) right.append(draftBanner(view, draft));
   if (latest && latest.stale) right.append(el("div", { class: "card", text: "The machine reading of this page changed after it was reviewed (a re-read). Compare the Machine reading tab and save again to confirm." }));
@@ -2944,17 +3385,326 @@ async function publishingView() {
   main(head, ...countries, runs);
 }
 
+// --- admin: Agents & Operators sessions (§3.3, §7.5, §10) ----------------------------------------
+
+async function privilegedGet(path) {
+  let result = await api(path);
+  if (result.status === 403 && result.data && result.data.code === "passkey_required" && typeof passkeyCheck === "function") {
+    try {
+      await passkeyCheck();
+    } catch (error) {
+      toast(error.name === "NotAllowedError" ? "Passkey check cancelled." : error.message);
+      return { ok: false, status: 403, data: { message: "Passkey check cancelled." } };
+    }
+    result = await api(path);
+  }
+  return result;
+}
+
+async function agentsView() {
+  const turn = ++app.turn;
+  setCrumbs("Agents");
+  const [bar, claimsRes, reportRes] = await Promise.all([
+    typeof passkeyBar === "function" ? passkeyBar().catch(() => null) : Promise.resolve(null),
+    api("/api/claims"),
+    api("/api/agents/report"),
+  ]);
+  if (turn !== app.turn) return;
+  const reload = () => agentsView();
+  const sendPrivileged = async (path, body) => {
+    if (typeof change === "function") return change(path, body, reload);
+    const res = await api(path, { method: "POST", body });
+    if (!res.ok) { toast(message(res)); return null; }
+    toast("Done.");
+    await reload();
+    return res.data;
+  };
+
+  const claimsList = claimsRes.ok
+    ? (Array.isArray(claimsRes.data) ? claimsRes.data : (claimsRes.data && claimsRes.data.claims) || [])
+    : [];
+  const report = reportRes.ok && reportRes.data && typeof reportRes.data === "object" ? reportRes.data : {};
+
+  // Live claims card
+  const claimsCard = el("div", { class: "card" },
+    el("h3", { text: `Live claims (${claimsList.length})` }),
+    !claimsRes.ok
+      ? el("p", { class: "warn", text: message(claimsRes) })
+      : claimsList.length
+        ? el("table", { class: "list" },
+          el("thead", {}, el("tr", {}, ["Work", "Account", "Label", "Task", "Claimed", "Expires (UTC)", ""].map((h) => el("th", { text: h })))),
+          el("tbody", {}, claimsList.map((c) => el("tr", {},
+            el("td", {}, el("a", { href: `#/doc/${encodeURIComponent(c.work_id)}`, text: c.work_id })),
+            el("td", { text: c.account || "" }),
+            el("td", {}, el("strong", { text: c.label || "" })),
+            el("td", {}, pill("role", c.task || "review")),
+            el("td", { class: "muted", text: c.claimed_at ? ago(c.claimed_at) : "—" }),
+            el("td", { text: c.expires_at ? formatClock(c.expires_at) : "—", title: c.expires_at || "" }),
+            el("td", {}, el("button", { class: "small danger", text: "Release", on: { click: async () => {
+              if (!confirm(`Release ${c.work_id} held by ${c.label}?`)) return;
+              const res = await api(`/api/claims/${encodeURIComponent(c.work_id)}/release`, {
+                method: "POST",
+                body: { outcome: "abandoned", reason: "Released by administrator" },
+              });
+              if (!res.ok) return toast(message(res));
+              removeClaimTokensForWork(c.work_id);
+              toast(`Released ${c.work_id}`);
+              reload();
+            } } }))))))
+        : el("p", { class: "muted", text: "No live claims right now." }));
+
+  // Pace & audit summary card
+  const paceRows = Array.isArray(report.pace) ? report.pace : [];
+  const auditRows = Array.isArray(report.audit_windows)
+    ? report.audit_windows
+    : (Array.isArray(report.audits) ? report.audits : (Array.isArray(report.audit) ? report.audit : []));
+  const blockedList = Array.isArray(report.blocked_labels) ? report.blocked_labels : [];
+
+  const reportCard = el("div", { class: "card" },
+    el("h3", { text: "Pace and audit summary" }),
+    !reportRes.ok
+      ? el("p", { class: "warn", text: message(reportRes) })
+      : el("div", {},
+        el("h4", { text: "Pace" }),
+        paceRows.length
+          ? el("table", { class: "list" },
+            el("thead", {}, el("tr", {}, ["Account", "Label", "Pages saved", "Median seconds", "Fast full pages", "Status"].map((h) => el("th", { text: h })))),
+            el("tbody", {}, paceRows.map((p) => {
+              const fast = p.fast_full_pages ?? p.fast_pages ?? 0;
+              return el("tr", {},
+                el("td", { text: p.author || p.account || "" }),
+                el("td", { text: p.label || "—" }),
+                el("td", { text: String(p.pages_saved ?? p.pages ?? 0) }),
+                el("td", { text: p.median_seconds != null ? `${Math.round(p.median_seconds)}s` : "—" }),
+                el("td", { text: String(fast) }),
+                el("td", {}, fast > 0 || p.flagged ? pill("high", "flagged") : pill("ok", "ok")));
+            })))
+          : el("p", { class: "muted", text: "No pace data yet." }),
+        el("h4", { text: "Audit results" }),
+        auditRows.length
+          ? el("table", { class: "list" },
+            el("thead", {}, el("tr", {}, ["Account", "Label", "Clean", "Minor", "Material", "Status"].map((h) => el("th", { text: h })))),
+            el("tbody", {}, auditRows.map((a) => {
+              const status = a.status || (a.breached ? "breached" : "pass");
+              const tone = status === "breached" ? "high" : status === "pass" ? "ok" : "medium";
+              return el("tr", {},
+                el("td", { text: a.reviewer || a.account || "" }),
+                el("td", { text: a.reviewer_label || a.label || "—" }),
+                el("td", { text: String(a.clean ?? 0) }),
+                el("td", { text: String(a.minor ?? 0) }),
+                el("td", { text: String(a.material ?? 0) }),
+                el("td", {}, pill(tone, status)));
+            })))
+          : el("p", { class: "muted", text: "No audit results yet." })));
+
+  // Emergency pause & label block/unblock controls
+  const blockAccount = el("input", { type: "email", placeholder: "agent@organisation.org", required: true, "aria-label": "Account to block" });
+  const blockLabelInput = el("input", { type: "text", placeholder: "claude-m1-07", maxlength: "40", required: true, "aria-label": "Label to block" });
+  const blockReason = el("input", { type: "text", placeholder: "Reason (optional)", maxlength: "500", "aria-label": "Block reason" });
+  const blockForm = el("form", {
+    class: "agents-inline-form",
+    on: { submit: async (event) => {
+      event.preventDefault();
+      await sendPrivileged("/api/labels/block", {
+        account: blockAccount.value.trim(),
+        label: blockLabelInput.value.trim(),
+        reason: blockReason.value.trim(),
+      });
+    } },
+  }, blockAccount, blockLabelInput, blockReason, el("button", { type: "submit", class: "danger", text: "Block label" }));
+
+  const unblockAccount = el("input", { type: "email", placeholder: "agent@organisation.org", required: true, "aria-label": "Account to unblock" });
+  const unblockLabelInput = el("input", { type: "text", placeholder: "claude-m1-07", maxlength: "40", required: true, "aria-label": "Label to unblock" });
+  const unblockForm = el("form", {
+    class: "agents-inline-form",
+    on: { submit: async (event) => {
+      event.preventDefault();
+      await sendPrivileged("/api/labels/unblock", {
+        account: unblockAccount.value.trim(),
+        label: unblockLabelInput.value.trim(),
+      });
+    } },
+  }, unblockAccount, unblockLabelInput, el("button", { type: "submit", text: "Unblock label" }));
+
+  const controlsCard = el("div", { class: "card" },
+    el("h3", { text: "Controls" }),
+    el("p", {},
+      el("button", { class: "danger", text: "Pause all agents", on: { click: async () => {
+        if (!confirm("Pause all agent accounts? Every active agent account will be deactivated and its sessions ended.")) return;
+        await sendPrivileged("/api/agents/pause-all", {});
+      } } }),
+      " ",
+      el("span", { class: "muted", text: "Switches off every agent account in one step (passkey required)." })),
+    el("h4", { text: "Block a label" }),
+    blockForm,
+    el("h4", { text: "Unblock a label" }),
+    unblockForm,
+    blockedList.length
+      ? el("div", {},
+        el("h4", { text: `Blocked labels (${blockedList.length})` }),
+        el("ul", { class: "plain" }, blockedList.map((b) => el("li", {},
+          el("strong", { text: b.label }), ` (${b.account})`, b.reason ? ` — ${b.reason}` : "", " ",
+          el("button", { class: "small", text: "Unblock", on: { click: () => sendPrivileged("/api/labels/unblock", { account: b.account, label: b.label }) } })))))
+      : null);
+
+  main(bar, controlsCard, claimsCard, reportCard);
+}
+
+async function agentsOperatorsView() {
+  const turn = ++app.turn;
+  setCrumbs("Operators");
+  const [bar, listed] = await Promise.all([
+    typeof passkeyBar === "function" ? passkeyBar() : Promise.resolve(null),
+    api("/api/operators"),
+  ]);
+  if (turn !== app.turn) return;
+  if (!listed.ok) return main(el("p", { text: message(listed) }));
+  const { operators, roles, iap_group: group } = listed.data;
+  const again = () => route();
+  const codeBox = el("div", { class: "code-box", hidden: true });
+  const showCode = (email) => (data) => {
+    codeBox.replaceChildren(
+      el("p", {}, "One-time code for ", el("strong", { text: email }), " (once, within 24 hours):"),
+      el("code", { class: "enrolment-code", text: data.code }),
+      el("p", { class: "muted", text: "Shown only now. Give it to them yourself; they enter it on the Access or Operators page to register their passkey." }));
+    codeBox.hidden = false;
+    codeBox.scrollIntoView({ block: "center" });
+  };
+
+  const sessionsBox = (o) => {
+    const path = `/api/operators/${encodeURIComponent(o.email)}`;
+    const body = el("div", { class: "operator-sessions" });
+    const loadSessions = async () => {
+      body.replaceChildren(el("span", { class: "muted small", text: "Loading sessions…" }));
+      const res = await privilegedGet(`${path}/sessions`);
+      if (!res.ok) {
+        body.replaceChildren(el("p", { class: "warn small", text: message(res) }));
+        return;
+      }
+      const list = (res.data && res.data.sessions) || [];
+      if (!list.length) {
+        body.replaceChildren(el("p", { class: "muted small", text: "No active sessions." }));
+        return;
+      }
+      body.replaceChildren(
+        el("p", {},
+          el("button", { class: "small danger", text: "End all", on: { click: () => change(`${path}/sessions/end-all`, {}, loadSessions) } })),
+        el("ul", { class: "plain" }, list.map((s) => el("li", { class: "small" },
+          el("code", { text: s.id }),
+          ` · started ${s.created_at ? ago(s.created_at) : "—"} · last used ${s.last_seen ? ago(s.last_seen) : "—"} `,
+          el("button", { class: "small danger", text: "End", on: { click: () => change(`${path}/sessions/${encodeURIComponent(s.id)}/end`, {}, loadSessions) } })))));
+    };
+    return el("details", { class: "sessions-details" },
+      el("summary", { text: "Sessions" }),
+      el("p", {}, el("button", { class: "small", text: "Load sessions", on: { click: loadSessions } })),
+      body);
+  };
+
+  const roleLabels = typeof ROLE_LABELS !== "undefined" ? ROLE_LABELS : {
+    reviewer: ["Reviewer", "checks and corrects pages"],
+    approver: ["Approver", "approves documents for publication"],
+    admin: ["Administrator", "manages operators"],
+    access_admin: ["Access administrator", "the Access section: developer accounts and API access"],
+  };
+  const makeRoleChoice = (chosen) => {
+    if (typeof roleChoice === "function") return roleChoice(roles, chosen);
+    const boxes = roles.map((role) => {
+      const box = el("input", { type: "checkbox", value: role, checked: chosen.includes(role) });
+      return el("label", { class: "role-choice" }, box, el("span", { text: (roleLabels[role] || [role])[0] }));
+    });
+    const grp = el("div", { class: "role-choices" }, boxes);
+    grp.read = () => boxes.map((l) => l.querySelector("input")).filter((b) => b.checked).map((b) => b.value);
+    return grp;
+  };
+
+  const rows = operators.map((o) => {
+    const path = `/api/operators/${encodeURIComponent(o.email)}`;
+    const agentBox = el("input", { type: "checkbox", checked: Boolean(o.agent) });
+    const approvedBox = el("input", { type: "checkbox", checked: Boolean(o.may_change_approved) });
+    const actions = el("details", {}, el("summary", { text: "Change" }),
+      form("Name, roles and flags", [
+        ["name", "Name", el("input", { type: "text", value: o.name, maxlength: "200" })],
+        ["roles", "Roles", makeRoleChoice(o.roles)],
+        ["agent", "Agent account (reviewer only)", agentBox],
+        ["may_change_approved", "May change approved documents", approvedBox],
+      ], "Save",
+      (v) => change("/api/operators", {
+        email: o.email,
+        name: v.name,
+        roles: v.roles,
+        agent: Boolean(v.agent),
+        may_change_approved: Boolean(v.may_change_approved),
+      }, again), { evidence: false, reason: false }),
+      o.active && o.roles.some((role) => role === "admin" || role === "access_admin")
+        ? form("", [], o.passkeys ? "Replace a lost passkey: new code" : "Issue a passkey code",
+          () => change(`${path}/enrolment`, { replace: o.passkeys > 0 }, showCode(o.email)), { evidence: false, reason: false })
+        : null,
+      form("", [], o.active ? "Deactivate" : "Reactivate", () => change(`${path}/active`, { active: !o.active }, again), { evidence: false, reason: false, danger: o.active }));
+    return el("tr", { class: o.active ? "" : "inactive" },
+      el("td", {},
+        el("strong", { text: o.name }),
+        el("div", { class: "muted small", text: o.email })),
+      el("td", {},
+        ...o.roles.map((role) => pill("role", (roleLabels[role] || [role])[0])),
+        o.agent ? pill("medium", "agent") : null,
+        o.may_change_approved ? pill("warn", "may change approved") : null),
+      el("td", {}, pill(o.active ? "ok" : "warn", o.active ? "active" : "inactive")),
+      el("td", { class: "muted", text: o.last_sign_in ? `${ago(o.last_sign_in)}` : "never" }),
+      el("td", { text: o.passkeys ? `${o.passkeys}` : "—" }),
+      el("td", {}, actions, sessionsBox(o)));
+  });
+
+  const email = el("input", { type: "email", placeholder: "their.name@gmail.com or @ruhu.ai", maxlength: "320" });
+  const name = el("input", { type: "text", placeholder: "Full name", maxlength: "200" });
+  const addAgent = el("input", { type: "checkbox", checked: false });
+  const addMayApproved = el("input", { type: "checkbox", checked: false });
+  main(
+    bar,
+    codeBox,
+    el("div", { class: "card" },
+      el("h3", { text: `Operators (${operators.filter((o) => o.active).length} active)` }),
+      el("table", { class: "list operators" },
+        el("thead", {}, el("tr", {}, ["Person", "Roles & flags", "Status", "Last sign-in", "Passkeys", ""].map((h) => el("th", { text: h })))),
+        el("tbody", {}, rows))),
+    el("div", { class: "card" },
+      el("h3", { text: "Add a person or agent account" }),
+      el("p", { class: "muted", text: "Use the Google account they sign in with: a Workspace address or a personal one such as Gmail." }),
+      form("", [
+        ["email", "Google account", email],
+        ["name", "Name", name],
+        ["roles", "Roles", makeRoleChoice(["reviewer"])],
+        ["agent", "Agent account (reviewer only)", addAgent],
+        ["may_change_approved", "May change approved documents", addMayApproved],
+      ], "Add",
+      (v) => change("/api/operators", {
+        email: v.email,
+        name: v.name,
+        roles: v.roles,
+        agent: Boolean(v.agent),
+        may_change_approved: Boolean(v.may_change_approved),
+      }, again), { evidence: false, reason: false })),
+    el("div", { class: "card muted-card" },
+      el("h3", { text: "Reaching the workbench" }),
+      el("p", {}, "People also pass Google's sign-in gate (IAP) before they see this page. ",
+        group
+          ? el("span", {}, "Add their Google account to ", el("strong", { text: group }), " in Google Workspace too, and remove it when they leave.")
+          : el("span", { text: "Ask the project's owner to let them through (deployment/gcp/workbench.sh operator)." }))),
+  );
+}
+
 async function route() {
   if (app.dirty && location.hash !== lastHash && !confirm("You have unsaved changes on this page. Leave without saving?")) {
     history.replaceState(null, "", lastHash);
     return;
   }
+  stopClaimHeartbeat();
   app.dirty = false;
   const address = lastHash = location.hash;
+  captureTabLabel();
+  const { parts } = parseHash(location.hash);
   if (!location.hash.includes("/page/") || !document.querySelector(".review")) main(el("div", { class: "loading" }, el("span", { class: "spinner" }), "Loading…"));
-  const parts = location.hash.replace(/^#\/?/, "").split("/").map(decodeURIComponent);
   for (const link of document.querySelectorAll("#who .nav-link")) {
-    const section = ["access", "operators", "traffic", "queue", "publishing"].includes(parts[0]) ? `#/${parts[0]}` : "#/";
+    const section = ["access", "operators", "agents", "traffic", "queue", "publishing"].includes(parts[0]) ? `#/${parts[0]}` : "#/";
     link.classList.toggle("on", link.hash === section);
   }
   try {
@@ -2965,11 +3715,13 @@ async function route() {
     if (parts[0] === "doc" && parts[2] === "events") return await eventsView(parts[1]);
     if (parts[0] === "doc" && parts[2] === "instructions") return await instructionsView(parts[1]);
     if (parts[0] === "doc" && parts[2] === "citations") return await citationsView(parts[1]);
+    if (parts[0] === "claim") return await claimView();
     if (parts[0] === "queue") return await queueView();
     if (parts[0] === "doc" && parts[1]) return await actView(parts[1]);
     if (parts[0] === "audit" && parts[1]) return await auditView(parts[1]);
     if (parts[0] === "access" && app.me.access) return await accessView(parts.slice(1));
-    if (parts[0] === "operators" && app.me.operators) return await operatorsView();
+    if (parts[0] === "operators" && app.me.operators) return await agentsOperatorsView();
+    if (parts[0] === "agents" && (app.me.agents || (app.me.roles || []).includes("admin"))) return await agentsView();
     if (parts[0] === "traffic" && app.me.traffic) return await trafficView();
     if (parts[0] === "publishing" && app.me.publishing) return await publishingView();
     return await dashboard();
@@ -2998,9 +3750,11 @@ document.addEventListener("keydown", (event) => {
 }, true);
 
 async function start() {
+  captureTabLabel();
   const signedOut = await loadMe();
   if (signedOut) return showSignIn(signedOut);
   returnToPlace();
+  captureTabLabel();
   if (!start.listening) { window.addEventListener("hashchange", route); start.listening = true; }
   await route();
   restoreForms();

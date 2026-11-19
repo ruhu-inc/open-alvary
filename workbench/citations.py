@@ -35,6 +35,7 @@ from workbench.store import Conflict
 
 # Each status and the role that may record it.
 STATUSES = {"proposed": "reviewer", "confirmed": "approver", "rejected": "approver", "withdrawn": "approver"}
+AGENT_WRITE_REFUSED = "Agent accounts may not change legal events, amendment instructions, or citations."
 JSON_BODY = Body(...)
 
 
@@ -211,6 +212,8 @@ def install(app: FastAPI, store, library, review) -> None:
         """Record, as proposals, the citations a proposals file (operations.citations propose) names that
         this judgment's text holds as it now stands and that are not recorded yet, even if rejected."""
         who = auth.current(request, store, write=True, role="reviewer")
+        if who["operator"].get("agent"):
+            raise HTTPException(403, AGENT_WRITE_REFUSED)
         act = document(act_id)
         work = review.details_key(act)
         text = text_of(act)
@@ -264,6 +267,8 @@ def install(app: FastAPI, store, library, review) -> None:
         rejected; or a confirmed one withdrawn, with its treatment."""
         status = body.get("status")
         who = auth.current(request, store, write=True, role=STATUSES.get(status, "approver"))
+        if who["operator"].get("agent"):
+            raise HTTPException(403, AGENT_WRITE_REFUSED)
         if status not in ("confirmed", "rejected", "withdrawn"):
             raise HTTPException(422, "status must be confirmed, rejected or withdrawn")
         act = document(act_id)

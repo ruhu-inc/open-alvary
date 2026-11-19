@@ -2,10 +2,49 @@
 (operations.publish): its pages, its details (shared by a work's language versions) and whether
 the latest approval still covers both exactly."""
 
+import os
+
 from pydantic import ValidationError
 
 from ingestion import cited_names
 from workbench import content, details, publication, record_view, routing
+
+# Families eligible for online legal-status research and ALVARY_REVIEW_STATUS_GATE (design §8).
+STATUS_RESEARCH_FAMILIES = frozenset(
+    {
+        "constitution",
+        "legislation",
+        "subsidiary_legislation",
+        "executive_instrument",
+        "treaty",
+        "regional_instrument",
+    }
+)
+STATUS_RESEARCH_PENDING_MESSAGE = "Legal status: research pending."
+
+
+def status_gate_enabled() -> bool:
+    """Whether ALVARY_REVIEW_STATUS_GATE is switched on (off by default)."""
+    return os.environ.get("ALVARY_REVIEW_STATUS_GATE", "off").strip().lower() == "on"
+
+
+def status_research_pending(record: dict | None, act: dict | None = None) -> bool:
+    """Whether a work's confirmed Details are still waiting for online legal-status research.
+
+    Pending is a state the workbench can see (design §8): the latest detail revision is confirmed,
+    its identity.family is in STATUS_RESEARCH_FAMILIES, status.legal is "unknown" (or unset), and
+    status.note is empty. Writing what each source answered in status.note ends the pending state.
+    """
+    if not record or record.get("status") != "confirmed":
+        return False
+    raw = record.get("details") or {}
+    values = raw if record_view.is_view(raw) else record_view.from_legacy(raw, record.get("absent") or {})[0]
+    family = values.get("identity.family") or record_view.family_for((act or {}).get("type"))
+    if family not in STATUS_RESEARCH_FAMILIES:
+        return False
+    legal = values.get("status.legal") or "unknown"
+    note = (values.get("status.note") or "").strip()
+    return legal == "unknown" and note == ""
 
 
 def to_do(readiness: dict) -> dict[int, str]:
@@ -68,6 +107,7 @@ class Review:
     def described(self, act: dict, record: dict | None, reading: dict) -> dict:
         """The document's details in the record view: values, what is accounted for, its fields."""
         place, profile = record_view.place_for(act, self.library.manifest_for(act["id"]), self.profiles)
+        dropped: dict = {}
         if record:
             values, absent = record["details"], record["absent"]
             if not record_view.is_view(values):  # saved under the Nigerian DETAILS-1: read it in this view
@@ -82,8 +122,25 @@ class Review:
             )
             if isinstance(values.get("identity.title"), str):
                 values = {**values, "identity.title": cited_names.cited(values["identity.title"])[0]}
+            allowed = {
+                spec.key
+                for spec in record_view.fields(values["identity.family"], values["identity.type"], profile)
+            }
+            dropped = {
+                key: {
+                    "value": value,
+                    "page": None,
+                    "evidence": "Read from the document; no field for it in this form.",
+                }
+                for key, value in values.items()
+                if key not in allowed
+            }
+            values = {key: value for key, value in values.items() if key in allowed}
+            absent = {key: reason for key, reason in absent.items() if key in allowed}
         else:  # nothing marked absent by inference: suggested beside its field (record_view.suggestions)
-            values = record_view.base_values(act, self.library.manifest_for(act["id"]))
+            manifest = self.library.manifest_for(act["id"])
+            values = record_view.base_values(act, manifest, profile)
+            dropped = record_view.unshown_suggestions(act, manifest, profile)
             shown = record_view.fields(values["identity.family"], values["identity.type"], profile)
             absent = record_view.first_absent(values, {spec.key for spec in shown})
         if isinstance(values.get("expressions"), list):
@@ -107,7 +164,11 @@ class Review:
             }
         family, kind = values["identity.family"], values["identity.type"]
         specs = record_view.fields(family, kind, profile)
-        values, absent, left_out = record_view.for_form(values, absent, specs)
+        values, absent, extra_left_out = record_view.for_form(values, absent, specs)
+        left_out = {
+            **{k: (v["value"] if isinstance(v, dict) else v) for k, v in dropped.items()},
+            **extra_left_out,
+        }
         notices = [] if record else list(record_view.usable_suggestions(act)[1])
         if note := record_view.left_out_notice(
             left_out,
@@ -126,6 +187,7 @@ class Review:
             "kind": kind,
             "missing": record_view.missing(values, absent, specs),
             "left_out": left_out,
+            "unshown": dropped,
             # What was put right in the reader's suggestions, and any values this form has no field for.
             "notices": notices,
         }
@@ -239,6 +301,18 @@ class Review:
             problem = self.record_and_problem(document, view)[1]
             readiness["details"] = {**readiness["details"], "record_problem": problem}
             readiness["ready"] = readiness["ready"] and problem is None
+        pending = status_research_pending(record, document)
+        if pending and status_gate_enabled():
+            readiness["status_pending"] = True
+            readiness["status_pending_message"] = STATUS_RESEARCH_PENDING_MESSAGE
+            readiness["details"] = {
+                **readiness["details"],
+                "status_pending": True,
+                "status_pending_message": STATUS_RESEARCH_PENDING_MESSAGE,
+            }
+            readiness["ready"] = False
+        else:
+            readiness["status_pending"] = False
         return {
             "reading": reading,
             "latest": latest,

@@ -51,6 +51,8 @@ operator = Table(
     Column("name", String(200), nullable=False),
     Column("roles", String(100), nullable=False),
     Column("active", Boolean, nullable=False, default=True),
+    Column("agent", Boolean, nullable=False, default=False),
+    Column("may_change_approved", Boolean, nullable=False, default=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
 )
 
@@ -116,6 +118,8 @@ page_revision = Table(
     Column("resolutions", JSON, nullable=False),  # flag id -> {decision, note}
     Column("comment", Text, nullable=False, default=""),
     Column("author", String(320), nullable=False),
+    Column("label", String(40)),
+    Column("task", String(20)),
     Column("created_at", DateTime(timezone=True), nullable=False),
     UniqueConstraint("act_id", "page", "revision"),
 )
@@ -131,6 +135,8 @@ detail_revision = Table(
     Column("status", String(20), nullable=False),  # draft | confirmed
     Column("comment", Text, nullable=False, default=""),
     Column("author", String(320), nullable=False),
+    Column("label", String(40)),
+    Column("task", String(20)),
     Column("created_at", DateTime(timezone=True), nullable=False),
     UniqueConstraint("act_id", "revision"),
 )
@@ -227,6 +233,70 @@ audit = Table(
     Column("detail", JSON, nullable=False),
 )
 
+# Multi-agent review claims, releases, blocked labels and page audits (docs/architecture/multi-agent-review-design.md).
+work_claim = Table(
+    "work_claim",
+    metadata,
+    Column("work_id", String(140), primary_key=True),
+    Column("account", String(320), nullable=False),
+    Column("label", String(40), nullable=False),
+    Column("token_hash", String(64), nullable=False),
+    Column("task", String(20), nullable=False),
+    Column("claimed_at", DateTime(timezone=True), nullable=False),
+    Column("renewed_at", DateTime(timezone=True), nullable=False),
+    Column("expires_at", DateTime(timezone=True), nullable=False),
+)
+
+work_release = Table(
+    "work_release",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("work_id", String(140), nullable=False),
+    Column("account", String(320), nullable=False),
+    Column("label", String(40), nullable=False),
+    Column("task", String(20), nullable=False),
+    Column("outcome", String(20), nullable=False),  # done | parked | abandoned
+    Column("reason", Text, nullable=False, default=""),
+    Column("released_at", DateTime(timezone=True), nullable=False),
+)
+
+blocked_label = Table(
+    "blocked_label",
+    metadata,
+    Column("account", String(320), primary_key=True),
+    Column("label", String(40), primary_key=True),
+    Column("blocked_at", DateTime(timezone=True), nullable=False),
+    Column("blocked_by", String(320), nullable=False),
+    Column("reason", Text, nullable=False, default=""),
+)
+
+review_audit = Table(
+    "review_audit",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("work_id", String(140), nullable=False),
+    Column("act_id", String(140), nullable=False),
+    Column("page", Integer, nullable=False),
+    Column("release_id", Integer, nullable=False),
+    Column("reviewer", String(320), nullable=False),
+    Column("reviewer_label", String(40), nullable=False),
+    Column("reviewer_revision", Integer, nullable=False),
+    Column("drawn_at", DateTime(timezone=True), nullable=False),
+    Column("auditor", String(320)),
+    Column("auditor_label", String(40)),
+    Column("auditor_units", JSON),
+    Column("auditor_resolutions", JSON),
+    Column("auditor_status", String(20)),
+    Column("audited_at", DateTime(timezone=True)),
+    Column("paragraphs_changed", Integer),
+    Column("words_changed", Integer),
+    Column("other_changes", Integer),
+    Column("verdict", String(20)),  # clean | minor | material
+    Column("owner_decision", String(20)),  # accepted_auditor | kept_reviewer
+    Column("owner_decided_by", String(320)),
+    Column("owner_decided_at", DateTime(timezone=True)),
+)
+
 
 # Publishing (operations.publish run): every run, asked for from the workbench or started by the nightly
 # schedule, and where each document considered stands in public view after the latest run. The
@@ -273,6 +343,30 @@ def now() -> datetime:
     return datetime.now(UTC)
 
 
+def db_now(db):
+    """Database clock on PostgreSQL (avoids cross-instance skew); UTC Python clock on SQLite."""
+    return func.now() if db.dialect.name == "postgresql" else now()
+
+
+def session_limits(person: dict | None) -> tuple[timedelta, timedelta]:
+    """Idle and maximum session lifetimes for an operator (section 3.3)."""
+    if (
+        person
+        and person.get("active", True)
+        and bool(person.get("agent"))
+        and set(person.get("roles") or ()) == {"reviewer"}
+    ):
+        idle_hours = float(os.environ.get("ALVARY_REVIEW_AGENT_IDLE_HOURS", "24"))
+        max_hours = float(os.environ.get("ALVARY_REVIEW_AGENT_MAX_HOURS", "168"))
+        return timedelta(hours=idle_hours), timedelta(hours=max_hours)
+    return SESSION_IDLE, SESSION_MAX
+
+
+def session_max_age(person: dict | None) -> int:
+    """Cookie max_age in seconds matching the account's maximum session lifetime."""
+    return int(session_limits(person)[1].total_seconds())
+
+
 def _aware(value: datetime) -> datetime:
     return value if value.tzinfo else value.replace(tzinfo=UTC)
 
@@ -289,9 +383,13 @@ def engine_from_environment() -> Engine:
 
 
 def connect(url: str) -> Engine:
-    engine = create_engine(url, future=True, pool_pre_ping=True)
-    metadata.create_all(engine)
-    _upgrade(engine)
+    pool_kwargs = (
+        {}
+        if make_url(url).drivername.startswith("sqlite")
+        else {"pool_size": 4, "max_overflow": 4, "pool_recycle": 1800}
+    )
+    engine = create_engine(url, future=True, pool_pre_ping=True, **pool_kwargs)
+    _make_schema(engine)
     publisher = os.environ.get("ALVARY_REVIEW_PUBLISHER_DATABASE_URL")
     if publisher and engine.dialect.name == "postgresql":
         try:
@@ -340,8 +438,31 @@ def provision_publisher(engine: Engine, password: str) -> None:
         db.execute(text(f"GRANT USAGE, SELECT ON SEQUENCE publication_run_id_seq TO {PUBLISHER}"))
 
 
+# Copies of the workbench that start together (a release with several instances) must not each try to
+# create the same new table: PostgreSQL then refuses all but one with a duplicate in its own catalogue,
+# and that copy fails to start. One session-level advisory lock makes them take turns; the later ones
+# find everything made. SQLite has one writer and needs no lock.
+SCHEMA_LOCK = 0x6F61726576696577  # "oareview"
+
+
+def _make_schema(engine: Engine) -> None:
+    """The tables, then the columns and indexes added since a database was first made, one copy at a time."""
+    if engine.dialect.name != "postgresql":
+        metadata.create_all(engine)
+        _upgrade(engine)
+        return
+    with engine.connect() as holder:
+        holder.execute(text("SELECT pg_advisory_lock(:key)"), {"key": SCHEMA_LOCK})
+        try:
+            metadata.create_all(engine)
+            _upgrade(engine)
+        finally:
+            holder.execute(text("SELECT pg_advisory_unlock(:key)"), {"key": SCHEMA_LOCK})
+            holder.commit()
+
+
 def _upgrade(engine: Engine) -> None:
-    """Columns added after a database was first created (create_all adds only missing tables)."""
+    """Columns and indexes added after a database was first created (create_all adds only missing tables)."""
     added = {
         "approval": {
             "details_sha256": "VARCHAR(64)",
@@ -357,13 +478,49 @@ def _upgrade(engine: Engine) -> None:
             "challenge_purpose": "VARCHAR(20)",
             "challenge_at": "TIMESTAMP WITH TIME ZONE",
         },
+        "operator": {
+            "agent": "BOOLEAN NOT NULL DEFAULT FALSE",
+            "may_change_approved": "BOOLEAN NOT NULL DEFAULT FALSE",
+        },
+        "page_revision": {
+            "label": "VARCHAR(40)",
+            "task": "VARCHAR(20)",
+        },
+        "detail_revision": {
+            "label": "VARCHAR(40)",
+            "task": "VARCHAR(20)",
+        },
     }
-    for table, columns in added.items():
-        present = {column["name"] for column in inspect(engine).get_columns(table)}
-        for name, kind in columns.items():
-            if name not in present:
-                with engine.begin() as db:
-                    db.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {kind}"))
+    if engine.dialect.name == "postgresql":
+        with engine.begin() as db:
+            for table, columns in added.items():
+                for name, kind in columns.items():
+                    db.execute(text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {name} {kind}"))
+    else:
+        for table, columns in added.items():
+            present = {column["name"] for column in inspect(engine).get_columns(table)}
+            for name, kind in columns.items():
+                if name not in present:
+                    with engine.begin() as db:
+                        db.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {kind}"))
+
+    indexes = (
+        "CREATE UNIQUE INDEX IF NOT EXISTS work_claim_account_label_uq "
+        "ON work_claim (account, label) WHERE label <> 'unlabelled'",
+        "CREATE INDEX IF NOT EXISTS work_claim_expires_at_idx ON work_claim (expires_at)",
+        "CREATE INDEX IF NOT EXISTS work_release_work_id_id_idx ON work_release (work_id, id)",
+        "CREATE INDEX IF NOT EXISTS page_revision_author_label_idx ON page_revision (author, label)",
+        "CREATE INDEX IF NOT EXISTS detail_revision_author_label_idx ON detail_revision (author, label)",
+        "CREATE INDEX IF NOT EXISTS audit_event_actor_at_idx ON audit_event (actor, at)",
+        "CREATE INDEX IF NOT EXISTS audit_event_act_id_id_idx ON audit_event (act_id, id)",
+        "CREATE INDEX IF NOT EXISTS review_audit_work_id_audited_at_idx ON review_audit (work_id, audited_at)",
+        "CREATE INDEX IF NOT EXISTS review_audit_reviewer_label_audited_at_idx "
+        "ON review_audit (reviewer, reviewer_label, audited_at)",
+        "CREATE INDEX IF NOT EXISTS review_audit_reviewer_revision_idx ON review_audit (reviewer_revision)",
+    )
+    with engine.begin() as db:
+        for stmt in indexes:
+            db.execute(text(stmt))
 
 
 class Store:
@@ -372,25 +529,78 @@ class Store:
 
     # --- operators and audit -----------------------------------------------------------------
 
-    def add_operator(self, email: str, name: str, roles: set[str], actor: str = "admin-cli") -> None:
+    def add_operator(
+        self,
+        email: str,
+        name: str,
+        roles: set[str],
+        actor: str = "admin-cli",
+        *,
+        agent: bool | None = None,
+        may_change_approved: bool | None = None,
+    ) -> None:
         if not roles or not roles <= ROLES:
             raise ValueError(f"roles must be among {sorted(ROLES)}")
         email = email.strip().lower()
         with self.engine.begin() as db:
             existing = db.execute(select(operator).where(operator.c.email == email)).first()
-            values = {"name": name, "roles": ",".join(sorted(roles))}
+            new_agent = bool(existing.agent) if (existing and agent is None) else bool(agent)
+            new_may_change = (
+                bool(existing.may_change_approved)
+                if (existing and may_change_approved is None)
+                else bool(may_change_approved)
+            )
+            if new_agent and roles != {"reviewer"}:
+                raise ValueError("An agent account may hold only the reviewer role.")
+            if (
+                existing
+                and new_agent != bool(existing.agent)
+                and set(existing.roles.split(",")) != {"reviewer"}
+            ):
+                raise ValueError("An account with privileged roles may not be marked as an agent account.")
+            values = {
+                "name": name,
+                "roles": ",".join(sorted(roles)),
+                "agent": new_agent,
+                "may_change_approved": new_may_change,
+            }
             if existing:
+                old_roles = set(existing.roles.split(","))
                 # An edit of name or roles leaves a deactivated operator deactivated: only reactivate
                 # brings one back (findings 2026-11-16, item 24).
                 db.execute(update(operator).where(operator.c.email == email).values(**values))
+                if (
+                    old_roles != roles
+                    or bool(existing.agent) != new_agent
+                    or bool(existing.may_change_approved) != new_may_change
+                ):
+                    db.execute(
+                        update(session)
+                        .where(session.c.email == email, session.c.ended_at.is_(None))
+                        .values(ended_at=now())
+                    )
             else:
                 db.execute(insert(operator).values(email=email, created_at=now(), active=True, **values))
-            self._audit(db, actor, "operator_saved", detail={"email": email, "roles": sorted(roles)})
+            self._audit(
+                db,
+                actor,
+                "operator_saved",
+                detail={
+                    "email": email,
+                    "roles": sorted(roles),
+                    "agent": new_agent,
+                    "may_change_approved": new_may_change,
+                },
+            )
 
     def deactivate(self, email: str, actor: str = "admin-cli") -> None:
         with self.engine.begin() as db:
             db.execute(update(operator).where(operator.c.email == email.lower()).values(active=False))
-            db.execute(update(session).where(session.c.email == email.lower()).values(ended_at=now()))
+            db.execute(
+                update(session)
+                .where(session.c.email == email.lower(), session.c.ended_at.is_(None))
+                .values(ended_at=now())
+            )
             self._audit(db, actor, "operator_deactivated", detail={"email": email.lower()})
 
     def operators(self) -> list[dict]:
@@ -415,6 +625,8 @@ class Store:
                 "name": row.name,
                 "roles": sorted(row.roles.split(",")),
                 "active": bool(row.active),
+                "agent": bool(row.agent),
+                "may_change_approved": bool(row.may_change_approved),
                 "created_at": row.created_at,
                 "last_sign_in": last.get(row.email),
                 "passkeys": keys.get(row.email, 0),
@@ -441,7 +653,15 @@ class Store:
             row = db.execute(
                 select(operator).where(operator.c.email == email.strip().lower(), operator.c.active.is_(True))
             ).first()
-        return {**row._mapping, "roles": set(row.roles.split(","))} if row else None
+        if not row:
+            return None
+        return {
+            **row._mapping,
+            "roles": set(row.roles.split(",")),
+            "active": bool(row.active),
+            "agent": bool(row.agent),
+            "may_change_approved": bool(row.may_change_approved),
+        }
 
     def _audit(self, db, actor: str, action: str, act_id=None, page=None, detail=None) -> None:
         db.execute(
@@ -546,21 +766,44 @@ class Store:
         return token, csrf
 
     def resume(self, token: str) -> dict | None:
-        """The session behind a cookie, if live; refreshes its idle timer."""
+        """The session behind a cookie, if live; enforces per-account idle/max limits and throttles
+        last_seen updates to at most once every 60 seconds."""
         with self.engine.begin() as db:
-            row = db.execute(select(session).where(session.c.token_hash == digest(token))).first()
-            if not row or row.ended_at:
+            row = db.execute(
+                select(
+                    session,
+                    operator.c.name.label("op_name"),
+                    operator.c.roles.label("op_roles"),
+                    operator.c.active.label("op_active"),
+                    operator.c.agent.label("op_agent"),
+                    operator.c.may_change_approved.label("op_may_change_approved"),
+                    operator.c.created_at.label("op_created_at"),
+                )
+                .select_from(session.join(operator, session.c.email == operator.c.email))
+                .where(session.c.token_hash == digest(token))
+            ).first()
+            if not row or row.ended_at or not row.op_active:
                 return None
+            person = {
+                "email": row.email,
+                "name": row.op_name,
+                "roles": set(row.op_roles.split(",")),
+                "active": bool(row.op_active),
+                "agent": bool(row.op_agent),
+                "may_change_approved": bool(row.op_may_change_approved),
+                "created_at": row.op_created_at,
+            }
+            idle_limit, max_limit = session_limits(person)
             moment = now()
-            if moment - _aware(row.last_seen) > SESSION_IDLE or moment - _aware(row.created_at) > SESSION_MAX:
+            if moment - _aware(row.last_seen) > idle_limit or moment - _aware(row.created_at) > max_limit:
                 db.execute(
                     update(session).where(session.c.token_hash == row.token_hash).values(ended_at=moment)
                 )
                 return None
-            db.execute(update(session).where(session.c.token_hash == row.token_hash).values(last_seen=moment))
-        person = self.operator(row.email)
-        if not person:
-            return None
+            if moment - _aware(row.last_seen) >= timedelta(seconds=60):
+                db.execute(
+                    update(session).where(session.c.token_hash == row.token_hash).values(last_seen=moment)
+                )
         return {
             "email": row.email,
             "csrf": row.csrf,
@@ -577,6 +820,95 @@ class Store:
                     update(session).where(session.c.token_hash == row.token_hash).values(ended_at=now())
                 )
                 self._audit(db, row.email, "signed_out")
+
+    def list_sessions(self, email: str) -> list[dict]:
+        """Live sessions for an operator: short id (first 12 chars of token_hash), created_at, last_seen."""
+        email = email.strip().lower()
+        person = self.operator(email)
+        idle_limit, max_limit = session_limits(person)
+        moment = now()
+        with self.engine.connect() as db:
+            rows = db.execute(
+                select(session)
+                .where(session.c.email == email, session.c.ended_at.is_(None))
+                .order_by(session.c.created_at.desc())
+            ).all()
+        live = []
+        for row in rows:
+            created = _aware(row.created_at)
+            seen = _aware(row.last_seen)
+            if moment - seen <= idle_limit and moment - created <= max_limit:
+                live.append(
+                    {
+                        "id": row.token_hash[:12],
+                        "created_at": created.isoformat(),
+                        "last_seen": seen.isoformat(),
+                    }
+                )
+        return live
+
+    def end_session_by_id(self, email: str, short_id: str, actor: str = "admin-cli") -> bool:
+        """End one live session identified by the first 12 characters of its token hash."""
+        email = email.strip().lower()
+        if not short_id or len(short_id) < 12 or not re.fullmatch(r"[0-9a-f]+", short_id):
+            return False
+        with self.engine.begin() as db:
+            done = db.execute(
+                update(session)
+                .where(
+                    session.c.email == email,
+                    session.c.token_hash.startswith(short_id),
+                    session.c.ended_at.is_(None),
+                )
+                .values(ended_at=now())
+            ).rowcount
+            if done:
+                self._audit(
+                    db,
+                    actor,
+                    "session_ended",
+                    detail={"email": email, "session_id": short_id[:12]},
+                )
+        return bool(done)
+
+    def end_all_sessions(self, email: str, actor: str = "admin-cli") -> int:
+        """End every live session for an operator."""
+        email = email.strip().lower()
+        with self.engine.begin() as db:
+            done = db.execute(
+                update(session)
+                .where(session.c.email == email, session.c.ended_at.is_(None))
+                .values(ended_at=now())
+            ).rowcount
+            self._audit(
+                db,
+                actor,
+                "sessions_ended_all",
+                detail={"email": email, "count": int(done or 0)},
+            )
+        return int(done or 0)
+
+    def pause_all_agents(self, actor: str = "admin-cli") -> list[str]:
+        """Deactivate every active agent account and end all of their live sessions."""
+        with self.engine.begin() as db:
+            rows = db.execute(
+                select(operator.c.email).where(operator.c.agent.is_(True), operator.c.active.is_(True))
+            ).all()
+            emails = sorted(row.email for row in rows)
+            if emails:
+                db.execute(update(operator).where(operator.c.email.in_(emails)).values(active=False))
+                db.execute(
+                    update(session)
+                    .where(session.c.email.in_(emails), session.c.ended_at.is_(None))
+                    .values(ended_at=now())
+                )
+            self._audit(
+                db,
+                actor,
+                "agents_paused_all",
+                detail={"accounts": emails, "count": len(emails)},
+            )
+        return emails
 
     # --- passkeys (Access section) --------------------------------------------------------------
 
@@ -725,11 +1057,23 @@ class Store:
         with self.engine.connect() as db:
             return [dict(row._mapping) for row in db.execute(query)]
 
-    def save_page(self, act_id: str, page: int, expected: int, author: str, **values) -> int:
+    def save_page(
+        self,
+        act_id: str,
+        page: int,
+        expected: int,
+        author: str,
+        *,
+        label: str | None = None,
+        task: str | None = None,
+        db=None,
+        **values,
+    ) -> int:
         """Write revision expected+1; Conflict if someone else saved since the client loaded."""
-        with self.engine.begin() as db:
+
+        def _write(conn) -> int:
             current = (
-                db.execute(
+                conn.execute(
                     select(func.max(page_revision.c.revision)).where(
                         page_revision.c.act_id == act_id, page_revision.c.page == page
                     )
@@ -739,20 +1083,22 @@ class Store:
             if current != expected:
                 raise Conflict(f"page {page} is at revision {current}, not {expected}")
             try:
-                db.execute(
+                conn.execute(
                     insert(page_revision).values(
                         act_id=act_id,
                         page=page,
                         revision=expected + 1,
                         author=author,
-                        created_at=now(),
+                        label=label,
+                        task=task,
+                        created_at=db_now(conn),
                         **values,
                     )
                 )
             except IntegrityError as error:
                 raise Conflict(str(error)) from error
             self._audit(
-                db,
+                conn,
                 author,
                 "page_saved",
                 act_id,
@@ -763,7 +1109,12 @@ class Store:
                     "resolved": len(values["resolutions"]),
                 },
             )
-        return expected + 1
+            return expected + 1
+
+        if db is not None:
+            return _write(db)
+        with self.engine.begin() as conn:
+            return _write(conn)
 
     # --- document details ----------------------------------------------------------------------
 
@@ -780,11 +1131,22 @@ class Store:
         history = self.detail_history(act_id)
         return history[0] if history else None
 
-    def save_details(self, act_id: str, expected: int, author: str, **values) -> int:
+    def save_details(
+        self,
+        act_id: str,
+        expected: int,
+        author: str,
+        *,
+        label: str | None = None,
+        task: str | None = None,
+        db=None,
+        **values,
+    ) -> int:
         """Write details revision expected+1; Conflict if someone else saved since the client loaded."""
-        with self.engine.begin() as db:
+
+        def _write(conn) -> int:
             current = (
-                db.execute(
+                conn.execute(
                     select(func.max(detail_revision.c.revision)).where(detail_revision.c.act_id == act_id)
                 ).scalar()
                 or 0
@@ -792,22 +1154,33 @@ class Store:
             if current != expected:
                 raise Conflict(f"details are at revision {current}, not {expected}")
             try:
-                db.execute(
+                conn.execute(
                     insert(detail_revision).values(
-                        act_id=act_id, revision=expected + 1, author=author, created_at=now(), **values
+                        act_id=act_id,
+                        revision=expected + 1,
+                        author=author,
+                        label=label,
+                        task=task,
+                        created_at=db_now(conn),
+                        **values,
                     )
                 )
             except IntegrityError as error:
                 raise Conflict(str(error)) from error
             self._audit(
-                db,
+                conn,
                 author,
                 "details_saved",
                 act_id,
                 None,
                 {"revision": expected + 1, "status": values["status"], "given": len(values["details"])},
             )
-        return expected + 1
+            return expected + 1
+
+        if db is not None:
+            return _write(db)
+        with self.engine.begin() as conn:
+            return _write(conn)
 
     # --- legal events, amendment instructions (workbench.editorial) and citations (workbench.citations) ---
 
@@ -910,6 +1283,197 @@ class Store:
                 },
             )
         return expected + 1
+
+    # --- review audits (section 7.2) -----------------------------------------------------------
+
+    def create_audit_draw(
+        self,
+        *,
+        work_id: str,
+        act_id: str,
+        page: int,
+        release_id: int,
+        reviewer: str,
+        reviewer_label: str,
+        reviewer_revision: int,
+        db=None,
+    ) -> int:
+        """Record a drawn page in review_audit."""
+
+        def _write(conn) -> int:
+            return int(
+                conn.execute(
+                    insert(review_audit).values(
+                        work_id=work_id,
+                        act_id=act_id,
+                        page=page,
+                        release_id=release_id,
+                        reviewer=reviewer.strip().lower(),
+                        reviewer_label=reviewer_label,
+                        reviewer_revision=reviewer_revision,
+                        drawn_at=db_now(conn),
+                    )
+                ).inserted_primary_key[0]
+            )
+
+        if db is not None:
+            return _write(db)
+        with self.engine.begin() as conn:
+            return _write(conn)
+
+    def save_audit_submission(
+        self,
+        audit_id: int,
+        *,
+        auditor: str,
+        auditor_label: str,
+        units: list[dict],
+        resolutions: dict,
+        status: str,
+        paragraphs_changed: int | None = None,
+        words_changed: int | None = None,
+        other_changes: int | None = None,
+        verdict: str | None = None,
+        db=None,
+    ) -> dict:
+        """Store an auditor's page submission on review_audit without touching live page_revision."""
+        auditor = auditor.strip().lower()
+
+        def _write(conn) -> dict:
+            row = conn.execute(select(review_audit).where(review_audit.c.id == audit_id)).first()
+            if row is None:
+                raise KeyError(f"No review_audit row {audit_id}")
+            if row.audited_at is not None:
+                raise Conflict(f"Audit {audit_id} was already submitted")
+            if row.reviewer == auditor:
+                raise ValueError("Auditor account must differ from reviewer account")
+            conn.execute(
+                update(review_audit)
+                .where(review_audit.c.id == audit_id)
+                .values(
+                    auditor=auditor,
+                    auditor_label=auditor_label,
+                    auditor_units=units,
+                    auditor_resolutions=resolutions,
+                    auditor_status=status,
+                    audited_at=db_now(conn),
+                    paragraphs_changed=paragraphs_changed,
+                    words_changed=words_changed,
+                    other_changes=other_changes,
+                    verdict=verdict,
+                )
+            )
+            self._audit(
+                conn,
+                auditor,
+                "audit_submitted",
+                detail={
+                    "audit_id": audit_id,
+                    "work_id": row.work_id,
+                    "act_id": row.act_id,
+                    "page": row.page,
+                    "label": auditor_label,
+                    "verdict": verdict,
+                },
+            )
+            updated = conn.execute(select(review_audit).where(review_audit.c.id == audit_id)).first()
+            return dict(updated._mapping)
+
+        if db is not None:
+            return _write(db)
+        with self.engine.begin() as conn:
+            return _write(conn)
+
+    def resolve_audit(
+        self,
+        audit_id: int,
+        *,
+        decision: str,
+        decided_by: str,
+        reading_sha256: str | None = None,
+        comment: str = "",
+    ) -> dict:
+        """Record an owner's decision on an audited page. Only accepted_auditor writes a live
+        page_revision (under the owner's account)."""
+        if decision not in {"accepted_auditor", "kept_reviewer"}:
+            raise ValueError("decision must be accepted_auditor or kept_reviewer")
+        decided_by = decided_by.strip().lower()
+        with self.engine.begin() as conn:
+            row = conn.execute(select(review_audit).where(review_audit.c.id == audit_id)).first()
+            if row is None:
+                raise KeyError(f"No review_audit row {audit_id}")
+            if row.audited_at is None:
+                raise ValueError(f"Audit {audit_id} has not been submitted yet")
+            if row.owner_decision is not None:
+                raise Conflict(f"Audit {audit_id} has already been resolved")
+            conn.execute(
+                update(review_audit)
+                .where(review_audit.c.id == audit_id)
+                .values(
+                    owner_decision=decision,
+                    owner_decided_by=decided_by,
+                    owner_decided_at=db_now(conn),
+                )
+            )
+            new_revision = None
+            if decision == "accepted_auditor":
+                latest = conn.execute(
+                    select(page_revision)
+                    .where(page_revision.c.act_id == row.act_id, page_revision.c.page == row.page)
+                    .order_by(page_revision.c.revision.desc())
+                    .limit(1)
+                ).first()
+                expected = latest.revision if latest else 0
+                sha = reading_sha256 or (latest.reading_sha256 if latest else "")
+                new_revision = self.save_page(
+                    row.act_id,
+                    row.page,
+                    expected,
+                    decided_by,
+                    reading_sha256=sha,
+                    units=row.auditor_units or [],
+                    status=row.auditor_status or "checked",
+                    resolutions=row.auditor_resolutions or {},
+                    comment=comment or f"Accepted audit #{audit_id}",
+                    db=conn,
+                )
+            self._audit(
+                conn,
+                decided_by,
+                "audit_resolved",
+                detail={
+                    "audit_id": audit_id,
+                    "work_id": row.work_id,
+                    "act_id": row.act_id,
+                    "page": row.page,
+                    "decision": decision,
+                    "new_revision": new_revision,
+                },
+            )
+            updated = conn.execute(select(review_audit).where(review_audit.c.id == audit_id)).first()
+            return {**updated._mapping, "new_revision": new_revision}
+
+    def list_audits(
+        self,
+        *,
+        work_id: str | None = None,
+        open_only: bool = False,
+        verdict: str | None = None,
+        unresolved_only: bool = False,
+        limit: int = 200,
+    ) -> list[dict]:
+        """List review_audit rows matching the given filters."""
+        query = select(review_audit).order_by(review_audit.c.id.desc()).limit(limit)
+        if work_id is not None:
+            query = query.where(review_audit.c.work_id == work_id)
+        if open_only:
+            query = query.where(review_audit.c.audited_at.is_(None))
+        if verdict is not None:
+            query = query.where(review_audit.c.verdict == verdict)
+        if unresolved_only:
+            query = query.where(review_audit.c.owner_decision.is_(None))
+        with self.engine.connect() as db:
+            return [dict(row._mapping) for row in db.execute(query)]
 
 
 def canonical_json(value) -> str:

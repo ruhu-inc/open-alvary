@@ -487,3 +487,17 @@ table.publishing th, table.publishing td { text-align: left; padding: .35rem .5r
 .traffic-bar { height: 8px; min-width: 2px; background: var(--chart); border-radius: 0 4px 4px 0; }
 .traffic-count { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 @media (prefers-color-scheme: dark) { .traffic-chart, .traffic-list { --chart: #4a8ae6; } }
+
+/* Multi-agent claims, lightweight #/claim panel, and admin Agents/Sessions views */
+.claim-banner { margin: .5rem 0 .75rem; padding: .5rem .75rem; border: 1px solid var(--line); border-radius: 6px; background: var(--accent-soft); font-size: 14px; }
+.claim-banner.other { background: var(--warn-bg); border-color: var(--medium); }
+.claim-line { display: flex; gap: .6rem; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.claim-release-form { display: flex; gap: .45rem; align-items: center; flex-wrap: wrap; margin-top: .5rem; padding-top: .5rem; border-top: 1px solid var(--line); }
+.claim-release-form input[type=text] { flex: 1 1 14rem; }
+.claim-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); gap: .6rem .9rem; }
+.claim-actions { display: flex; gap: .8rem; align-items: center; flex-wrap: wrap; margin: .5rem 0 0; }
+.claim-status { margin: .5rem 0 0; }
+.agents-inline-form { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; margin-bottom: .75rem; }
+.agents-inline-form input { flex: 1 1 11rem; min-width: 9rem; }
+.sessions-details { margin-top: .35rem; }
+.operator-sessions { margin-top: .35rem; }
