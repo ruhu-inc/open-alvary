@@ -335,12 +335,12 @@ def test_claim_lifecycle_guards_implicit_and_activity_renewal(env):
     assert saved.status_code == 200, saved.text
     assert saved.json()["revision"] == 1
 
-    # Activity renewal: backdate renewed_at by 2 minutes, then GET page with X-Claim-Token.
+    # Activity renewal: backdate the last activity by 2 minutes, then GET page with X-Claim-Token.
     with store.engine.begin() as db:
         db.execute(
             update(work_claim)
             .where(work_claim.c.work_id == work_id)
-            .values(renewed_at=now() - timedelta(minutes=2))
+            .values(renewed_at=now() - timedelta(minutes=2), active_at=now() - timedelta(minutes=2))
         )
     before_renew = owner.get("/api/claims").json()["claims"][0]["renewed_at"]
     assert (

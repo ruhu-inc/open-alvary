@@ -62,6 +62,14 @@ MSG_CLAIM_GONE = (
 MSG_CLAIMS_OFF = "Claims are switched off."
 MSG_AUDIT_NEEDS_ENFORCE = "Audits run only while claims are enforced."
 MSG_LEFT_FOR_OWNER = "This work was left for the owner. Claim another work."
+MSG_CLAIM_IDLE = (
+    "Nothing on this work has been opened or saved for {minutes} minutes, so it goes back to the queue "
+    "at {time} UTC. Take it up again to carry on."
+)
+MSG_CLAIM_IDLE_LAPSED = (
+    "Nothing on this work was opened or saved for {minutes} minutes, so it has gone back to the queue. "
+    "Take it up again to carry on, if nobody else has."
+)
 
 UNLABELLED = "unlabelled"  # a person's own claim, taken by their first save
 
@@ -150,11 +158,11 @@ class Held:
     task: str
     expires_at: datetime
     live: bool  # not yet lapsed
-    due: bool  # last renewed a minute or more ago
+    quiet: float  # seconds since the holder last opened or saved something on the work
 
 
 def _held(db: Connection, work_id: str, *, lock: bool = True) -> Held | None:
-    """The work's claim, whether it is live, and whether it is due a renewal. On PostgreSQL the row is
+    """The work's claim, whether it is live, and how long its holder has been quiet. On PostgreSQL the row is
     locked until the caller's transaction ends and both answers are the database's (design 4.3): a
     takeover, a renewal or a release of the same work waits its turn, so nothing is decided on a row
     that has changed since it was read, or by the clock of one copy of the workbench."""
@@ -163,7 +171,7 @@ def _held(db: Connection, work_id: str, *, lock: bool = True) -> Held | None:
             text(
                 "SELECT account, label, token_hash, task, expires_at, "
                 "       expires_at > CURRENT_TIMESTAMP AS live, "
-                "       CURRENT_TIMESTAMP - renewed_at >= INTERVAL '60 seconds' AS due "
+                "       EXTRACT(EPOCH FROM CURRENT_TIMESTAMP - COALESCE(active_at, claimed_at)) AS quiet "
                 "  FROM work_claim WHERE work_id = :work_id" + (" FOR UPDATE" if lock else "")
             ),
             {"work_id": work_id},
@@ -177,7 +185,7 @@ def _held(db: Connection, work_id: str, *, lock: bool = True) -> Held | None:
             row.task,
             _aware(row.expires_at),
             bool(row.live),
-            bool(row.due),
+            float(row.quiet),
         )
     row = db.execute(select(work_claim).where(work_claim.c.work_id == work_id)).first()
     if row is None:
@@ -191,21 +199,30 @@ def _held(db: Connection, work_id: str, *, lock: bool = True) -> Held | None:
         row.task,
         expires_at,
         expires_at > moment,
-        moment - _aware(row.renewed_at) >= timedelta(seconds=60),
+        (moment - _aware(row.active_at or row.claimed_at)).total_seconds(),
     )
 
 
 def _extend(
-    db: Connection, work_id: str, token_hash: str, minutes: int, *, new_hash: str | None = None
+    db: Connection,
+    work_id: str,
+    token_hash: str,
+    minutes: int,
+    *,
+    new_hash: str | None = None,
+    active: bool = False,
 ) -> datetime | None:
-    """Renew the claim that still carries ``token_hash`` (and give it ``new_hash``, if any); when it
-    now ends, or None if no such claim was there to renew: the caller then refuses, it never goes on."""
+    """Renew the claim that still carries ``token_hash`` (and give it ``new_hash``, if any); ``active``
+    when the renewal comes from the holder working on it (a page opened or saved, the work taken up
+    again), not from the tab's heartbeat. When it now ends, or None if no such claim was there to renew:
+    the caller then refuses, it never goes on."""
     if db.dialect.name == "postgresql":
         found = db.execute(
             text(
                 "UPDATE work_claim "
                 "   SET token_hash = :new_hash, renewed_at = CURRENT_TIMESTAMP, "
-                "       expires_at = CURRENT_TIMESTAMP + make_interval(mins => :minutes) "
+                + ("active_at = CURRENT_TIMESTAMP, " if active else "")
+                + "       expires_at = CURRENT_TIMESTAMP + make_interval(mins => :minutes) "
                 " WHERE work_id = :work_id AND token_hash = :token_hash "
                 "RETURNING expires_at"
             ),
@@ -222,7 +239,12 @@ def _extend(
     changed = db.execute(
         update(work_claim)
         .where(work_claim.c.work_id == work_id, work_claim.c.token_hash == token_hash)
-        .values(token_hash=new_hash or token_hash, renewed_at=moment, expires_at=expires_at)
+        .values(
+            token_hash=new_hash or token_hash,
+            renewed_at=moment,
+            expires_at=expires_at,
+            **({"active_at": moment} if active else {}),
+        )
     ).rowcount
     return expires_at if changed == 1 else None
 
@@ -419,14 +441,14 @@ def _try_claim_candidate(
                     res = db.execute(
                         text(
                             "INSERT INTO work_claim "
-                            "  (work_id, account, label, token_hash, task, claimed_at, renewed_at, expires_at) "
+                            "  (work_id, account, label, token_hash, task, claimed_at, renewed_at, active_at, expires_at) "
                             "VALUES (:work_id, :account, :label, :token_hash, :task, "
-                            "  CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, "
+                            "  CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, "
                             "  CURRENT_TIMESTAMP + make_interval(mins => :minutes)) "
                             "ON CONFLICT (work_id) DO UPDATE "
                             "   SET account = :account, label = :label, token_hash = :token_hash, "
                             "       task = :task, claimed_at = CURRENT_TIMESTAMP, "
-                            "       renewed_at = CURRENT_TIMESTAMP, "
+                            "       renewed_at = CURRENT_TIMESTAMP, active_at = CURRENT_TIMESTAMP, "
                             "       expires_at = CURRENT_TIMESTAMP + make_interval(mins => :minutes) "
                             " WHERE work_claim.expires_at <= CURRENT_TIMESTAMP"
                         ),
@@ -445,11 +467,11 @@ def _try_claim_candidate(
                     res = db.execute(
                         text(
                             "INSERT INTO work_claim "
-                            "  (work_id, account, label, token_hash, task, claimed_at, renewed_at, expires_at) "
-                            "VALUES (:work_id, :account, :label, :token_hash, :task, :now, :now, :expires) "
+                            "  (work_id, account, label, token_hash, task, claimed_at, renewed_at, active_at, expires_at) "
+                            "VALUES (:work_id, :account, :label, :token_hash, :task, :now, :now, :now, :expires) "
                             "ON CONFLICT (work_id) DO UPDATE "
                             "   SET account = :account, label = :label, token_hash = :token_hash, "
-                            "       task = :task, claimed_at = :now, renewed_at = :now, expires_at = :expires "
+                            "       task = :task, claimed_at = :now, renewed_at = :now, active_at = :now, expires_at = :expires "
                             " WHERE work_claim.expires_at <= :now"
                         ),
                         {
@@ -487,7 +509,9 @@ def _try_claim_candidate(
                 if allow_rotate:
                     live = _held(db, work_id)
                     if live and live.account == account and live.label == label:
-                        expires_at = _extend(db, work_id, live.token_hash, minutes, new_hash=token_hash)
+                        expires_at = _extend(
+                            db, work_id, live.token_hash, minutes, new_hash=token_hash, active=True
+                        )
                         if expires_at is not None:
                             return {
                                 "work_id": work_id,
@@ -656,35 +680,43 @@ def claim_next(
 
 
 def renew_claim(store: Store, work_id: str, account: str, token: str) -> dict:
-    """Extend a claim's lease (also revives a lapsed claim nobody else took); refuses blocked labels."""
+    """The tab's heartbeat: whether the caller still holds the work, and until when. It extends nothing.
+    A claim lasts ``claim_minutes`` from the holder's last real action on the work (a page opened or
+    saved, the work taken up again: ``touch`` and ``guard``), so a tab left open by an agent that has
+    stopped keeps the work an hour at most, and the work then goes back to the queue."""
     account = account.strip().lower()
     if not token:
         raise ClaimError(409, MSG_AGENT_NEEDS_CLAIM, "claim_required")
     token_hash = digest(token)
-    with store.engine.begin() as db:
-        held = _held(db, work_id)
-        if held is None:
-            raise ClaimError(404, "No claim found for this work.", "claim_lost")
-        if held.account != account or not secrets.compare_digest(held.token_hash, token_hash):
-            if held.live:
-                raise ClaimError(409, _held_message(held.label, held.account, held.expires_at), "claim_held")
-            raise ClaimError(409, MSG_CLAIM_GONE, "claim_lost")
+    minutes = claim_minutes()
+    with store.engine.connect() as db:
+        held = _held(db, work_id, lock=False)
+    if held is None:
+        raise ClaimError(404, "No claim found for this work.", "claim_lost")
+    if held.account != account or not secrets.compare_digest(held.token_hash, token_hash):
+        if held.live:
+            raise ClaimError(409, _held_message(held.label, held.account, held.expires_at), "claim_held")
+        raise ClaimError(409, MSG_CLAIM_GONE, "claim_lost")
+    with store.engine.connect() as db:
         if is_label_blocked(db, account, held.label):
             raise ClaimError(403, MSG_BLOCKED_LABEL.format(label=held.label), "label_blocked")
-        expires_at = _extend(db, work_id, token_hash, claim_minutes())
-        if expires_at is None:  # the row is locked, so this is not reached; never report a renewal not made
-            raise ClaimError(409, MSG_CLAIM_GONE, "claim_lost")
+    if not held.live or held.quiet >= minutes * 60:
+        if held.live:
+            clock = held.expires_at.astimezone(UTC).strftime("%H:%M")
+            raise ClaimError(409, MSG_CLAIM_IDLE.format(minutes=minutes, time=clock), "claim_idle")
+        raise ClaimError(409, MSG_CLAIM_IDLE_LAPSED.format(minutes=minutes), "claim_idle")
     return {
         "work_id": work_id,
         "label": held.label,
         "task": held.task,
-        "expires_at": expires_at.isoformat(),
+        "expires_at": held.expires_at.isoformat(),
     }
 
 
 def touch(engine: Engine, work_id: str, account: str, token: str) -> None:
-    """Renew the caller's claim because they are at work on it (a page or image read, a save): once a
-    minute at most, never for a blocked label, and only while the claim still carries their token."""
+    """The holder is at work on it (a page, an image or the document opened, a save): the claim now lasts
+    ``claim_minutes`` from this moment. Once a minute at most, never for a blocked label, and only while
+    the claim still carries the caller's token (a lapsed one nobody took is taken up again)."""
     account = account.strip().lower()
     token_hash = digest(token)
     minutes = claim_minutes()
@@ -693,11 +725,11 @@ def touch(engine: Engine, work_id: str, account: str, token: str) -> None:
             db.execute(
                 text(
                     "UPDATE work_claim AS c "
-                    "   SET renewed_at = CURRENT_TIMESTAMP, "
+                    "   SET renewed_at = CURRENT_TIMESTAMP, active_at = CURRENT_TIMESTAMP, "
                     "       expires_at = CURRENT_TIMESTAMP + make_interval(mins => :minutes) "
                     " WHERE c.work_id = :work_id AND c.account = :account AND c.token_hash = :token_hash "
-                    "   AND (c.expires_at <= CURRENT_TIMESTAMP "
-                    "        OR CURRENT_TIMESTAMP - c.renewed_at >= INTERVAL '60 seconds') "
+                    "   AND (c.expires_at <= CURRENT_TIMESTAMP OR c.active_at IS NULL "
+                    "        OR CURRENT_TIMESTAMP - c.active_at >= INTERVAL '60 seconds') "
                     "   AND NOT EXISTS (SELECT 1 FROM blocked_label b "
                     "                    WHERE b.account = c.account AND b.label = c.label)"
                 ),
@@ -709,9 +741,9 @@ def touch(engine: Engine, work_id: str, account: str, token: str) -> None:
             return
         if not secrets.compare_digest(held.token_hash, token_hash):
             return
-        if (held.live and not held.due) or is_label_blocked(db, account, held.label):
+        if (held.live and held.quiet < 60) or is_label_blocked(db, account, held.label):
             return
-        _extend(db, work_id, token_hash, minutes)
+        _extend(db, work_id, token_hash, minutes, active=True)
 
 
 def release_claim(
@@ -964,8 +996,8 @@ def guard(
                 label=held.label,
             )
         expires_at = held.expires_at
-        if not held.live or held.due:
-            renewed = _extend(db, work_id, token_hash, minutes)
+        if not held.live or held.quiet >= 60:
+            renewed = _extend(db, work_id, token_hash, minutes, active=True)
             if renewed is None:  # not reached while the row is locked; never save for a claim not held
                 return refuse_or_warn(409, MSG_CLAIM_GONE, "claim_lost", "claim_lost", label=held.label)
             expires_at = renewed
@@ -992,7 +1024,7 @@ def guard(
                     "implicit": False,
                 }
             new_token = secrets.token_urlsafe(32)
-            renewed = _extend(db, work_id, held.token_hash, minutes, new_hash=digest(new_token))
+            renewed = _extend(db, work_id, held.token_hash, minutes, new_hash=digest(new_token), active=True)
             if renewed is not None:
                 return implicit(new_token, renewed)
         if is_privileged:
@@ -1018,14 +1050,14 @@ def guard(
         taken = db.execute(
             text(
                 "INSERT INTO work_claim "
-                "  (work_id, account, label, token_hash, task, claimed_at, renewed_at, expires_at) "
+                "  (work_id, account, label, token_hash, task, claimed_at, renewed_at, active_at, expires_at) "
                 "VALUES (:work_id, :account, 'unlabelled', :token_hash, 'review', "
-                "  CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, "
+                "  CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, "
                 "  CURRENT_TIMESTAMP + make_interval(mins => :minutes)) "
                 "ON CONFLICT (work_id) DO UPDATE "
                 "   SET account = :account, label = 'unlabelled', token_hash = :token_hash, "
                 "       task = 'review', claimed_at = CURRENT_TIMESTAMP, "
-                "       renewed_at = CURRENT_TIMESTAMP, "
+                "       renewed_at = CURRENT_TIMESTAMP, active_at = CURRENT_TIMESTAMP, "
                 "       expires_at = CURRENT_TIMESTAMP + make_interval(mins => :minutes) "
                 " WHERE work_claim.expires_at <= CURRENT_TIMESTAMP "
                 "RETURNING expires_at"
@@ -1039,11 +1071,11 @@ def guard(
         changed = db.execute(
             text(
                 "INSERT INTO work_claim "
-                "  (work_id, account, label, token_hash, task, claimed_at, renewed_at, expires_at) "
-                "VALUES (:work_id, :account, 'unlabelled', :token_hash, 'review', :now, :now, :expires) "
+                "  (work_id, account, label, token_hash, task, claimed_at, renewed_at, active_at, expires_at) "
+                "VALUES (:work_id, :account, 'unlabelled', :token_hash, 'review', :now, :now, :now, :expires) "
                 "ON CONFLICT (work_id) DO UPDATE "
                 "   SET account = :account, label = 'unlabelled', token_hash = :token_hash, "
-                "       task = 'review', claimed_at = :now, renewed_at = :now, expires_at = :expires "
+                "       task = 'review', claimed_at = :now, renewed_at = :now, active_at = :now, expires_at = :expires "
                 " WHERE work_claim.expires_at <= :now"
             ),
             {**values, "now": moment, "expires": expires},

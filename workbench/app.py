@@ -1990,7 +1990,7 @@ def create_app(
 
     @app.post("/api/claims/{work_id}/renew")
     def renew_work_claim(request: Request, work_id: str, body: dict | None = OPTIONAL_JSON_BODY):
-        """Renew or revive a claim lease; refuses blocked labels with 403."""
+        """The tab's heartbeat: whether this browser still holds the work, and until when (claims.renew_claim)."""
         who = auth.current(request, store, write=True, role="reviewer")
         _claims_open()
         token = request.headers.get("X-Claim-Token") or str((body or {}).get("token") or "")
@@ -1998,10 +1998,10 @@ def create_app(
 
     def _draw_audit(work_id: str, released: dict) -> dict:
         """Draw the audit's pages for a review just released as done: how many, or why none. The audit is
-        off without its salt or with a rate of 0; switched on, a draw that is skipped is written to the
-        log, so a work that was never audited can be found."""
+        off until ALVARY_REVIEW_AUDIT_RATE is set above 0; switched on, a draw that is skipped is written to
+        the log, so a work that was never audited can be found."""
         cfg = audit_mod.audit_config()
-        if not cfg["salt"] or cfg["rate"] <= 0:
+        if cfg["rate"] <= 0:
             return {"drawn": 0, "skipped": "audit_off"}
 
         def skipped(reason: str) -> dict:
@@ -2019,16 +2019,6 @@ def create_app(
             return skipped("approved_document")
         if not docs:
             return skipped("no_documents")
-        with store.engine.connect() as db:
-            release_number = (
-                db.execute(
-                    select(func.count(work_release.c.id)).where(
-                        work_release.c.work_id == work_id,
-                        work_release.c.outcome == "done",
-                    )
-                ).scalar()
-                or 1
-            )
         doc_pages: dict[str, list[int]] = {}
         latest_by_doc: dict[str, dict[int, dict]] = {}
         for doc in docs:
@@ -2039,14 +2029,7 @@ def create_app(
             if page_nums:
                 doc_pages[doc["id"]] = page_nums
                 latest_by_doc[doc["id"]] = store.latest_pages(doc["id"])
-        drawn = audit_mod.draw_pages(
-            work_id,
-            doc_pages,
-            salt=cfg["salt"],
-            rate=cfg["rate"],
-            minimum=cfg["minimum"],
-            release_number=int(release_number),
-        )
+        drawn = audit_mod.draw_pages(doc_pages, rate=cfg["rate"], minimum=cfg["minimum"])
         for aid, page_num in drawn:
             rev = (latest_by_doc.get(aid, {}).get(page_num) or {}).get("revision", 0)
             store.create_audit_draw(
@@ -2145,10 +2128,13 @@ def create_app(
         return {"ok": True, "paused": paused, "count": len(paused)}
 
     @app.get("/api/agents/report")
-    def agents_report(request: Request, days: int = 7):
-        """Admin dashboard report: live claims, page counts, pace, parked, audit windows & material diffs."""
+    def agents_report(request: Request, days: int = 1):
+        """Admin dashboard report: live claims, page counts, pace, parked, audit windows & material diffs.
+
+        Built from each save's word count, never its text, and over a day unless asked (a week at most):
+        with 150 agents saving all day the text of a week's pages would not fit in a copy's memory."""
         auth.current(request, store, role="admin")
-        days = max(1, min(days, 90))
+        days = max(1, min(days, 7))
         moment = store_now()
         since = moment - timedelta(days=days)
         today_start = moment.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -2175,7 +2161,7 @@ def create_app(
                     page_revision.c.author,
                     page_revision.c.label,
                     page_revision.c.task,
-                    page_revision.c.units,
+                    page_revision.c.words,
                     page_revision.c.created_at,
                 )
                 .where(page_revision.c.created_at >= since)
@@ -2209,7 +2195,7 @@ def create_app(
                 "author": r.author,
                 "label": r.label or "",
                 "task": r.task,
-                "units": r.units or [],
+                "words": r.words,  # None for a page saved before words were counted: never "fast"
                 "created_at": _aware(r.created_at),
             }
             for r in rev_rows
@@ -2228,7 +2214,16 @@ def create_app(
                 bucket["today_pages_saved"] += 1
         page_counts = sorted(counts_map.values(), key=lambda c: (c["account"], c["label"]))
 
-        pace = audit_mod.pace_report(revisions)
+        # Each label's figures, and as evidence its ten fastest full pages, not every save it made.
+        pace = [
+            {
+                **row,
+                "intervals": sorted(
+                    (gap for gap in row["intervals"] if gap["fast"]), key=lambda gap: gap["seconds"]
+                )[:10],
+            }
+            for row in audit_mod.pace_report(revisions)
+        ]
 
         parked_counts_map: dict[tuple[str, str], int] = {}
         parked_recent = []

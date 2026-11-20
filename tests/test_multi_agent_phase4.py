@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import random
 import sqlite3
 import subprocess
 import sys
@@ -129,52 +130,47 @@ def test_audit_diff_table_cell_change_is_material_and_marks_only_is_minor():
 # --- draw_pages ------------------------------------------------------------------------------
 
 
-def test_draw_pages_determinism_and_input_forms():
+def test_draw_pages_takes_either_input_form_and_the_rate_or_the_minimum():
     doc_pages = {
         "rw-law-1-en": list(range(1, 31)),
         "rw-law-1-fr": list(range(1, 31)),
     }
     flat_reversed = [(doc, p) for doc, pages in reversed(list(doc_pages.items())) for p in reversed(pages)]
-    salt = "secret-audit-salt-for-testing-1234567890"
-
-    draw_a = audit.draw_pages("rw-law-1", doc_pages, salt=salt, rate=0.05, minimum=2, release_number=1)
-    draw_b = audit.draw_pages("rw-law-1", flat_reversed, salt=salt, rate=0.05, minimum=2, release_number=1)
+    # The same random choices give the same pages whichever way the pages are listed.
+    draw_a = audit.draw_pages(doc_pages, rate=0.05, minimum=2, rng=random.Random(7))
+    draw_b = audit.draw_pages(flat_reversed, rate=0.05, minimum=2, rng=random.Random(7))
     assert draw_a == draw_b
     assert len(draw_a) == 3  # ceil(0.05 * 60) == 3
     assert draw_a == sorted(draw_a)
+    assert set(draw_a) <= {(doc, p) for doc, pages in doc_pages.items() for p in pages}
 
 
-def test_draw_pages_changes_with_release_number_and_salt():
+def test_draw_pages_is_random_so_no_reviewer_can_know_it_beforehand():
     doc_pages = {"rw-law-2-en": list(range(1, 101))}
-    salt_a = "salt-alpha-0000000000000000000000000000"
-    salt_b = "salt-bravo-0000000000000000000000000000"
-
-    r1 = audit.draw_pages("rw-law-2", doc_pages, salt=salt_a, rate=0.05, minimum=2, release_number=1)
-    r2 = audit.draw_pages("rw-law-2", doc_pages, salt=salt_a, rate=0.05, minimum=2, release_number=2)
-    r1_other_salt = audit.draw_pages(
-        "rw-law-2", doc_pages, salt=salt_b, rate=0.05, minimum=2, release_number=1
-    )
-
-    assert len(r1) == 5
-    assert r1 != r2
-    assert r1 != r1_other_salt
+    draws = {tuple(audit.draw_pages(doc_pages, rate=0.05, minimum=2)) for _ in range(20)}
+    assert all(len(draw) == 5 for draw in draws)
+    assert len(draws) > 1  # twenty draws of 5 pages in 100 are not all the same
 
 
-def test_draw_pages_rate_zero_returns_empty_without_salt():
-    doc_pages = {"rw-law-3-en": [1, 2, 3, 4, 5]}
-    assert audit.draw_pages("rw-law-3", doc_pages, salt="", rate=0, minimum=2, release_number=1) == []
+def test_draw_pages_rate_zero_returns_empty():
+    assert audit.draw_pages({"rw-law-3-en": [1, 2, 3, 4, 5]}, rate=0, minimum=2) == []
+
+
+def test_the_audit_is_off_until_a_rate_is_set(monkeypatch):
+    monkeypatch.delenv("ALVARY_REVIEW_AUDIT_RATE", raising=False)
+    assert audit.audit_config()["rate"] == 0.0
+    monkeypatch.setenv("ALVARY_REVIEW_AUDIT_RATE", "0.05")
+    assert audit.audit_config() == {"rate": 0.05, "minimum": 2}
 
 
 def test_draw_pages_minimum_and_validation():
     doc_pages = {"rw-law-4-en": [1, 2, 3]}
-    salt = "salt-charlie-0000000000000000000000000"
-    drawn = audit.draw_pages("rw-law-4", doc_pages, salt=salt, rate=0.05, minimum=2, release_number=1)
-    assert len(drawn) == 2
-
+    assert len(audit.draw_pages(doc_pages, rate=0.05, minimum=2)) == 2
+    assert len(audit.draw_pages(doc_pages, rate=0.05, minimum=5)) == 3  # all there are
     with pytest.raises(ValueError):
-        audit.draw_pages("rw-law-4", doc_pages, salt="", rate=0.05, minimum=2, release_number=1)
+        audit.draw_pages(doc_pages, rate=-0.1, minimum=2)
     with pytest.raises(ValueError):
-        audit.draw_pages("rw-law-4", doc_pages, salt=salt, rate=-0.1, minimum=2, release_number=1)
+        audit.draw_pages(doc_pages, rate=0.05, minimum=-1)
 
 
 # --- evaluate_window -------------------------------------------------------------------------

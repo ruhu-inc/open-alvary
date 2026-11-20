@@ -318,3 +318,26 @@ def test_starting_on_an_up_to_date_database_waits_for_no_open_transaction(scratc
         future.result()
         pool.shutdown()
     engine.dispose()
+
+
+def test_the_database_as_the_first_release_left_it_gains_the_two_new_columns(scratch_url):
+    """Staging's review database since 87d900d7 has work_claim and page_revision without active_at and
+    words: the next start adds both, keeps every row, and an old claim counts its holder as quiet since
+    it was claimed."""
+    engine = connect(scratch_url)
+    store = Store(engine)
+    first = claims.claim_work(store, "rw-law-old", ACCOUNT, "claude-m6-01", check_limit=False)
+    with engine.begin() as db:
+        db.execute(text("ALTER TABLE work_claim DROP COLUMN active_at"))
+        db.execute(text("ALTER TABLE page_revision DROP COLUMN words"))
+    engine.dispose()
+
+    started = together(3, lambda n: connect(scratch_url))
+    assert not [error for error in started if isinstance(error, Exception)]
+    found = inspect(started[0])
+    assert "active_at" in {c["name"] for c in found.get_columns("work_claim")}
+    assert "words" in {c["name"] for c in found.get_columns("page_revision")}
+    store = Store(started[0])
+    assert claims.renew_claim(store, "rw-law-old", ACCOUNT, first["token"])["label"] == "claude-m6-01"
+    for made in started:
+        made.dispose()

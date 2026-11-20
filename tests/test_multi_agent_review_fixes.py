@@ -6,6 +6,7 @@ strict flags and settings, and a start-up that issues nothing an up-to-date data
 from __future__ import annotations
 
 import unicodedata
+from datetime import timedelta
 
 import pytest
 import test_multi_agent_e2e as e2e
@@ -382,3 +383,119 @@ def test_the_release_before_can_still_add_an_operator_to_a_database_this_code_ma
         )
         row = db.execute(text("SELECT agent, may_change_approved FROM operator")).one()
     assert (bool(row[0]), bool(row[1])) == (False, False)
+
+
+# --- the three simple fixes (owner, 2026-11-20) ----------------------------------------------------
+
+
+def _quiet_for(store, work_id: str, minutes: int) -> None:
+    """As if the holder last opened or saved something ``minutes`` ago, its claim ending an hour after."""
+    then = now() - timedelta(minutes=minutes)
+    with store.engine.begin() as db:
+        db.execute(
+            update(work_claim)
+            .where(work_claim.c.work_id == work_id)
+            .values(active_at=then, renewed_at=then, expires_at=then + timedelta(minutes=60))
+        )
+
+
+def test_the_heartbeat_only_checks_and_real_work_keeps_the_claim(env):
+    store, _, app = env
+    claude = _browser(app, "claude@example.org")
+    token = _claim(claude, WORK_LAW2, "claude-m1-04").json()["token"]
+    _quiet_for(store, WORK_LAW2, 30)
+    with store.engine.connect() as db:
+        before = db.execute(select(work_claim.c.expires_at)).scalar()
+
+    beat = claude.post(f"/api/claims/{WORK_LAW2}/renew", headers={"X-Claim-Token": token})
+    assert beat.status_code == 200
+    with store.engine.connect() as db:
+        assert db.execute(select(work_claim.c.expires_at)).scalar() == before  # the heartbeat extends nothing
+
+    # Opening a page is real work: the claim now runs an hour from this moment.
+    assert (
+        claude.get(f"/api/documents/{DOC_LAW2}/pages/1", headers={"X-Claim-Token": token}).status_code == 200
+    )
+    with store.engine.connect() as db:
+        after = db.execute(select(work_claim.c.expires_at)).scalar()
+    assert after > before and abs((after - now().replace(tzinfo=None)).total_seconds() - 3600) < 60
+
+
+def test_a_tab_left_open_keeps_the_work_an_hour_at_most_and_is_told_so(env):
+    store, _, app = env
+    claude = _browser(app, "claude@example.org")
+    token = _claim(claude, WORK_LAW2, "claude-m1-05").json()["token"]
+
+    _quiet_for(store, WORK_LAW2, 61)  # opened or saved nothing for an hour; the claim lapsed a minute ago
+    gone = claude.post(f"/api/claims/{WORK_LAW2}/renew", headers={"X-Claim-Token": token})
+    assert gone.status_code == 409 and gone.json()["code"] == "claim_idle"
+    assert "has gone back to the queue" in gone.json()["message"]
+
+    codex = _browser(app, "codex@example.org")  # so another agent can have it
+    assert _claim(codex, WORK_LAW2, "codex-m1-05").status_code == 200
+
+    # The first agent coming back asks to take it up again, and is told who has it now.
+    again = _claim(claude, WORK_LAW2, "claude-m1-05")
+    assert again.status_code == 409 and again.json()["code"] == "claim_held"
+
+
+def test_quiet_for_the_hour_while_still_held_says_when_it_goes_back_and_can_be_kept(env):
+    store, _, app = env
+    claude = _browser(app, "claude@example.org")
+    token = _claim(claude, WORK_LAW2, "claude-m1-06").json()["token"]
+    with store.engine.begin() as db:  # quiet an hour, though something kept the claim a few minutes more
+        db.execute(
+            update(work_claim)
+            .where(work_claim.c.work_id == WORK_LAW2)
+            .values(active_at=now() - timedelta(minutes=61), expires_at=now() + timedelta(minutes=4))
+        )
+    idle = claude.post(f"/api/claims/{WORK_LAW2}/renew", headers={"X-Claim-Token": token})
+    assert idle.status_code == 409 and idle.json()["code"] == "claim_idle"
+    assert "goes back to the queue at" in idle.json()["message"] and " UTC" in idle.json()["message"]
+
+    kept = _claim(claude, WORK_LAW2, "claude-m1-06")  # "Take it up again"
+    assert kept.status_code == 200 and kept.json()["rotated"] is True
+    beat = claude.post(f"/api/claims/{WORK_LAW2}/renew", headers={"X-Claim-Token": kept.json()["token"]})
+    assert beat.status_code == 200
+
+
+def test_each_save_keeps_its_word_count_and_the_report_reads_counts_not_text(env):
+    store, _, app = env
+    human, owner = _browser(app, "human@example.org"), _browser(app, "owner@example.org")
+    assert _save(human, DOC_LAW2, 1).status_code == 200
+    with store.engine.connect() as db:
+        words = db.execute(select(page_revision.c.words)).scalar()
+    assert words == len(
+        "Article 1. English Law 2 provision text on page 1 with enough words to check.".split()
+    )
+    assert (
+        workbench_store.unit_word_count(
+            [{"kind": "table", "caption": "Rates", "rows": [["VAT", "18 %"], ["", None]]}]
+        )
+        == 4
+    )
+
+    report = owner.get("/api/agents/report").json()
+    (row,) = [r for r in report["pace"] if r["author"] == "human@example.org"]
+    assert row["pages_saved"] == 1 and row["intervals"] == []  # only fast full pages, ten at most
+    statement: list[str] = []
+
+    @event.listens_for(store.engine, "before_cursor_execute")
+    def keep(conn, cursor, text_, parameters, context, executemany):
+        statement.append(text_)
+
+    assert owner.get("/api/agents/report?days=30").status_code == 200  # a week at most is read
+    reads = [s for s in statement if "FROM page_revision" in s and "page_revision.created_at >=" in s]
+    assert reads and all("page_revision.units" not in s for s in reads)
+
+
+def test_the_workbench_error_alert_is_in_terraform():
+    from pathlib import Path
+
+    tf = (Path(__file__).resolve().parents[1] / "deployment/gcp-terraform/env/monitoring.tf").read_text()
+    block = tf[tf.index('resource "google_monitoring_alert_policy" "workbench_errors"') :]
+    block = block[: block.index("\n}\n")]
+    assert "count        = local.workbench_enabled ? 1 : 0" in block
+    assert 'metric.labels.response_code_class = \\"5xx\\"' in block
+    assert "threshold_value = 9" in block and 'alignment_period     = "600s"' in block
+    assert "google_monitoring_notification_channel.operator.id" in block

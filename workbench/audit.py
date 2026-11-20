@@ -5,9 +5,8 @@ Provides:
   word/number/table-cell edits AND paragraph splits, merges, or text boundary shifts as
   ``material``, metadata-only diffs (alignment, heading rank, emphasis, notes) as
   ``minor``, and identical units as ``clean``.
-- ``draw_pages``: deterministic keyed HMAC-SHA256 page draw over a work's documents,
-  incorporating ``release_number`` so re-reviewed works draw fresh pages, and returning
-  ``[]`` when ``rate == 0``.
+- ``draw_pages``: a random draw of a work's pages, made when the work is released as done and
+  recorded then, so nobody can know it in advance; ``[]`` when ``rate == 0``.
 - ``evaluate_window``: rolling 100-page pass-mark evaluation with a minimum sample of 25
   pages and an early-stop trigger at 3+ material pages within the first 25.
 - ``pace_report``: per-``(author, label)`` inter-save duration report beside page length,
@@ -18,21 +17,19 @@ Provides:
 from __future__ import annotations
 
 import difflib
-import hashlib
-import hmac
 import math
 import os
+import random
 import unicodedata
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from statistics import median
 from typing import Any
 
-SALT_ENV = "OPEN_ALVARY_REVIEW_AUDIT_SALT"
 RATE_ENV = "ALVARY_REVIEW_AUDIT_RATE"
 MINIMUM_ENV = "ALVARY_REVIEW_AUDIT_MINIMUM"
 
-DEFAULT_RATE = 0.05
+DEFAULT_RATE = 0.0  # off until the owner sets a rate: 0.05 is about one page in twenty
 DEFAULT_MINIMUM = 2
 FAST_PAGE_SECONDS = 20.0
 FULL_PAGE_WORDS = 80
@@ -56,7 +53,7 @@ def audit_config() -> dict[str, Any]:
         minimum = -1
     if minimum < 0:
         raise ValueError(f"{MINIMUM_ENV} must be a whole number of 0 or more, not {min_raw!r}")
-    return {"salt": os.environ.get(SALT_ENV, ""), "rate": rate, "minimum": minimum}
+    return {"rate": rate, "minimum": minimum}
 
 
 def _norm_text(text: str | None) -> str:
@@ -150,60 +147,34 @@ def audit_diff(
 
 
 def draw_pages(
-    work_id: str,
     doc_pages: Mapping[str, Sequence[int]] | Sequence[tuple[str, int]],
     *,
-    salt: str,
     rate: float = DEFAULT_RATE,
     minimum: int = DEFAULT_MINIMUM,
-    release_number: int = 1,
+    rng: random.Random | None = None,
 ) -> list[tuple[str, int]]:
-    """Deterministically draw audit pages for a released work using keyed HMAC-SHA256.
+    """The pages of a work just released as done that a second agent checks: about ``rate`` of them and
+    ``minimum`` at least (or all, if there are fewer), chosen at random. The draw is made at release and
+    recorded then (review_audit), so no reviewer can know it beforehand, and there is no key to keep.
 
-    ``doc_pages`` may be a mapping ``{act_id: [page, ...]}`` or a sequence of
-    ``(act_id, page)`` pairs. Returns a sorted list of ``(act_id, page)`` pairs.
-    Returns ``[]`` cleanly when ``rate == 0`` (supporting ``ALVARY_REVIEW_AUDIT_RATE=0``).
+    ``doc_pages`` may be a mapping ``{act_id: [page, ...]}`` or a sequence of ``(act_id, page)`` pairs.
+    Returns a sorted list of ``(act_id, page)`` pairs, ``[]`` when ``rate == 0``.
     """
     if not 0.0 <= rate <= 1.0:
         raise ValueError("audit rate must be between 0 and 1")
     if minimum < 0:
         raise ValueError("audit minimum must be non-negative")
-    if release_number < 1:
-        raise ValueError("release_number must be at least 1")
-
     if rate == 0:
         return []
-
     if isinstance(doc_pages, Mapping):
         raw_candidates = [(str(act_id), int(page)) for act_id, pages in doc_pages.items() for page in pages]
     else:
         raw_candidates = [(str(act_id), int(page)) for act_id, page in doc_pages]
-
     candidates = sorted(set(raw_candidates))
-    if not candidates:
-        return []
-
-    if not salt:
-        raise ValueError(f"audit salt is required ({SALT_ENV})")
-
     size = min(len(candidates), max(minimum, math.ceil(rate * len(candidates))))
     if size <= 0:
         return []
-
-    key = salt.encode("utf-8")
-    ranked = sorted(
-        candidates,
-        key=lambda item: (
-            hmac.new(
-                key,
-                f"{work_id}:{release_number}:{item[0]}:{item[1]}".encode(),
-                hashlib.sha256,
-            ).hexdigest(),
-            item[0],
-            item[1],
-        ),
-    )
-    return sorted(ranked[:size])
+    return sorted((rng or random.SystemRandom()).sample(candidates, size))
 
 
 def evaluate_window(

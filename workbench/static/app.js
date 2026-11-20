@@ -888,8 +888,9 @@ function claimBanner(actId, serverClaim, redraw) {
   const cancelBtn = el("button", { class: "small", text: "Cancel", on: { click: () => { releaseForm.hidden = true; } } });
   releaseForm.append(outcome, reason, confirmBtn, cancelBtn);
 
-  if (state.lost) {
-    // Same account and label hold the work, but this browser has no token: claiming it again re-issues one.
+  // Claims the work again under this tab's label: a new token where this browser has none, or the work
+  // kept for another hour after it went quiet. Only the banner is drawn again, so nothing typed is lost.
+  const takeUpLine = (words) => {
     const status = el("span", { class: "claim-status", role: "status" });
     const takeUp = el("button", { class: "small primary", text: "Take it up again", on: { click: async () => {
       takeUp.disabled = true;
@@ -897,7 +898,7 @@ function claimBanner(actId, serverClaim, redraw) {
         const result = await api(`/api/claims/${encodeURIComponent(state.workId)}`, { method: "POST", body: { label: state.label, task: state.task } });
         if (!result.ok) {
           status.textContent = message(result);
-          return toast(message(result));
+          return;
         }
         storeClaimTokens({
           work_id: result.data.work_id || state.workId,
@@ -907,15 +908,17 @@ function claimBanner(actId, serverClaim, redraw) {
           documents: result.data.documents,
         });
         toast("You hold this work again.");
-        // Only the banner is drawn again, so nothing typed on the page is lost.
-        banner.replaceWith(claimBanner(actId, { ...serverClaim, expires_at: result.data.expires_at || serverClaim.expires_at }, redraw));
+        banner.replaceWith(claimBanner(actId, { ...serverClaim, account: app.me && app.me.email, label: state.label, expires_at: result.data.expires_at || serverClaim.expires_at }, redraw));
       } finally {
         takeUp.disabled = false;
       }
     } } });
-    banner.append(el("div", { class: "claim-line" },
-      el("span", { text: "This work is claimed under your label, but this browser has no claim token for it." }),
-      takeUp, status));
+    return el("div", { class: "claim-line" }, el("span", { text: words }), takeUp, status);
+  };
+
+  if (state.lost) {
+    // Same account and label hold the work, but this browser has no token: claiming it again re-issues one.
+    banner.append(takeUpLine("This work is claimed under your label, but this browser has no claim token for it."));
     return banner;
   }
 
@@ -934,8 +937,14 @@ function claimBanner(actId, serverClaim, redraw) {
         expiresSpan.textContent = formatClockUtc(nextExpires);
         expiresSpan.title = nextExpires;
       }, (refused) => {
-        line.replaceChildren(el("span", { text: message(refused) }));
         releaseForm.hidden = true;
+        // Gone quiet for an hour: say when the work goes back to the queue, and offer to keep it.
+        if (refused.data && refused.data.code === "claim_idle" && state.label && state.label !== "unlabelled") {
+          banner.classList.replace("mine", "lost");
+          line.replaceWith(takeUpLine(message(refused)));
+        } else {
+          line.replaceChildren(el("span", { text: message(refused) }));
+        }
       });
     }
   } else {

@@ -333,9 +333,18 @@ def test_lapsed_claim_revival_takeover_and_blocked_label(store, monkeypatch):
     with store.engine.begin() as db:
         db.execute(update(work_claim).where(work_claim.c.work_id == "work-lapsed").values(expires_at=past))
 
-    # Holder can revive its own lapsed claim via renew_claim.
-    renewed = claims.renew_claim(store, "work-lapsed", "claude@example.org", c1["token"])
-    assert renewed["work_id"] == "work-lapsed"
+    # The tab's heartbeat alone does not bring a lapsed claim back: it says so, in words the page shows.
+    with pytest.raises(claims.ClaimError) as idle:
+        claims.renew_claim(store, "work-lapsed", "claude@example.org", c1["token"])
+    assert idle.value.code == "claim_idle" and "has gone back to the queue" in idle.value.message
+    # Real work does: a save with the holder's token, nobody having taken the work meanwhile.
+    claude = _who(store, "claude@example.org")
+    with store.engine.begin() as db:
+        assert claims.guard(db, "work-lapsed", claude, token=c1["token"])["label"] == "claude-m1-02"
+    assert (
+        claims.renew_claim(store, "work-lapsed", "claude@example.org", c1["token"])["work_id"]
+        == "work-lapsed"
+    )
 
     # Block the label: renewal, guard, and new claims are all refused with 403.
     claims.block_label(
@@ -348,7 +357,6 @@ def test_lapsed_claim_revival_takeover_and_blocked_label(store, monkeypatch):
     assert exc.value.status_code == 403
     assert exc.value.message == "The label claude-m1-02 has been paused by the owner. Stop and report."
 
-    claude = _who(store, "claude@example.org")
     with store.engine.begin() as db:
         with pytest.raises(claims.ClaimError) as exc:
             claims.guard(db, "work-lapsed", claude, token=c1["token"])

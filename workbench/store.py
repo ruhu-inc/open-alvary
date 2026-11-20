@@ -123,6 +123,7 @@ page_revision = Table(
     Column("author", String(320), nullable=False),
     Column("label", String(40)),
     Column("task", String(20)),
+    Column("words", Integer),  # the page's words as saved: the Agents screen sums these, never the units
     Column("created_at", DateTime(timezone=True), nullable=False),
     UniqueConstraint("act_id", "page", "revision"),
 )
@@ -248,6 +249,9 @@ work_claim = Table(
     Column("claimed_at", DateTime(timezone=True), nullable=False),
     Column("renewed_at", DateTime(timezone=True), nullable=False),
     Column("expires_at", DateTime(timezone=True), nullable=False),
+    # When the holder last did something on the work (opened or saved a page), not just kept a tab open:
+    # the tab's heartbeat keeps the claim only while this is recent (claims.renew_claim).
+    Column("active_at", DateTime(timezone=True)),
 )
 
 work_release = Table(
@@ -368,6 +372,18 @@ def session_limits(person: dict | None) -> tuple[timedelta, timedelta]:
 def session_max_age(person: dict | None) -> int:
     """Cookie max_age in seconds matching the account's maximum session lifetime."""
     return int(session_limits(person)[1].total_seconds())
+
+
+def unit_word_count(units: list[dict]) -> int:
+    """The words on a page as saved: its paragraphs', and its tables' captions and cells."""
+    count = 0
+    for unit in units:
+        if unit.get("kind") == "table":
+            count += len(str(unit.get("caption") or "").split())
+            count += sum(len(str(cell or "").split()) for row in unit.get("rows") or [] for cell in row)
+        else:
+            count += len(str(unit.get("text") or "").split())
+    return count
 
 
 def _aware(value: datetime) -> datetime:
@@ -495,6 +511,10 @@ def _upgrade(engine: Engine) -> None:
         "page_revision": {
             "label": "VARCHAR(40)",
             "task": "VARCHAR(20)",
+            "words": "INTEGER",
+        },
+        "work_claim": {
+            "active_at": "TIMESTAMP WITH TIME ZONE",
         },
         "detail_revision": {
             "label": "VARCHAR(40)",
@@ -1134,6 +1154,7 @@ class Store:
                         author=author,
                         label=label,
                         task=task,
+                        words=unit_word_count(values.get("units") or []),
                         created_at=db_now(conn),
                         **values,
                     )

@@ -65,6 +65,7 @@ class FakeNode {
       add() {},
       remove() {},
       toggle() {},
+      replace() {},
     };
   }
   setAttribute(k, v) { this.attrs[k] = String(v); }
@@ -751,6 +752,41 @@ def test_lost_token_take_up_again_and_heartbeat_stops_on_refusal_or_sign_out():
     assert "You hold this work" not in result["afterRefusal"]["text"]
     assert result["afterSignOut"] == {"cleared": True, "timer": None}
     assert result["leftCleared"] is True
+
+
+@pytest.mark.skipif(NODE is None, reason="node not installed")
+def test_a_work_gone_quiet_says_when_it_goes_back_and_offers_to_keep_it():
+    result = _run_node(
+        _harness_preamble()
+        + """
+(async () => {
+  sandbox.app.me = { email: "claude@example.org", roles: ["reviewer"], claims: "enforce", agent: true };
+  sandbox.app.csrf = "c";
+  sandbox.setTabLabel("claude-m1-07");
+  sandbox.storeClaimTokens({ work_id: "rw-3", token: "tok-old", label: "claude-m1-07",
+    expires_at: "2026-11-20T14:32:00Z", documents: [{ id: "rw-3-en" }] });
+  const serverClaim = { work_id: "rw-3", account: "claude@example.org", label: "claude-m1-07", task: "review", expires_at: "2026-11-20T14:32:00Z" };
+  const parent = new FakeNode("div");
+  const mine = sandbox.claimBanner("rw-3-en", serverClaim);
+  parent.append(mine);
+  const beat = intervals[intervals.length - 1];
+  const words = "Nothing on this work has been opened or saved for 60 minutes, so it goes back to the queue at 14:32 UTC. Take it up again to carry on.";
+  fetchHandler = async () => ({ ok: false, status: 409, json: async () => ({ code: "claim_idle", message: words }) });
+  await beat.fn();
+  const idle = { cleared: beat.cleared, text: mine.allText(), buttons: mine.findButtons().map((b) => b.textContent) };
+  fetchHandler = async () => ({ ok: true, status: 200, json: async () => ({
+    work_id: "rw-3", task: "review", token: "tok-new", expires_at: "2026-11-20T15:40:00Z",
+    documents: [{ id: "rw-3-en" }], rotated: true }) });
+  await mine.findButtons().find((b) => b.textContent === "Take it up again").listeners.click[0]();
+  console.log(JSON.stringify({ idle, kept: parent.children[0].allText(), token: sandbox.getClaimForDoc("rw-3-en").token }));
+})();
+"""
+    )
+    assert result["idle"]["cleared"] is True
+    assert "goes back to the queue at 14:32 UTC" in result["idle"]["text"]
+    assert "Take it up again" in result["idle"]["buttons"]
+    assert "You hold this work until 15:40 UTC (claude-m1-07)" in result["kept"]
+    assert result["token"] == "tok-new"
 
 
 @pytest.mark.skipif(NODE is None, reason="node not installed")

@@ -234,6 +234,41 @@ resource "google_monitoring_alert_policy" "frequent_job" {
   }
 }
 
+# The review workbench answering with errors: it is down, or its database is (each shows as a server
+# error). Ten in ten minutes, not one: a single failed request is not worth a message.
+resource "google_monitoring_alert_policy" "workbench_errors" {
+  count        = local.workbench_enabled ? 1 : 0
+  display_name = "Open Alvary: the review workbench is answering with errors (${var.environment})"
+  combiner     = "OR"
+
+  conditions {
+    display_name = "Ten or more server errors from the workbench within 10 minutes"
+    condition_threshold {
+      filter          = "resource.type = \"cloud_run_revision\" AND resource.labels.service_name = \"${google_cloud_run_v2_service.workbench[0].name}\" AND metric.type = \"run.googleapis.com/request_count\" AND metric.labels.response_code_class = \"5xx\""
+      comparison      = "COMPARISON_GT"
+      threshold_value = 9
+      duration        = "0s"
+      aggregations {
+        alignment_period     = "600s"
+        per_series_aligner   = "ALIGN_SUM"
+        cross_series_reducer = "REDUCE_SUM"
+      }
+      trigger {
+        count = 1
+      }
+    }
+  }
+
+  notification_channels = [google_monitoring_notification_channel.operator.id]
+  alert_strategy {
+    auto_close = "86400s"
+  }
+  documentation {
+    mime_type = "text/markdown"
+    content   = "The review workbench answered ten or more requests with a server error in ten minutes. Look at its ERROR lines in Cloud Run (the workbench service, its latest revision): a database error means the review database is down or out of connections; none, with failed starts, means the latest revision does not start (roll back to the previous image). Agents working at the time see their saves refused and stop; nothing is saved twice. See docs/deployment/runbook.md, Monitoring and alerts."
+  }
+}
+
 # Being attacked, or simply overrun: what the load balancer answered, each for five minutes running, so
 # the operator hears before the site is down (docs/deployment/runbook.md, Edge limits and attack alerts).
 locals {
