@@ -354,13 +354,24 @@ function joinUnits(state, index, dispatch) {
   return true;
 }
 
-// Backspace at the start of a unit's words joins it to the unit before. After a table, an empty
-// unit goes and the cursor moves into the table; a unit with words stays.
+// Backspace at the start of a unit's words joins it to the unit before. An empty unit at the top of
+// the page goes when another block follows; after a table, an empty unit goes and the cursor moves
+// into the table; a unit with words stays.
 function joinBackward(state, dispatch) {
   const { $from, empty } = state.selection;
   if (!empty || $from.parent.type !== N.body || $from.parentOffset !== 0) return false;
   const index = $from.index(0);
-  if (index === 0) return true;
+  if (index === 0) {
+    if (state.doc.childCount > 1 && isEmptyUnit(state.doc.child(0))) {
+      const next = state.doc.child(1);
+      if (next.type === N.unit) return joinUnits(state, 1, dispatch);
+      if (dispatch) {
+        const tr = state.tr.delete(0, state.doc.child(0).nodeSize);
+        dispatch(tr.setSelection(Selection.near(tr.doc.resolve(0), 1)).scrollIntoView());
+      }
+    }
+    return true;
+  }
   if (state.doc.child(index - 1).type === N.unit) return joinUnits(state, index, dispatch);
   if (isEmptyUnit(state.doc.child(index)) && dispatch) {
     const at = unitStart(state.doc, index);
@@ -881,11 +892,16 @@ export function createEditor(mount, { units, machineUnits, flags, onChange, onFl
       if (tr.selectionSet || tr.docChanged || tr.storedMarksSet) onSelect && onSelect(index);
     },
     handleDoubleClickOn(view2, pos, node, nodePos) {
-      if (node.type === N.marker && onMarkerEdit) {
+      if (editable && node.type === N.marker && onMarkerEdit) {
+        const dom = view2.nodeDOM(nodePos);
+        const rect = dom && dom.getBoundingClientRect ? dom.getBoundingClientRect() : null;
         onMarkerEdit(node.attrs.value, (value) => {
+          const current = view2.state.doc.nodeAt(nodePos);
+          if (!current || current.type !== N.marker) return;
           const tr = value ? view2.state.tr.setNodeMarkup(nodePos, null, { value, source: null }) : view2.state.tr.delete(nodePos, nodePos + 1);
           view2.dispatch(tr);
-        });
+          view2.focus();
+        }, rect);
         return true;
       }
       return false;

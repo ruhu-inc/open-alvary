@@ -171,6 +171,9 @@ pre.check { white-space: pre-wrap; font: 13px/1.5 ui-monospace, Menlo, monospace
 .popover { position: absolute; z-index: 20; width: min(34rem, 92vw); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: .5rem; box-shadow: 0 8px 28px rgba(0, 0, 0, .18); }
 .popover .flag { margin: 0 0 .4rem; }
 .popover .close { float: right; }
+.popover.marker-editor { width: min(20rem, 92vw); display: flex; flex-direction: column; gap: .4rem; }
+.popover.marker-editor input { width: 100%; box-sizing: border-box; }
+.popover.marker-editor .actions { display: flex; gap: .4rem; flex-wrap: wrap; }
 .frame { position: relative; }
 .frame img { display: block; width: 100%; background: #fff; cursor: crosshair; }
 .viewer-tools { position: sticky; top: 0; z-index: 2; display: flex; gap: .6rem; align-items: center; padding: .3rem .5rem; background: var(--panel); border-bottom: 1px solid var(--line); font-size: 13px; }

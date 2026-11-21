@@ -1526,7 +1526,49 @@ async function detailsView(actId) {
     counter.className = gaps ? "pill warn" : "pill ok";
     confirmButton.disabled = !canEdit || gaps > 0;
   };
-  const touched = () => { app.dirty = true; refresh(); };
+  const detailsDraftKey = `oa-details-draft:${actId}`;
+  let detailsDraftTimer = null;
+  const detailsSnapshot = () => {
+    const allowed = new Set(currentFields().map((f) => f.key));
+    return {
+      details: Object.fromEntries(Object.entries(values).filter(([k, v]) => allowed.has(k) && !isEmpty(v))),
+      absent: Object.fromEntries(Object.entries(absent).filter(([k, r]) => allowed.has(k) && Boolean(r))),
+      comment: comment.value,
+    };
+  };
+  const writeDetailsDraft = () => {
+    try {
+      localStorage.setItem(detailsDraftKey, JSON.stringify({
+        base: record.revision,
+        author: (app.me && app.me.email) || "",
+        at: new Date().toISOString(),
+        kind: currentKind,
+        values,
+        absent,
+        comment: comment.value,
+      }));
+    } catch { /* storage unavailable */ }
+  };
+  const saveDetailsDraft = () => {
+    clearTimeout(detailsDraftTimer);
+    detailsDraftTimer = setTimeout(writeDetailsDraft, 400);
+  };
+  const clearDetailsDraft = () => {
+    clearTimeout(detailsDraftTimer);
+    try { localStorage.removeItem(detailsDraftKey); } catch { /* nothing to clear */ }
+  };
+  const loadDetailsDraft = () => {
+    let draft = null;
+    try { draft = JSON.parse(localStorage.getItem(detailsDraftKey) || "null"); } catch { draft = null; }
+    if (!draft || typeof draft !== "object") return null;
+    if (draftExpired(draft)) { clearDetailsDraft(); return null; }
+    const sameValues = JSON.stringify(draft.values || {}) === JSON.stringify(record.details || {});
+    const sameAbsent = JSON.stringify(draft.absent || {}) === JSON.stringify(record.absent || {});
+    const sameComment = !(draft.comment || "").trim();
+    if (sameValues && sameAbsent && sameComment) { clearDetailsDraft(); return null; }
+    return draft;
+  };
+  const touched = () => { app.dirty = true; refresh(); saveDetailsDraft(); };
 
   const setAsideSlot = el("div");
   const groupsSlot = el("div");
@@ -1678,24 +1720,50 @@ async function detailsView(actId) {
   const counter = el("span");
   // A note belongs to one save, so the box is empty again after each: say where the note went, or the
   // reviewer takes it for lost and saves again (owner, 2026-11-17).
-  const comment = el("textarea", { rows: 2, placeholder: "Note for this save (optional)" });
+  const comment = el("textarea", { rows: 2, placeholder: "Note for this save (optional)", on: { input: () => { app.dirty = true; saveDetailsDraft(); } } });
   const commentHelp = el("div", { class: "muted small", text: "The note is kept with this save and listed under “Details record” at the foot of this page, so this box is empty again after each save. Notes stay in the workbench: they are not published." });
   const save = async (status) => {
-    const allowed = new Set(currentFields().map((f) => f.key));
-    const detailsPayload = Object.fromEntries(Object.entries(values).filter(([k, v]) => allowed.has(k) && !isEmpty(v)));
-    const absentPayload = Object.fromEntries(Object.entries(absent).filter(([k, r]) => allowed.has(k) && Boolean(r)));
+    const { details: detailsPayload, absent: absentPayload } = detailsSnapshot();
     const result = await api(`/api/documents/${encodeURIComponent(actId)}/details`, { method: "POST",
       body: { expected_revision: record.revision, status, details: detailsPayload, absent: absentPayload, comment: comment.value } });
     if (!result.ok) {
       if (result.data && result.data.missing) result.data.missing.forEach((key) => rows.get(key)?.classList.add("missing"));
       return toast(message(result));
     }
+    clearDetailsDraft();
     toast(status === "confirmed" ? "Details confirmed and recorded" : "Draft saved");
     if (location.hash !== address) return;
     app.dirty = false;
     detailsView(actId);
   };
   const confirmButton = el("button", { class: "primary", text: "Confirm details", on: { click: () => save("confirmed") } });
+  const detailsDraft = loadDetailsDraft();
+  const detailsDraftBanner = detailsDraft ? (() => {
+    const when = new Date(detailsDraft.at).toLocaleString();
+    const current = detailsDraft.base === record.revision;
+    const banner = el("div", { class: "card draft" },
+      el("strong", { text: "Unsaved changes found. " }),
+      current ? `You were editing these details (${when}) and did not save.`
+        : draftRevisionNotice(detailsDraft.base, when, record.revision, record.author, "Check the fields before saving."),
+      " ",
+      el("button", { class: "small primary", text: "Restore my changes", on: { click: async () => {
+        if (detailsDraft.kind && detailsDraft.kind !== currentKind) {
+          await loadFields(data.family, detailsDraft.kind);
+        }
+        for (const k of Object.keys(values)) delete values[k];
+        Object.assign(values, structuredClone(detailsDraft.values || {}));
+        for (const k of Object.keys(absent)) delete absent[k];
+        Object.assign(absent, { ...(detailsDraft.absent || {}) });
+        comment.value = detailsDraft.comment || "";
+        drawGroups();
+        updateSetAside();
+        refresh();
+        app.dirty = true;
+        banner.remove();
+      } } }), " ",
+      el("button", { class: "small", text: "Discard them", on: { click: () => { clearDetailsDraft(); banner.remove(); } } }));
+    return banner;
+  })() : null;
   drawGroups();
   const history = data.history.length ? el("div", { class: "card" }, el("h3", { text: "Details record" }),
     el("ul", {}, data.history.map((h) => el("li", { text: `${h.at.slice(0, 16).replace("T", " ")} · revision ${h.revision} · ${h.status} by ${h.author}${h.comment ? ` — ${h.comment}` : ""}` })))) : null;
@@ -1705,6 +1773,7 @@ async function detailsView(actId) {
         el("div", { class: "card details-head" },
           el("h2", { text: `${title}: details` }),
           claimBanner(actId, doc.data.claim, () => detailsView(actId)),
+          detailsDraftBanner,
           el("p", { class: "muted", text: "Each detail was read from the document where it is printed; the page and words are shown beside it. Check each against the original beside the form (a page number opens that page there), correct it, or say why it is not given. Legal facts (what each language version is worth as law, when it commences, whether it is current, the laws it affects) are only suggested: none is filled in until you use the suggestion or give it yourself, and an authority left empty is published as unknown. Confirmed details are approved with the text and shown to the public." }),
           el("p", {}, pill(record.status === "confirmed" ? "ok" : record.status === "draft" ? "warn" : "medium", DETAIL_STATUS[record.status] + (record.revision ? ` · revision ${record.revision} by ${record.author}` : "")), " ", counter),
           ...(data.notices || []).map((notice) => el("div", { class: "hint", text: notice })),
@@ -2559,9 +2628,9 @@ async function pageView(actId, pageNumber) {
 }
 
 // Every edit counts (view.edits), so a save can tell whether the page changed while it was being sent.
-function changed(view) {
+function changed(view, { immediate = false } = {}) {
   view.edits = (view.edits || 0) + 1;
-  app.dirty = true; if (view.dirtyBadge) view.dirtyBadge.hidden = false; saveDraft(view);
+  app.dirty = true; if (view.dirtyBadge) view.dirtyBadge.hidden = false; saveDraft(view, { immediate });
 }
 
 // Under a routing decision: what this page needs, in a sentence (nothing for a page to review whole,
@@ -2613,7 +2682,7 @@ function refreshJoin(view) {
   if (!view.joinSlot) return;
   const before = view.page.previous_end;
   const first = (view.units || [])[firstWords(view.units)];
-  const set = (join) => { view.join = join; currentUnits(view); changed(view); refreshJoin(view); };
+  const set = (join) => { view.join = join; currentUnits(view); changed(view, { immediate: true }); refreshJoin(view); };
   if (!before || !first) return view.joinSlot.replaceChildren();
   const tail = `“…${before.text.slice(-60)}”`;
   if (view.join) {
@@ -2809,19 +2878,56 @@ window.addEventListener("scroll", () => {
 
 // --- drafts: unsaved work survives a crash or an accidental close ----------------------------------
 
+const DRAFT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const draftKey = (view) => `oa-draft:${view.actId}:${view.pageNumber}`;
 
-function saveDraft(view) {
+function draftExpired(draft) {
+  const ts = draft && draft.at ? Date.parse(draft.at) : NaN;
+  return !Number.isFinite(ts) || (Date.now() - ts > DRAFT_MAX_AGE_MS);
+}
+
+function isSameAuthor(author) {
+  if (!author || !app.me) return false;
+  return author === app.me.email || author === app.me.name;
+}
+
+function draftRevisionNotice(base, when, expected, latestAuthor, checkHint) {
+  if (isSameAuthor(latestAuthor)) {
+    return `You were editing revision ${base} (${when}); revision ${expected} was already saved under your account. Discard this older draft unless you want to put it back.`;
+  }
+  const who = latestAuthor ? operatorName(latestAuthor) : "someone";
+  return `You were editing revision ${base} (${when}); ${who} has since saved revision ${expected}. Restoring puts your version back — ${checkHint}`;
+}
+
+function writeDraft(view) {
+  try {
+    localStorage.setItem(draftKey(view), JSON.stringify({
+      base: view.expected,
+      author: (app.me && app.me.email) || "",
+      at: new Date().toISOString(),
+      units: currentUnits(view),
+      resolutions: view.resolutions,
+      comment: view.comment,
+    }));
+  } catch { /* storage unavailable: the unload warning still protects the work */ }
+}
+
+function saveDraft(view, { immediate = false } = {}) {
   clearTimeout(view.draftTimer);
-  view.draftTimer = setTimeout(() => {
-    try {
-      localStorage.setItem(draftKey(view), JSON.stringify({ base: view.expected, at: new Date().toISOString(), units: currentUnits(view), resolutions: view.resolutions, comment: view.comment }));
-    } catch { /* storage unavailable: the unload warning still protects the work */ }
-  }, 700);
+  if (immediate) return writeDraft(view);
+  view.draftTimer = setTimeout(() => writeDraft(view), 700);
 }
 
 function loadDraft(view) {
-  try { return JSON.parse(localStorage.getItem(draftKey(view)) || "null"); } catch { return null; }
+  let draft = null;
+  try { draft = JSON.parse(localStorage.getItem(draftKey(view)) || "null"); } catch { draft = null; }
+  if (!draft || typeof draft !== "object") return null;
+  if (draftExpired(draft)) { clearDraft(view); return null; }
+  const sameUnits = JSON.stringify(draft.units || []) === JSON.stringify(view.units || []);
+  const sameRes = JSON.stringify(draft.resolutions || {}) === JSON.stringify(view.resolutions || {});
+  const sameComment = (draft.comment || "") === (view.comment || "");
+  if (sameUnits && sameRes && sameComment) { clearDraft(view); return null; }
+  return draft;
 }
 
 function clearDraft(view) {
@@ -2832,10 +2938,11 @@ function clearDraft(view) {
 function draftBanner(view, draft) {
   const when = new Date(draft.at).toLocaleString();
   const current = draft.base === view.expected;
+  const latestAuthor = view.page.latest && view.page.latest.author;
   const banner = el("div", { class: "card draft" },
     el("strong", { text: "Unsaved changes found. " }),
     current ? `You were editing this page (${when}) and did not save.`
-      : `You were editing revision ${draft.base} (${when}); someone has since saved revision ${view.expected}. Restoring puts your version back — check the Changes tab before saving.`,
+      : draftRevisionNotice(draft.base, when, view.expected, latestAuthor, "check the Changes tab before saving."),
     " ",
     el("button", { class: "small primary", text: "Restore my changes", on: { click: () => {
       view.units = draft.units; view.resolutions = draft.resolutions || {}; view.comment = draft.comment || "";
@@ -2886,7 +2993,7 @@ function actOnFlag(code) {
 function resolveLow(view) {
   const low = view.page.flags.filter((f) => f.severity === "low" && !view.resolutions[f.id]);
   for (const flag of low) { view.resolutions[flag.id] = { decision: "keep", reader: "", note: "punctuation only" }; if (view.surface) view.surface.resolve(flag.id); }
-  if (low.length) { changed(view); refreshFlags(view); }
+  if (low.length) { changed(view, { immediate: true }); refreshFlags(view); }
   toast(low.length ? `Kept ${low.length} punctuation-only differences as read` : "No punctuation-only flags open");
 }
 
@@ -3105,7 +3212,7 @@ function editTab(view) {
     onFlagClick: (id, rect) => openFlag(view, id, rect),
     onUnitFocus: (index) => { const units = view.surface ? view.surface.units() : view.units; showRegion(view, units[index] ? regionFor(view, units[index]) : null); },
     onSelect: () => setTimeout(() => { showLine(view); updateToolbar(view); }, 0),
-    onMarkerEdit: (value, apply) => { const next = prompt("Section or paragraph number (empty to remove):", value); if (next !== null) apply(next.trim()); },
+    onMarkerEdit: (value, apply, rect) => openMarkerEditor(view, value, apply, rect),
     onFind: () => openFind(view),
     onEscape: () => focusToolbar(view),
     onNotice: (message) => toast(message),
@@ -3241,7 +3348,7 @@ function flagCard(view, flag, inList) {
   const resolve = (decision, reader = "") => {
     view.resolutions[flag.id] = { decision, reader, note: "" };
     if (view.surface && decision !== "use_check") view.surface.resolve(flag.id);
-    changed(view); close(); refreshFlags(view);
+    changed(view, { immediate: true }); close(); refreshFlags(view);
   };
   const reads = el("div", { class: "reads" }, el("span", { class: "muted", text: flag.compare ? "This version" : "Main reading" }),
     el("q", { text: flag.primary || (flag.missing ? `no article ${flag.missing} found` : "—") }), el("span"));
@@ -3255,7 +3362,7 @@ function flagCard(view, flag, inList) {
   }
   const actions = resolution
     ? el("div", { class: "actions" }, pill("ok", DECISION_LABEL[resolution.decision] + (resolution.reader ? ` (${resolution.reader})` : "")),
-        el("button", { class: "small", text: "Reopen", on: { click: () => { delete view.resolutions[flag.id]; changed(view); currentUnits(view); view.showTab("edit"); } } }))
+        el("button", { class: "small", text: "Reopen", on: { click: () => { delete view.resolutions[flag.id]; changed(view, { immediate: true }); currentUnits(view); view.showTab("edit"); } } }))
     : el("div", { class: "actions" },
         el("button", { class: "small", text: "Keep as read (printed so)", on: { click: () => resolve("keep") } }),
         el("button", { class: "small", text: "I corrected it", on: { click: () => resolve("edited") } }),
@@ -3289,6 +3396,36 @@ function openFlag(view, id, rect) {
   const top = window.scrollY + rect.bottom + 6;
   const left = Math.min(window.scrollX + rect.left, window.scrollX + document.documentElement.clientWidth - pop.offsetWidth - 12);
   Object.assign(pop.style, { top: `${top}px`, left: `${Math.max(8, left)}px` });
+}
+
+function openMarkerEditor(view, value, apply, rect) {
+  document.querySelectorAll(".popover").forEach((p) => p.remove());
+  const close = () => { pop.remove(); if (view.surface && view.surface.view) view.surface.view.focus(); };
+  const input = el("input", {
+    type: "text",
+    value: value || "",
+    "aria-label": "Section or paragraph number",
+    placeholder: "e.g. (ii) or 12.",
+  });
+  const submit = () => { const next = input.value.trim(); pop.remove(); apply(next); };
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") { event.preventDefault(); submit(); }
+    else if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(); }
+  });
+  const pop = el("div", { class: "popover marker-editor", role: "dialog", "aria-label": "Edit section or paragraph number" },
+    el("label", { class: "small muted", text: "Section or paragraph number" }),
+    input,
+    el("div", { class: "actions" },
+      el("button", { type: "button", class: "small primary", text: "Save", on: { click: submit } }),
+      el("button", { type: "button", class: "small", text: "Remove", on: { click: () => { pop.remove(); apply(""); } } }),
+      el("button", { type: "button", class: "small", text: "Cancel", on: { click: close } })));
+  document.body.append(pop);
+  const anchor = rect || (view.toolbar && view.toolbar.getBoundingClientRect()) || { bottom: 120, left: 120 };
+  const top = window.scrollY + anchor.bottom + 6;
+  const left = Math.min(window.scrollX + anchor.left, window.scrollX + document.documentElement.clientWidth - pop.offsetWidth - 12);
+  Object.assign(pop.style, { top: `${top}px`, left: `${Math.max(8, left)}px` });
+  input.focus();
+  input.select();
 }
 
 document.addEventListener("keydown", (event) => { if (event.key === "Escape") document.querySelectorAll(".popover").forEach((p) => p.remove()); });

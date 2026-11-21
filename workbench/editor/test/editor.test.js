@@ -371,6 +371,23 @@ test("Backspace at the start of a unit after an empty one removes the empty one"
   assert.deepEqual(fromDoc(state.doc), [PAGE[0]]);
 });
 
+test("Backspace inside an empty top unit removes it when another block follows", () => {
+  let state = stateOf([{ kind: "paragraph", text: "" }, PAGE[0]]);
+  state = select(state, inWords(state.doc, 0));
+  state = press(state, "Backspace");
+  assert.deepEqual(fromDoc(state.doc), [PAGE[0]]);
+
+  let beforeTable = stateOf([{ kind: "paragraph", text: "" }, TAX_TABLE]);
+  beforeTable = select(beforeTable, inWords(beforeTable.doc, 0));
+  beforeTable = press(beforeTable, "Backspace");
+  assert.deepEqual(fromDoc(beforeTable.doc), [TAX_TABLE]);
+
+  let sole = stateOf([{ kind: "paragraph", text: "" }]);
+  sole = select(sole, inWords(sole.doc, 0));
+  sole = press(sole, "Backspace");
+  assert.deepEqual(fromDoc(sole.doc), [{ kind: "paragraph", text: "" }]);
+});
+
 test("Enter at the start of the words opens a unit above; the notes stay", () => {
   let state = stateOf([{ kind: "paragraph", text: "Words", notes: ["Note"] }]);
   state = select(state, inWords(state.doc, 0));
