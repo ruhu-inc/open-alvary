@@ -795,7 +795,7 @@ def test_the_state_and_kept_runs_are_mirrored_to_the_bucket(tmp_path, monkeypatc
 
 def test_every_type_and_source_is_one_the_brief_names():
     assert {kind for meta in nigeria.SOURCES.values() for kind in meta["kinds"]} <= set(nigeria.TYPES)
-    assert not {"cbn", "nrs", "nuprc", "fct-high-court"} & set(nigeria.SOURCES)
+    assert not {"nrs", "nuprc", "fct-high-court"} & set(nigeria.SOURCES)
     assert set(nigeria.READERS) == set(nigeria.SOURCES)
     assert all(meta["wave"] in (1, 2) for meta in nigeria.SOURCES.values())
     assert date.fromisoformat("2026-10-22")  # the owner's decision the sources follow
@@ -944,3 +944,58 @@ def test_pull_fetched_builds_the_industrial_court_entries_from_the_job_records(t
         7,
         8,
     ]
+
+
+def test_cbn_circulars_catalogue():
+    payload = [
+        {
+            "id": 9244,
+            "refNo": "PSP/DIR/PUB/CIR/001/004",
+            "title": "Regulations for the Operations of Non-Security Virtual Assets in Nigeria ",
+            "description": "CIRCULAR TO ALL DEPOSIT MONEY BANKS",
+            "keywords": "Virtual Assets, Regulations",
+            "link": "/Out/2026/CCD/REGULATIONS FOR THE OPERATIONS OF NON-SECURITY VIRTUAL ASSETS IN NIGERIA.pdf",
+            "documentDate": "05/11/2026",
+            "filesize": "8336341",
+        },
+        {
+            "id": 8180,
+            "refNo": "FMD/DIR/PUB/CIR/001/031 ",
+            "title": "Review of Discount Window Restrictions and Open Market Operations Participation Framework",
+            "description": "CIRCULAR TO ALL DEPOSIT MONEY BANKS",
+            "keywords": "Discount Window",
+            "link": "/Out/2026/FMD/Review & Framework.pdf",
+            "documentDate": "29/10/2026",
+            "filesize": "41879",
+        },
+        {
+            "id": 9999,
+            "refNo": "BAD/001",
+            "title": "External mirror PDF",
+            "link": "https://example.com/Out/2026/bad.pdf",
+            "documentDate": "01/10/2026",
+            "filesize": "100",
+        },
+    ]
+    client = Site(
+        {"https://www.cbn.gov.ng/api/GetAllCirculars?format=json": json.dumps(payload)}
+    )
+    found = nigeria.Found("cbn")
+    nigeria.read_cbn(client, found, {})
+    items = list(found.items.values())
+    assert len(items) == 2
+    assert len(found.rejected) == 1
+    first = items[0]
+    assert first["type"] == "regulation"
+    assert (
+        first["url"]
+        == "https://www.cbn.gov.ng/Out/2026/CCD/REGULATIONS%20FOR%20THE%20OPERATIONS%20OF%20NON-SECURITY%20VIRTUAL%20ASSETS%20IN%20NIGERIA.pdf"
+    )
+    assert first["listed"]["posted"] == "2026-11-05"
+    assert first["listed"]["year"] == 2026
+    assert first["listed"]["ref_no"] == "PSP/DIR/PUB/CIR/001/004"
+    assert first["listed"]["size_bytes"] == 8336341
+    second = items[1]
+    assert second["type"] == "guideline"
+    assert second["listed"]["posted"] == "2026-10-29"
+    assert second["url"] == "https://www.cbn.gov.ng/Out/2026/FMD/Review%20&%20Framework.pdf"

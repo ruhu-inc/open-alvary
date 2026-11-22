@@ -10,6 +10,7 @@ import hmac
 import html
 import os
 import re
+import subprocess
 import sys
 import threading
 import time
@@ -956,8 +957,8 @@ def create_app(
             image = library.image(act_id, page)
         except FileNotFoundError as error:
             raise HTTPException(404, str(error)) from error
-        except render.Failed as error:
-            raise HTTPException(502, str(error)) from error
+        except (render.Failed, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+            raise HTTPException(502, f"Could not render page {page} of {act_id}: {error}") from error
         return FileResponse(
             image, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=3600"}
         )

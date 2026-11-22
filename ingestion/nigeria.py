@@ -342,6 +342,22 @@ SOURCES: dict[str, dict] = {
         "fetch": True,
         "categories": {"158": "Laws", "109": "Guidelines", "157": "Circulars", "161": "Directives"},
     },
+    "cbn": {
+        "name": "Central Bank of Nigeria: circulars, guidelines, regulations",
+        "publisher": "Central Bank of Nigeria",
+        "url": "https://www.cbn.gov.ng/Documents/circulars.html",
+        "kinds": ["circular", "regulation", "guideline"],
+        "listing": "The CBN circulars API (www.cbn.gov.ng/api/GetAllCirculars?format=json): reference number, "
+        "title, description, document date, file size and PDF path under /Out/.",
+        "robots": "User-agent: * / Allow: / (disallows /footer.html, /header.html, /museum/, /*.asp$, "
+        "/appsettings.json). API and /Out/ PDFs allowed.",
+        "terms": "Central Bank of Nigeria official publications.",
+        "wave": 2,
+        "hosts": ["www.cbn.gov.ng"],
+        "file_hosts": ["www.cbn.gov.ng", "cbn.gov.ng"],
+        "cadence": "weekly",
+        "fetch": True,
+    },
     "court-of-appeal": {
         "name": "Court of Appeal: judgments",
         "publisher": "Court of Appeal of Nigeria",
@@ -2337,6 +2353,55 @@ def naicom_post(found: Found, post: dict, categories: dict, listing_url: str) ->
     found.add(url, kind, {**listed, "file_name": file_name(url)}, raw=post, listing_url=listing_url)
 
 
+def read_cbn(client, found: Found, state: dict, log=print, budget=None) -> None:
+    url = "https://www.cbn.gov.ng/api/GetAllCirculars?format=json"
+    body = _json(client.get(url))
+    records = body if isinstance(body, list) else (body.get("data") or [])
+    for record in records:
+        if isinstance(record, dict):
+            cbn_circular(found, record, url)
+
+
+def cbn_circular(found: Found, record: dict, listing_url: str) -> None:
+    title = clean(record.get("title"))
+    link = (record.get("link") or "").strip()
+    if not link:
+        found.reject("no file link", url=listing_url, title=title)
+        return
+    if link.startswith(("http://", "https://")):
+        parts = urlsplit(link)
+        url = parts._replace(path=quote(parts.path, safe="/%&:@!$'()*+,;=-._~")).geturl()
+    else:
+        rel = link if link.startswith("/") else "/" + link
+        url = urljoin("https://www.cbn.gov.ng/", quote(rel, safe="/%&:@!$'()*+,;=-._~"))
+    why = on_path(url, {"www.cbn.gov.ng", "cbn.gov.ng"}, r"^/(?:out|documents)/.+\.(pdf|docx?)$") or sane_title(title)
+    if why:
+        found.reject(why, url=url, title=title)
+        return
+    posted = to_date(record.get("documentDate"))
+    size_raw = str(record.get("filesize") or "").strip()
+    ref_no = clean(record.get("refNo"))
+    listed = {
+        "title": title,
+        "year": int(posted[:4]) if posted and posted[:4].isdigit() else year_in(title),
+        "posted": posted,
+        "posted_as_listed": clean(record.get("documentDate")) or None,
+        "ref_no": ref_no or None,
+        "description": clean(record.get("description")) or None,
+        "keywords": clean(record.get("keywords")) or None,
+        "record_id": record.get("id"),
+        "size_bytes": int(size_raw) if size_raw.isdigit() else None,
+        "link_as_listed": link,
+    }
+    if re.search(r"\bregulations?\b", title, re.I):
+        kind = "regulation"
+    elif re.search(r"\b(?:guidelines?|framework)\b", title, re.I):
+        kind = "guideline"
+    else:
+        kind = "circular"
+    found.add(url, kind, {**listed, "file_name": file_name(url)}, raw=record, listing_url=listing_url)
+
+
 def read_court_of_appeal(client, found: Found, state: dict, log=print, budget=None) -> None:
     page, seen, total = 1, 0, None
     while total is None or seen < total:
@@ -2448,6 +2513,7 @@ READERS = {
     "nesrea": read_nesrea,
     "cac": read_cac,
     "naicom": read_naicom,
+    "cbn": read_cbn,
     "court-of-appeal": read_court_of_appeal,
     "fhc-rules": read_fhc,
 }
