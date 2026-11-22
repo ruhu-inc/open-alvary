@@ -468,6 +468,10 @@ h2 {
   margin-bottom: 19px;
   color: #6b6b6b;
 }
+.home-search:focus-within {
+  outline: 3px solid #737373;
+  outline-offset: 3px;
+}
 .home-search input {
   background: transparent;
   outline: none;
@@ -1446,6 +1450,10 @@ main:focus {
   letter-spacing: 0.04em;
   margin: 24px 0 10px;
 }
+.doc-section:nth-of-type(n + 4) {
+  content-visibility: auto;
+  contain-intrinsic-block-size: auto 12lh;
+}
 .doc-section h3 {
   font: 600 17px/1.45 "DM Sans", sans-serif;
   margin: 26px 0 8px;
@@ -1752,6 +1760,10 @@ main:focus {
   padding: 2px 4px 2px 8px;
   background: #ffffff;
 }
+.doc-find:focus-within {
+  outline: 3px solid #737373;
+  outline-offset: 2px;
+}
 .doc-find input {
   border: 0;
   background: transparent;
@@ -1894,6 +1906,9 @@ main:focus {
   .doc-text {
     padding: 0;
     font-size: 11pt;
+  }
+  .doc-section:nth-of-type(n + 4) {
+    content-visibility: visible;
   }
   .doc-section h3 {
     break-after: avoid;

@@ -375,7 +375,11 @@ function message(result) {
 // Resolves once the proxy lets requests through again, with the notice shown meanwhile. Every request
 // that met the expired session waits on the same renewal.
 function proxyRenewed() {
-  if (!proxy.renewed) proxy.renewed = new Promise((resolve) => { proxy.resolve = resolve; });
+  if (!proxy.renewed) {
+    const { promise, resolve } = Promise.withResolvers();
+    proxy.renewed = promise;
+    proxy.resolve = resolve;
+  }
   offerRenewal(true);
   return proxy.renewed;
 }
@@ -658,7 +662,7 @@ function ago(iso) {
   return `${n} ${unit[0]}${n === 1 ? "" : "s"} ago`;
 }
 
-// Page numbers as runs: "1, 3–6".
+// Page numbers as runs: "1, 3–6". Accepts an Array or Set.
 function pageRuns(pages) {
   const sorted = [...pages].sort((a, b) => a - b);
   const runs = [];
@@ -1218,7 +1222,7 @@ function findReplaceCard(actId) {
       el("p", { class: "muted", text: result.data.hits.length ? `${result.data.hits.length} match(es) on ${byPage.size} page(s)${result.data.truncated ? " (first 500 shown)" : ""}.` : "No matches." }),
       list, byPage.size ? el("p", {}, apply) : null);
   };
-  find.addEventListener("keydown", (e) => { if (e.key === "Enter") run(); });
+  find.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); if (e.isComposing || e.keyCode === 229) return; run(); } });
   return el("div", { class: "card" }, el("h3", { text: "Find and replace across the document" }),
     el("div", { class: "findbar" }, find, replace, el("button", { text: "Find", on: { click: run } })),
     el("p", { class: "muted" }, el("label", {}, caseBox, " match case"), " ", el("label", {}, wordBox, " whole words only")),
@@ -3137,8 +3141,8 @@ function findBar(view) {
     search();
   };
   query.addEventListener("input", search);
-  query.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); step(event.shiftKey ? -1 : 1); } });
-  replacement.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); S().run(C.replaceOne(replacement.value), { focus: false }); search(); } });
+  query.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); if (event.isComposing || event.keyCode === 229) return; step(event.shiftKey ? -1 : 1); } });
+  replacement.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); if (event.isComposing || event.keyCode === 229) return; S().run(C.replaceOne(replacement.value), { focus: false }); search(); } });
   [matchCase, wholeWord].forEach((box) => box.addEventListener("change", search));
   const bar = el("div", { class: "findbar-page", role: "search", hidden: true },
     query, el("button", { type: "button", class: "small", title: "Previous match (Shift+Enter)", "aria-label": "Previous match", text: "↑", on: { click: () => step(-1) } }),
@@ -3409,7 +3413,7 @@ function openMarkerEditor(view, value, apply, rect) {
   });
   const submit = () => { const next = input.value.trim(); pop.remove(); apply(next); };
   input.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") { event.preventDefault(); submit(); }
+    if (event.key === "Enter") { event.preventDefault(); if (event.isComposing || event.keyCode === 229) return; submit(); }
     else if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(); }
   });
   const pop = el("div", { class: "popover marker-editor", role: "dialog", "aria-label": "Edit section or paragraph number" },

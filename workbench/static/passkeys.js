@@ -11,7 +11,11 @@ const b64 = {
 const day = (value) => (value ? String(value).slice(0, 10) : "");
 const moment = (value) => (value ? String(value).slice(0, 16).replace("T", " ") : "");
 
+let passkeyAbort = null;
+
 async function passkeyCheck() {
+  if (passkeyAbort) passkeyAbort.abort();
+  passkeyAbort = new AbortController();
   const options = await api("/api/passkeys/options", { method: "POST", body: { purpose: "verify" } });
   if (!options.ok) throw new Error(message(options));
   const o = options.data;
@@ -23,12 +27,16 @@ async function passkeyCheck() {
       userVerification: o.userVerification,
       timeout: o.timeout,
     },
+    signal: passkeyAbort.signal,
   });
   const r = credential.response;
   const verified = await api("/api/passkeys/verify", {
     method: "POST",
     body: { credential: { id: credential.id, clientDataJSON: b64.enc(r.clientDataJSON), authenticatorData: b64.enc(r.authenticatorData), signature: b64.enc(r.signature) } },
   });
+  if (verified.status === 404 && typeof PublicKeyCredential !== "undefined" && PublicKeyCredential.signalUnknownCredential) {
+    await PublicKeyCredential.signalUnknownCredential({ rpId: o.rpId, credentialId: credential.id }).catch(() => {});
+  }
   if (!verified.ok) throw new Error(message(verified));
 }
 

@@ -131,6 +131,7 @@ function FindInDocument({ root }: { root: () => Element | null }) {
         onKeyDown={(event) => {
           if (event.key === "Enter") {
             event.preventDefault();
+            if (event.nativeEvent.isComposing || event.keyCode === 229) return;
             step(event.shiftKey ? -1 : 1);
           }
         }}

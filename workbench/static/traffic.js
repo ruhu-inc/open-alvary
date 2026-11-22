@@ -172,7 +172,7 @@ async function trafficView() {
     el("details", { class: "card" }, el("summary", { text: "Day by day" }),
       el("div", { class: "traffic-wide" }, el("table", { class: "list" },
         el("thead", {}, el("tr", {}, ["Day", "Arrivals", ...(totals.visitors ? ["Visitors"] : []), "Searches", "Found nothing", "Records", "Texts", "Downloads", "Automated"].map((name) => el("th", { text: name })))),
-        el("tbody", {}, [...daily].reverse().map((row) => el("tr", {},
+        el("tbody", {}, daily.toReversed().map((row) => el("tr", {},
           el("td", { text: trafficDay(row.day) }),
           ["arrivals", ...(totals.visitors ? ["visitors"] : []), "searches", "none_found", "records", "texts", "downloads", "bots"].map((key) => el("td", { text: trafficNumber(row[key]) })))))))),
     el("p", { class: "muted traffic-note", text: `Totals only: no visit, address or searched word is kept, and today's numbers are still growing.${lost ? ` ${trafficNumber(lost)} counts could not be kept in this period.` : ""}` }),
