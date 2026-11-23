@@ -395,6 +395,24 @@ test("Enter at the start of the words opens a unit above; the notes stay", () =>
   assert.deepEqual(fromDoc(state.doc), [{ kind: "paragraph", text: "" }, { kind: "paragraph", text: "Words", notes: ["Note"] }]);
 });
 
+test("Enter mid-paragraph or over selected words splits into a new unit, never a margin note", () => {
+  let state = stateOf([{ kind: "paragraph", text: "First sentence. Second sentence.", notes: ["Side note"] }]);
+  state = select(state, inWords(state.doc, 0, 15));
+  state = press(state, "Enter");
+  assert.deepEqual(fromDoc(state.doc), [
+    { kind: "paragraph", text: "First sentence.", notes: ["Side note"] },
+    { kind: "paragraph", text: "Second sentence." },
+  ]);
+
+  let selected = stateOf([{ kind: "list_item", text: "a. First item b. Second item", notes: ["Note"] }]);
+  selected = select(selected, inWords(selected.doc, 0, 13), inWords(selected.doc, 0, 14)); // select the space
+  selected = press(selected, "Enter");
+  assert.deepEqual(fromDoc(selected.doc), [
+    { kind: "list_item", text: "a. First item", notes: ["Note"] },
+    { kind: "list_item", text: "b. Second item" },
+  ]);
+});
+
 // --- tables -------------------------------------------------------------------------------------------
 
 test("Backspace and Delete at a cell's edges leave the table whole", () => {

@@ -611,8 +611,17 @@ def _slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
 
 
+def _rlrc_number_key(number: str | None) -> str | None:
+    """Normalise an instrument's leading number while preserving bis/ter/quater suffixes:
+    '006/2021' -> '6', '006bis/2021' -> '6bis', '011/01' -> '11'."""
+    match = re.match(r"\s*0*(\d+)\s*(bis|ter|quater)?\b", number or "", re.I)
+    if not match:
+        return None
+    return f"{int(match.group(1))}{(match.group(2) or '').lower()}"
+
+
 def rlrc_index() -> tuple[dict, str | None]:
-    """RLRC's listing by (kind, number, year): whether each law is filed among the laws in force or
+    """RLRC's listing by (kind, number_key, year): whether each law is filed among the laws in force or
     the repealed ones, and under which subject; and when the listing was read."""
     path = STAGING / "catalogue" / "rlrc-laws.json"
     if not path.exists():
@@ -621,14 +630,14 @@ def rlrc_index() -> tuple[dict, str | None]:
     index: dict = {}
     for item in catalogue["files"]:
         parsed = item["parsed"]
-        number = re.match(r"0*(\d+)", parsed.get("number") or "")
+        num_key = _rlrc_number_key(parsed.get("number"))
         if (
             parsed.get("kind")
-            and number
+            and num_key
             and parsed.get("year")
             and parsed.get("status") in ("in_force", "repealed")
         ):
-            index.setdefault((parsed["kind"], int(number.group(1)), parsed["year"]), []).append(item)
+            index.setdefault((parsed["kind"], num_key, parsed["year"]), []).append(item)
     return index, (catalogue.get("checked_at") or "")[:10] or None
 
 
@@ -639,18 +648,34 @@ def _subjects(folder: str) -> str:
     return " › ".join(name for name in names if name)
 
 
-def rlrc_status(index: dict, checked: str | None, kind: str, number: str, year: str | None) -> dict:
+def rlrc_status(
+    index: dict, checked: str | None, kind: str, number: str, year: str | None, title: str | None = None
+) -> dict:
     """Legal status and subjects suggested from RLRC's listing, where it files this instrument."""
-    lead = re.match(r"0*(\d+)", number or "")
-    if not (lead and year):
+    num_key = _rlrc_number_key(number)
+    if not (num_key and year):
         return {}
-    found = index.get((kind, int(lead.group(1)), int(year)), [])
+    found = index.get((kind, num_key, int(year)), [])
+    if len(found) > 1 and title:
+        matched = [
+            item
+            for item in found
+            if _title_overlap(title, item.get("name") or item.get("title") or "") >= SAME_TITLE
+        ]
+        if matched:
+            found = matched
     statuses = {item["parsed"]["status"] for item in found}
     if len(statuses) != 1:
         return {}  # not listed, or listed both ways: left for the reviewer
+    subjects = {_subjects(item["folder"]) for item in found if _subjects(item["folder"])}
+    if len(subjects) > 1:
+        # Ambiguous collision across distinct RLRC subjects (e.g. two laws sharing a number/year):
+        # keep status if unanimous, but never guess the wrong subject.
+        subject = ""
+    else:
+        subject = next(iter(subjects), "")
     status = statuses.pop()
     item = found[0]
-    subject = _subjects(item["folder"])
     where = "the laws in force" if status == "in_force" else "the repealed laws"
     return {
         "status.legal": status,
@@ -742,15 +767,43 @@ def work_key(work: str) -> str:
     return re.sub(r"(?<![0-9a-z])0+(?=\d)", "", re.sub(r"(\d)(bis|ter)\b", r"\1-\2", work))
 
 
+def _title_overlap(a: str, b: str) -> float:
+    wa, wb = _title_words(a), _title_words(b)
+    if not wa or not wb:
+        return 0.0
+    return len(wa & wb) / min(len(wa), len(wb))
+
+
 def _by_number(whole: list[dict]):
-    """How a citation's work is found among Rwanda's: by its kind, number and year, however printed."""
-    by_key: dict[str, str] = {}
+    """How a citation's work is found among Rwanda's: by its kind, number and year, however printed.
+    Where two distinct works collide on the same key (e.g. a shared order or law number), disambiguate
+    by title words or leave unlinked rather than attaching unrelated instruments."""
+    by_key: dict[str, dict[str, list[str]]] = {}
     for d in whole:
-        by_key.setdefault(work_key(d["work"]), d["work"])
+        bucket = by_key.setdefault(work_key(d["work"]), {})
+        titles = bucket.setdefault(d["work"], [])
+        if d.get("title"):
+            titles.append(d["title"])
 
     def find(cite: dict, source: dict) -> list[str]:
-        target = by_key.get(work_key(work_id(cite["instrument"], cite["number"], cite["year"])))
-        return [target] if target else []
+        number = cite.get("number") or ""
+        year = cite.get("year")
+        if not year and not re.search(r"(?:19|20)\d\d", number):
+            return []
+        candidates = by_key.get(work_key(work_id(cite["instrument"], number, year))) or {}
+        if not candidates:
+            return []
+        target_text = cite.get("target") or ""
+        if len(candidates) == 1:
+            return [next(iter(candidates))]
+        scored = [
+            (max((_title_overlap(target_text, t) for t in titles), default=0.0), work)
+            for work, titles in candidates.items()
+        ]
+        scored.sort(reverse=True)
+        if scored[0][0] >= SAME_TITLE and (len(scored) == 1 or scored[0][0] > scored[1][0]):
+            return [scored[0][1]]
+        return []
 
     return find
 
@@ -1398,7 +1451,12 @@ def prepare_selection(
             # manifest is assembled (link_works).
             cites = rw_gazette.cited(lines, entry)
             listing = rlrc_status(
-                rlrc, rlrc_checked, entry["kind"], entry["number"], (entry.get("date") or "")[:4] or None
+                rlrc,
+                rlrc_checked,
+                entry["kind"],
+                entry["number"],
+                (entry.get("date") or "")[:4] or None,
+                title=values.get("identity.title"),
             )
             # Its subjects are filled in; its status, as a legal fact, is suggested with the listing's words.
             values |= {k: v for k, v in listing.items() if v and k not in LISTED_STATUS}

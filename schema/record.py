@@ -42,6 +42,7 @@ class RecordModel(BaseModel):
 
 
 Text = Annotated[str, Field(min_length=1, max_length=4000)]
+Title = Annotated[str, Field(min_length=1, max_length=1000)]
 Short = Annotated[str, Field(min_length=1, max_length=300)]
 LanguageTag = Annotated[str, Field(pattern=r"^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$")]  # BCP 47
 ScriptCode = Annotated[str, Field(pattern=r"^[A-Z][a-z]{3}$")]  # ISO 15924: Latn, Arab, Ethi, Tfng
@@ -233,7 +234,7 @@ CITATION_KINDS = ("official", "neutral", "law_report", "revised_edition", "popul
 
 class Citation(RecordModel):
     kind: Literal[*CITATION_KINDS]
-    text: Short  # "Copyright Act, No. 8, 2022"; "[2019] KEHC 5 (KLR)"; "Cap. C28, LFN 2004"
+    text: Title  # "Copyright Act, No. 8, 2022"; "[2019] KEHC 5 (KLR)"; "Cap. C28, LFN 2004"
     scheme: Short | None = None  # a law report or citation scheme: "KLR", "NWLR", "SALR"
 
 
@@ -246,9 +247,9 @@ class Identity(RecordModel):
     work_uri: Annotated[
         str, Field(pattern=r"^/akn/[a-z]{2}(?:-[a-z0-9]{1,12})?/[a-zA-Z]+(?:/[a-z0-9._-]+)+$")
     ]
-    title: Short  # short title, or a case's short name: "Copyright Act, 2022"; "Kenya Airways v Mwangi"
+    title: Title  # short title, or a case's short name: "Copyright Act, 2022"; "Kenya Airways v Mwangi"
     full_title: Text | None = None  # long title, or full case name with all parties
-    alternative_titles: tuple[Short, ...] = ()
+    alternative_titles: tuple[Title, ...] = ()
     numbers: tuple[Number, ...] = ()
     year: int | None = Field(default=None, ge=1800, le=2200)
     citations: tuple[Citation, ...] = ()
@@ -470,7 +471,7 @@ RELATIONS = (
 class Reference(RecordModel):
     """Another document: its work URI when known, and how it is cited."""
 
-    citation: Short
+    citation: Title
     work_uri: str | None = None
     place: PlaceCode | None = None
 

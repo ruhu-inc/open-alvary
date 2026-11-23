@@ -197,7 +197,7 @@
           "type": "string"
         },
         "text": {
-          "maxLength": 300,
+          "maxLength": 1000,
           "minLength": 1,
           "title": "Text",
           "type": "string"
@@ -829,7 +829,7 @@
           "type": "string"
         },
         "title": {
-          "maxLength": 300,
+          "maxLength": 1000,
           "minLength": 1,
           "title": "Title",
           "type": "string"
@@ -851,7 +851,7 @@
         "alternative_titles": {
           "default": [],
           "items": {
-            "maxLength": 300,
+            "maxLength": 1000,
             "minLength": 1,
             "type": "string"
           },
@@ -1586,7 +1586,7 @@
       "description": "Another document: its work URI when known, and how it is cited.",
       "properties": {
         "citation": {
-          "maxLength": 300,
+          "maxLength": 1000,
           "minLength": 1,
           "title": "Citation",
           "type": "string"

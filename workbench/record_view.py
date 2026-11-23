@@ -1267,6 +1267,11 @@ def slugify(text: str) -> str:
 # --- validation, suggestions and the document's place ---------------------------------------------------
 
 LIMITS = {"text": 300, "long": 4000}
+FIELD_LIMITS = {
+    "publication.url": 2048,
+    "identity.title": 1000,
+    "identity.citation": 1000,
+}
 DATE_ISO = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
@@ -1311,8 +1316,9 @@ def validate(values: dict, absent: dict, specs: list[FieldSpec]) -> tuple[dict, 
         spec = by_key[key]
         label = spec.label
         if spec.kind in LIMITS:
-            if not isinstance(value, str) or len(value.strip()) > LIMITS[spec.kind]:
-                raise ValueError(f"{label}: text of at most {LIMITS[spec.kind]} characters")
+            limit = FIELD_LIMITS.get(spec.key, LIMITS[spec.kind])
+            if not isinstance(value, str) or len(value.strip()) > limit:
+                raise ValueError(f"{label}: text of at most {limit} characters")
             value = value.strip()
         elif spec.kind == "date":
             if not isinstance(value, str) or not DATE_ISO.match(value):

@@ -1661,10 +1661,10 @@ async function detailsView(actId) {
         field.choices.map((c) => el("option", { value: c.value, text: c.label })));
       input.value = value || "";
     } else if (field.kind === "long") {
-      input = el("textarea", { rows: field.key === "summary" ? 4 : 2, on: { input: () => set(input.value) } });
+      input = el("textarea", { rows: field.key === "summary" ? 4 : 2, on: { input: () => set(input.value), change: () => set(input.value) } });
       input.value = value || "";
     } else if (field.kind === "list") {
-      input = el("input", { type: "text", placeholder: "Separate with commas", on: { input: () => set(input.value.split(",").map((x) => x.trim()).filter(Boolean)) } });
+      input = el("input", { type: "text", placeholder: "Separate with commas", on: { input: () => set(input.value.split(",").map((x) => x.trim()).filter(Boolean)), change: () => set(input.value.split(",").map((x) => x.trim()).filter(Boolean)) } });
       input.value = (value || []).join(", ");
     } else if (field.kind === "relations") {
       input = relationsEditor(standard, value || [], (links) => set(links), related);
@@ -1672,7 +1672,7 @@ async function detailsView(actId) {
       input = rowsEditor(field.columns, structuredClone(value || []), (rows) => set(rows), { suggested: suggestions[field.key] || {}, pageLink, canEdit });
     } else {
       const type = field.kind === "date" ? "date" : field.kind === "url" ? "url" : "text";
-      input = el("input", { type, inputmode: field.kind === "year" ? "numeric" : undefined, on: { input: () => set(input.value) } });
+      input = el("input", { type, inputmode: field.kind === "year" ? "numeric" : undefined, on: { input: () => set(input.value), change: () => set(input.value) } });
       input.value = value || "";
     }
     if (!canEdit) input.setAttribute("disabled", "");

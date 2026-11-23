@@ -750,30 +750,51 @@ ANNEX_TITLE = re.compile(
 ANNEXED = re.compile(
     r"Seen to be annexed|Bibonywe kugira ngo bishyirwe ku mugereka|Vu pour [êe]tre annex", re.I
 )
+ANNEX_CLOSING_SEAL = re.compile(
+    r"Seal of the Republic|Ikirango cya Repubulika|Sceau de la R[ée]publique"
+    r"|President of the Republic|Pr[ée]sident de la R[ée]publique|Perezida wa Repubulika"
+    r"|Prime Minister|Premier Ministre|Minisitiri w['’]Intebe",
+    re.I,
+)
 
 
 def _opens(page: dict, pattern: re.Pattern, lines: int = 2) -> bool:
     return any(pattern.match(line["text"].strip()) for c in page["columns"] for line in c["lines"][:lines])
 
 
+def _page_has(page: dict, pattern: re.Pattern) -> bool:
+    return any(pattern.search(line["text"]) for c in page["columns"] for line in c["lines"])
+
+
 def annex_pages(split: list[dict]) -> dict[int, int]:
     """Which pages belong to an annex: page number -> the annex's position in the issue (1, 2, …)."""
     roles: dict[int, int] = {}
-    count, inside = 0, False
+    count, inside, just_closed = 0, False, False
     for page in split:
-        if _opens(page, ANNEX_TITLE) or (not inside and _opens(page, ANNEX_START)):
-            count, inside = count + 1, True
-        elif inside and any(
+        opens_annex = _opens(page, ANNEX_TITLE) or (not inside and _opens(page, ANNEX_START))
+        has_annexed = _page_has(page, ANNEXED)
+        opens_instrument = any(
             OPENING[c["language"]].match(line["text"].strip())
             for c in page["columns"]
             if c["language"] in OPENING
             for line in c["lines"][:2]
-        ):
-            inside = False  # the next instrument begins
+        )
+        if opens_annex:
+            count, inside, just_closed = count + 1, True, False
+        elif inside and opens_instrument and not has_annexed:
+            inside, just_closed = False, False  # the next instrument begins
+        elif just_closed and not opens_instrument and _page_has(page, ANNEX_CLOSING_SEAL):
+            # Standalone trilingual signature/Seal page immediately following "Seen to be annexed…":
+            # stays with the annex rather than leaking onto the parent instrument.
+            roles[page["page"]] = count
+            just_closed = False
+            continue
+        else:
+            just_closed = False
         if inside:
             roles[page["page"]] = count
-            if any(ANNEXED.search(line["text"]) for c in page["columns"] for line in c["lines"]):
-                inside = False
+            if has_annexed:
+                inside, just_closed = False, True
     return roles
 
 

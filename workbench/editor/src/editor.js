@@ -259,20 +259,23 @@ function unitAt($pos) {
 // Enter in a unit's words: the rest of the words become a new unit of the same kind and level. At
 // the very start of the words, an empty unit opens above instead (a heading of the same rank), so
 // the margin notes stay put.
+// Enter in a unit's words: splits into a new unit (a heading starts a paragraph); at the very start
+// of non-empty words, opens an empty unit above. Works for both cursor and selected text inside the
+// same body; margin notes stay put and body text is never turned into a margin note.
 function splitUnit(state, dispatch) {
-  const { $from, empty } = state.selection;
-  if (!empty || $from.parent.type !== N.body) return false;
+  const { $from, $to, empty } = state.selection;
+  if ($from.parent.type !== N.body || (!empty && $to.parent !== $from.parent)) return false;
   const unit = unitAt($from);
   if (dispatch) {
     const { kind, level, rank } = unit.node.attrs;
-    if ($from.parentOffset === 0 && $from.parent.content.size) {
+    if (empty && $from.parentOffset === 0 && $from.parent.content.size) {
       const tr = state.tr.insert(unit.pos, N.unit.create({ kind, level, rank }, [N.body.create()]));
       dispatch(tr.scrollIntoView());
       return true;
     }
-    const rest = $from.parent.content.cut($from.parentOffset);
+    const rest = $to.parent.content.cut($to.parentOffset);
     const after = unit.pos + unit.node.nodeSize;
-    const tr = state.tr.delete($from.pos, $from.end());
+    const tr = state.tr.delete($from.pos, $to.end());
     const fresh = N.unit.create({ kind: kind === "heading" ? "paragraph" : kind, level }, [N.body.create(null, trimStart(rest))]);
     const at = tr.mapping.map(after);
     tr.insert(at, fresh);
@@ -860,9 +863,50 @@ export const keyCommands = {
   "Shift-Mod-g": findNext(-1),
 };
 
+// Never let native contentEditable paragraph splits or newline inserts turn body text into a margin
+// note (<aside class="note">, the only other child allowed by `unit: body note*`).
+const safeEnterPlugin = new Plugin({
+  props: {
+    handleDOMEvents: {
+      beforeinput(view, event) {
+        if (event.inputType !== "insertParagraph" && event.inputType !== "insertLineBreak") return false;
+        const parent = view.state.selection.$from.parent;
+        if (parent.type === N.body) {
+          event.preventDefault();
+          splitUnit(view.state, view.dispatch);
+          return true;
+        }
+        if (parent.type === N.note) {
+          event.preventDefault();
+          splitNote(view.state, view.dispatch);
+          return true;
+        }
+        return false;
+      },
+    },
+    handleTextInput(view, from, to, text) {
+      if (text !== "\n" && text !== "\r\n" && text !== "\r") return false;
+      const { $from } = view.state.selection;
+      if ($from.parent.type === N.body) {
+        const tr = view.state.tr.setSelection(TextSelection.create(view.state.doc, from, to));
+        const next = view.state.apply(tr);
+        if (splitUnit(next, (splitTr) => view.dispatch(splitTr))) return true;
+      }
+      if ($from.parent.type === N.note) {
+        if (splitNote(view.state, view.dispatch)) return true;
+      }
+      return false;
+    },
+  },
+});
+
+const safeBaseKeymap = Object.fromEntries(
+  Object.entries(baseKeymap).filter(([key]) => !/Enter$/i.test(key)),
+);
+
 // The plugins of a page, without the view (tests build states with them).
 export function plugins(extra = []) {
-  return [history(), keymap(keyCommands), keymap(baseKeymap), tableEditing(), tables.headerRows, pastePlugin, hangPlugin, findPlugin, ...extra];
+  return [history(), safeEnterPlugin, keymap(keyCommands), keymap(safeBaseKeymap), tableEditing(), tables.headerRows, pastePlugin, hangPlugin, findPlugin, ...extra];
 }
 
 // --- the editor ------------------------------------------------------------------------------------

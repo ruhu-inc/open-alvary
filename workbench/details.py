@@ -131,6 +131,7 @@ FIELDS = (
 BY_KEY = {field.key: field for field in FIELDS}
 
 LIMITS = {"text": 300, "long": 4000}
+FIELD_LIMITS = {"short_title": 1000, "citation": 1000}
 DATE_ISO = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 LANGUAGE_TAG = re.compile(r"^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$")
 JURISDICTION = re.compile(r"^[a-z]{2}(?:-[a-z0-9]{1,3})?$")
@@ -168,8 +169,9 @@ def validate(details: dict, absent: dict) -> tuple[dict, dict]:
 def _value(field: Field, value):
     label = field.label
     if field.kind in ("text", "long"):
-        if not isinstance(value, str) or len(value.strip()) > LIMITS[field.kind]:
-            raise ValueError(f"{label}: text of at most {LIMITS[field.kind]} characters")
+        limit = FIELD_LIMITS.get(field.key, LIMITS[field.kind])
+        if not isinstance(value, str) or len(value.strip()) > limit:
+            raise ValueError(f"{label}: text of at most {limit} characters")
         return value.strip()
     if field.kind == "date":
         if not isinstance(value, str) or not DATE_ISO.match(value):
@@ -216,8 +218,8 @@ def _relation(item) -> dict:
     if item.get("kind") not in RELATIONS:
         raise ValueError(f"Related laws: kind is one of {', '.join(RELATIONS)}")
     target = item.get("target")
-    if not isinstance(target, str) or not target.strip() or len(target) > 300:
-        raise ValueError("Related laws: the target law's title or citation (at most 300 characters)")
+    if not isinstance(target, str) or not target.strip() or len(target) > 1000:
+        raise ValueError("Related laws: the target law's title or citation (at most 1000 characters)")
     out = {"kind": item["kind"], "target": target.strip()}
     if item.get("target_id"):
         if not isinstance(item["target_id"], str) or not TARGET_ID.match(item["target_id"]):

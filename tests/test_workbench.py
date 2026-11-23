@@ -2598,3 +2598,28 @@ def test_two_writes_of_one_cached_file_never_cut_each_other_short(tmp_path):
         thread.join()
     assert path.read_bytes() in bodies  # one whole write, never a mixture or a part
     assert [p.name for p in tmp_path.iterdir()] == ["issue.pdf"]  # no temporary file left behind
+
+
+def test_details_accepts_long_urls_titles_and_citations():
+    from schema.jurisdictions import registry
+    from workbench import record_view
+
+    specs = record_view.fields("legislation", "law", registry().get("rw"))
+    long_url = "https://www.minijust.gov.rw/index.php?eID=dumpFile&t=f&f=" + ("a" * 310) + ".pdf"
+    long_title = "Law n° 057/2021 of 18/09/2021 approving the ratification of the financing agreement " + ("x" * 380)
+    long_citation = "Official Gazette n° Special of 20/09/2021 — " + ("y" * 380)
+    clean, absent = record_view.validate(
+        {
+            "identity.family": "legislation",
+            "identity.type": "law",
+            "identity.title": long_title,
+            "identity.citation": long_citation,
+            "publication.url": long_url,
+        },
+        {},
+        specs,
+    )
+    assert clean["publication.url"] == long_url
+    assert clean["identity.title"] == long_title
+    assert clean["identity.citation"] == long_citation
+    assert absent == {}

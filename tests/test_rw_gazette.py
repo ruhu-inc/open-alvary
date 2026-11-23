@@ -2532,3 +2532,19 @@ def test_an_accented_arrete_and_a_minister_ended_by_a_comma_begin_the_body():
     nodes = RG.structure(lines, "fr")
     kinds = [n["kind"] for n in nodes if n.get("article")]
     assert kinds[-1] == "heading"
+
+
+def test_annex_closing_attestation_and_trailing_seal_stay_in_annex():
+    def page(n, lines, lang="en"):
+        return {"page": n, "columns": [{"language": lang, "lines": [{"text": t} for t in lines]}]}
+
+    split = [
+        page(70, ["LAW N° 045/2026 OF 10/01/2026 APPROVING RATIFICATION", "Article One: Approval"]),
+        page(71, ["ANNEX TO LAW N° 045/2026", "Agreement text..."]),
+        page(75, ["LAW N° 045/2026 OF 10/01/2026", "Seen to be annexed to Law n° 045/2026 of 10/01/2026"]),
+        page(76, ["Kigali, 10/01/2026", "Paul KAGAME", "President of the Republic", "Seen and sealed with the Seal of the Republic"]),
+        page(77, ["LAW N° 046/2026 OF 10/01/2026 ON SOMETHING ELSE", "Article One: Scope"]),
+    ]
+    roles = RG.annex_pages(split)
+    assert roles == {71: 1, 75: 1, 76: 1}
+    assert 70 not in roles and 77 not in roles

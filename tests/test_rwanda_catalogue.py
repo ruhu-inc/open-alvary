@@ -1466,3 +1466,34 @@ def test_a_gazette_instruments_title_and_contents_begun_on_the_front_page_open_i
     ]
     rwanda.contents_before_first(own, kept)
     assert kept[0]["versions"]["en"]["start"] == 3
+
+
+def test_rlrc_bis_separation_and_collision_disambiguation():
+    index = {
+        ("law", "6", 2021): [
+            {
+                "name": "Law 006/2021 on Investment Promotion",
+                "folder": "/Laws_in_force/10._Business/10.1._Investment/",
+                "parsed": {"kind": "law", "number": "006/2021", "year": 2021, "status": "in_force", "subject_code": "10.1"},
+            }
+        ]
+    }
+    assert rwanda.rlrc_status(index, "2026-11-23", "law", "006/2021", "2021")["classification.subjects"] == [
+        "Business › Investment"
+    ]
+    # 006bis/2021 must NEVER inherit 006/2021's subject
+    assert rwanda.rlrc_status(index, "2026-11-23", "law", "006bis/2021", "2021") == {}
+
+    # Year-less order citation ("011/01") must not match an arbitrary year
+    docs = [
+        {"id": "rw-presidential-order-11-01-2020-en", "work": "rw-presidential-order-11-01-2020", "language": "en", "title": "Presidential Order 011/01 on roads"},
+        {
+            "id": "rw-law-007-2023-en",
+            "work": "rw-law-007-2023",
+            "language": "en",
+            "title": "Law 007/2023",
+            "cites": [{"kind": "made_under", "target": "Presidential Order n° 011/01", "instrument": "presidential_order", "number": "011/01", "year": ""}],
+        },
+    ]
+    linked = {d["id"]: d.get("relations") for d in rwanda.link_works(docs)}
+    assert "target_id" not in linked["rw-law-007-2023-en"][0]
