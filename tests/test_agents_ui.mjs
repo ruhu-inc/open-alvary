@@ -369,6 +369,14 @@ describe("page behaviour the 2026-11-23 review found broken", () => {
     assert.doesNotMatch(css, /position: sticky;\s*inset-block-end: 0;\s*\}\s*\.lc-welcome/);
   });
 
+  it("says how many of its laws are published from the live records, never a number written in the page", () => {
+    // 2026-11-23: the page said "3 published so far" while none of the three texts was published.
+    const page = fs.readFileSync(path.join(repoRoot, "web/public/agents/index.html"), "utf8");
+    assert.doesNotMatch(page, /published so far/);
+    assert.match(siteSrc, /a\.has_full_text === true/);
+    assert.match(siteSrc, /none published yet/);
+  });
+
   it("on a phone the composer folds to one row, on a wider window it never does, and the header is short", () => {
     // Folding resized the thread on every click and made it jump: only a phone folds.
     assert.match(css, /@media \(max-width: 520px\) \{\s*\.lc-chat\.has-thread \.lc-dock:not\(\.is-open\) \.lc-composer \{/);

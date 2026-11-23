@@ -615,7 +615,6 @@ class LawCheckController {
 
   async _loadRecords() {
     const datalist = document.getElementById("law-suggestions");
-    const countEl = document.getElementById("record-count");
     try {
       const resp = await fetch("./records.json", { headers: { Accept: "application/json" } });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -625,9 +624,9 @@ class LawCheckController {
       this.records = [];
     }
 
-    if (countEl && this.records.length > 0) {
-      countEl.textContent = String(this.records.length);
-    }
+    // How many of Law check's laws have their text published now, from the site's own record answers
+    // (has_full_text): the list names the laws Law check may check, not whether their text is out yet.
+    this._countPublished(this.records);
 
     if (datalist) {
       datalist.replaceChildren();
@@ -637,6 +636,26 @@ class LawCheckController {
         datalist.appendChild(opt);
       }
     }
+  }
+
+  async _countPublished(records) {
+    const summary = document.getElementById("coverage-summary");
+    if (!summary || !records.length) return;
+    const answers = await Promise.all(
+      records.map((rec) =>
+        fetch(`/site/v1/sources/${encodeURIComponent(rec.source_id)}`, { headers: { Accept: "application/json" } })
+          .then((r) => (r.ok ? r.json() : null))
+          .catch(() => null),
+      ),
+    );
+    // Said only when every answer came back; otherwise the line names the laws and no number.
+    if (answers.some((a) => a === null)) {
+      summary.textContent = "Nigerian laws.";
+      return;
+    }
+    const published = answers.filter((a) => a.has_full_text === true).length;
+    summary.textContent =
+      published === 0 ? "Nigerian laws; none published yet." : `Nigerian laws; ${published} published so far.`;
   }
 
   _setFieldError(control, message, { announce = false } = {}) {
