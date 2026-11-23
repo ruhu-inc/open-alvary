@@ -2606,7 +2606,9 @@ def test_details_accepts_long_urls_titles_and_citations():
 
     specs = record_view.fields("legislation", "law", registry().get("rw"))
     long_url = "https://www.minijust.gov.rw/index.php?eID=dumpFile&t=f&f=" + ("a" * 310) + ".pdf"
-    long_title = "Law n° 057/2021 of 18/09/2021 approving the ratification of the financing agreement " + ("x" * 380)
+    long_title = "Law n° 057/2021 of 18/09/2021 approving the ratification of the financing agreement " + (
+        "x" * 380
+    )
     long_citation = "Official Gazette n° Special of 20/09/2021 — " + ("y" * 380)
     clean, absent = record_view.validate(
         {
