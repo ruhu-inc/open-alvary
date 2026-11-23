@@ -34,7 +34,7 @@ export type History = {
 };
 
 // How the other record relates to this one, in the order a reader asks: what replaced it first.
-const KINDS: [string, string][] = [
+export const KINDS: [string, string][] = [
   ["overruled_by", "Overruled by"],
   ["doubted_by", "Doubted by"],
   ["distinguished_by", "Distinguished by"],
@@ -69,7 +69,7 @@ const KINDS: [string, string][] = [
 
 const record = (id: string) => "/sources/" + encodeURIComponent(id);
 
-function day(value: string) {
+export function day(value: string) {
   return new Date(value + "T00:00:00Z").toLocaleDateString("en-GB", {
     day: "numeric",
     month: "short",

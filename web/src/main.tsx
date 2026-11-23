@@ -1,6 +1,7 @@
 import React, { useContext, useEffect, useRef, useState } from "react";
-import { ChangesPage, RecordChanges } from "./changes";
-import { CurrentLaw, type History, RecordHistory } from "./history";
+import { ChangesPage } from "./changes";
+import { CurrentLaw, type History } from "./history";
+import { RecordActions, RecordCards, RecordTimeline, TextStatus } from "./record";
 import { createRoot } from "react-dom/client";
 import {
   ArrowUpRight,
@@ -12,8 +13,8 @@ import {
   Code2,
   Download,
   Globe2,
+  Check,
   ChevronRight,
-  ExternalLink,
   FileText,
 } from "lucide-react";
 import "@fontsource/dm-sans/latin-400.css";
@@ -556,6 +557,10 @@ function SourceList({
   params?: URLSearchParams;
   onChange?: (changes: Record<string, string | null>) => void;
 }) {
+  // On the home page, tabs narrow the short list to one kind of record.
+  const [kind, setKind] = useState("");
+  const [railOpen, setRailOpen] = useState(false);
+  const kinds = useRef<Facet[]>([]);
   const q = params.get("q") || "";
   const page = Math.max(1, Number(params.get("page")) || 1);
   const query = new URLSearchParams();
@@ -564,6 +569,7 @@ function SourceList({
     const value = params.get(name);
     if (value) query.set(name, value);
   }
+  if (compact && kind) query.set("type", kind);
   if (params.get("sort")) query.set("sort", params.get("sort")!);
   if (page > 1) query.set("page", String(page));
   const { data, error } = useData<BrowseResult>(
@@ -571,6 +577,7 @@ function SourceList({
   );
   const resultsRef = useRef<HTMLDivElement>(null);
   if (!data) return <Feedback error={error} />;
+  if (!kind) kinds.current = data.facets.type ?? [];
   const first = (page - 1) * PAGE_SIZE;
   const items = compact ? data.items.slice(0, 6) : data.items;
   const capped = data.total > data.last_page * PAGE_SIZE;
@@ -579,65 +586,9 @@ function SourceList({
     onChange?.({ page: next > 1 ? String(next) : null });
     resultsRef.current?.focus();
   };
-  return (
+  const allKinds = kinds.current.reduce((n, f) => n + f.count, 0);
+  const list = (
     <>
-      {!compact && onChange && (
-        <div className="filters" role="group" aria-label="Filter and sort the catalogue">
-          {FILTERS.map(([name, label]) => {
-            const values = data.facets[name] ?? [];
-            const value = params.get(name) || "";
-            if (values.length < 2 && !value) return null;
-            return (
-              <label key={name}>
-                {label}
-                <select
-                  value={value}
-                  onChange={(e) => onChange({ [name]: e.target.value || null })}
-                >
-                  <option value="">All</option>
-                  {values.map((f) => (
-                    <option key={f.value} value={f.value}>
-                      {facetLabel(name, f)} ({f.count})
-                    </option>
-                  ))}
-                </select>
-              </label>
-            );
-          })}
-          <label>
-            Sort
-            <select
-              value={data.sort}
-              onChange={(e) => onChange({ sort: e.target.value })}
-            >
-              {q && <option value="relevance">Best match</option>}
-              <option value="title">Title A–Z</option>
-              <option value="newest">Newest first</option>
-              <option value="oldest">Oldest first</option>
-            </select>
-          </label>
-          {selected && (
-            <button
-              type="button"
-              className="clear-filters"
-              onClick={() =>
-                onChange(Object.fromEntries(FILTERS.map(([name]) => [name, null])))
-              }
-            >
-              Clear filters
-            </button>
-          )}
-        </div>
-      )}
-      {!compact && (
-        <p className="result-count" role="status">
-          {plural(data.total, "source", "sources")}
-          {q ? ` for “${q}”` : ""}
-          {data.last_page > 1
-            ? ` · showing ${first + 1}–${first + items.length}`
-            : ""}
-        </p>
-      )}
       <div
         ref={resultsRef}
         tabIndex={-1}
@@ -663,10 +614,10 @@ function SourceList({
           <Link to="/browse">Start again</Link>
         </div>
       )}
-      {compact && data.total > items.length && (
+      {compact && (
         <div className="catalogue-pagination">
-          <p>{plural(data.total, "source", "sources")} in the catalogue</p>
-          <Link to="/browse">
+          <p>{plural(allKinds || data.total, "source", "sources")} in the catalogue</p>
+          <Link to={"/browse" + (kind ? "?type=" + encodeURIComponent(kind) : "")}>
             View all <ArrowRight size={16} aria-hidden="true" />
           </Link>
         </div>
@@ -690,6 +641,108 @@ function SourceList({
         </nav>
       )}
     </>
+  );
+  if (compact)
+    return (
+      <>
+        {kinds.current.length > 1 && (
+          <div className="kind-tabs" role="group" aria-label="Show one kind of record">
+            <button type="button" aria-pressed={!kind} onClick={() => setKind("")}>
+              All<span>{allKinds}</span>
+            </button>
+            {kinds.current.map((f) => (
+              <button
+                key={f.value}
+                type="button"
+                aria-pressed={kind === f.value}
+                onClick={() => setKind(kind === f.value ? "" : f.value)}
+              >
+                {typeLabel(f.value) + (f.count > 1 && !typeLabel(f.value).endsWith("s") ? "s" : "")}
+                <span>{f.count}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        {list}
+      </>
+    );
+  return (
+    <div className="browse-grid">
+      <aside
+        id="catalogue-filters"
+        className={"filter-rail" + (railOpen ? " open" : "")}
+        aria-label="Filter the catalogue"
+      >
+        {FILTERS.map(([name, label]) => {
+          const facet = data.facets[name] ?? [];
+          // Years read newest first; every other filter keeps the server's order (largest first).
+          const values = name === "year" ? [...facet].sort((a, b) => b.value.localeCompare(a.value)) : facet;
+          const value = params.get(name) || "";
+          if (values.length < 2 && !value) return null;
+          return (
+            <fieldset key={name} className="filter-group">
+              <legend>{label}</legend>
+              {values.map((f) => (
+                <button
+                  key={f.value}
+                  type="button"
+                  className="filter-option"
+                  aria-pressed={value === f.value}
+                  onClick={() => onChange?.({ [name]: value === f.value ? null : f.value })}
+                >
+                  <span className="box" aria-hidden="true">
+                    {value === f.value ? <Check size={12} /> : null}
+                  </span>
+                  {facetLabel(name, f)}
+                  <span className="count">{f.count}</span>
+                </button>
+              ))}
+            </fieldset>
+          );
+        })}
+        {selected && (
+          <button
+            type="button"
+            className="clear-filters"
+            onClick={() =>
+              onChange?.(Object.fromEntries(FILTERS.map(([name]) => [name, null])))
+            }
+          >
+            Clear filters
+          </button>
+        )}
+      </aside>
+      <section>
+        <div className="results-bar">
+          <p className="result-count" role="status">
+            <b>{plural(data.total, "record", "records")}</b>
+            {q ? ` for “${q}”` : ""}
+            {data.last_page > 1 ? ` · showing ${first + 1}–${first + items.length}` : ""}
+          </p>
+          <div className="results-tools">
+            <button
+              type="button"
+              className="filters-toggle"
+              aria-expanded={railOpen}
+              aria-controls="catalogue-filters"
+              onClick={() => setRailOpen(!railOpen)}
+            >
+              Filters
+            </button>
+            <label>
+              <span className="visually-hidden">Sort</span>
+              <select value={data.sort} onChange={(e) => onChange?.({ sort: e.target.value })}>
+                {q && <option value="relevance">Best match</option>}
+                <option value="title">Title A–Z</option>
+                <option value="newest">Newest first</option>
+                <option value="oldest">Oldest first</option>
+              </select>
+            </label>
+          </div>
+        </div>
+        {list}
+      </section>
+    </div>
   );
 }
 function Browse({ route }: { route: string }) {
@@ -785,63 +838,50 @@ function Reader({ id }: { id: string }) {
           {s.jurisdiction_name || jurisdictionName(s.jurisdiction_id)}
         </Link>
       </nav>
-      <PageTitle label={typeLabel(s.document_type) + " · " + s.citation} title={s.title}>
-        {s.summary || s.citation}
+      <PageTitle
+        label={[typeLabel(s.document_type), s.jurisdiction_name || jurisdictionName(s.jurisdiction_id), s.year]
+          .filter(Boolean)
+          .join(" · ")}
+        title={s.title}
+      >
+        {/* A judgment's citation is often its title: then the heading says it once. */}
+        {s.summary || (s.citation !== s.title ? s.citation : null)}
       </PageTitle>
       <CurrentLaw history={history.data} />
-      <div className="reader-grid">
-        <article className="reader">
-          <div className="reader-bar">
-            <FileText size={18} /> Source text{" "}
-            <span className="badge">
-              {s.has_full_text ? "Open full text" : "Metadata only"}
-            </span>
-          </div>
+      <RecordCards source={s} history={history.data} />
+      <RecordActions source={s} />
+      <div className="reader-grid record-body">
+        <div className="record-main">
           {versions.data && versions.data.items.length ? (
-            <p className="copy-note">
-              A copy of the official text, checked against the official copy. Open Alvary is not its
-              publisher: the{" "}
-              <a href={s.canonical_url} target="_blank" rel="noreferrer">
-                official copy
-              </a>{" "}
-              prevails where the two differ.
-            </p>
-          ) : null}
-          {versions.data ? (
-            versions.data.items.length ? (
-              versions.data.items.map((v) => (
+            <article className="reader">
+              <div className="reader-bar">
+                <FileText size={18} /> Source text <span className="badge green">Open full text</span>
+              </div>
+              <p className="copy-note">
+                A copy of the official text, checked against the official copy. Open Alvary is not its
+                publisher: the{" "}
+                <a href={s.canonical_url} target="_blank" rel="noreferrer">
+                  official copy
+                </a>{" "}
+                prevails where the two differ.
+              </p>
+              {versions.data.items.map((v) => (
                 <section key={v.id}>
                   <h3>{v.id}</h3>
                   <pre className="legal-text">{v.canonical_text}</pre>
                   <p className="hash">SHA-256 {v.content_hash}</p>
                 </section>
-              ))
-            ) : (
-              <div className="empty">
-                <ShieldCheck size={36} aria-hidden="true" />
-                <h2>The text isn’t on this site yet.</h2>
-                <p>
-                  It will be added once its rights and content have been
-                  reviewed. Until then, read it at the official source.
-                </p>
-                <a
-                  className="button primary"
-                  href={s.canonical_url}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Read the official source <ExternalLink size={16} aria-hidden="true" />
-                </a>
-              </div>
-            )
+              ))}
+            </article>
+          ) : versions.data ? (
+            <TextStatus source={s} />
           ) : (
             <Feedback error={versions.error} />
           )}
-        </article>
+          <RecordTimeline source={s} history={history.data} />
+        </div>
         <aside>
-          <SourceRecord source={s} rights={rights.data?.record} alone />
-          <RecordHistory history={history.data} source={s} />
-          <RecordChanges id={s.id} />
+          <SourceRecord source={s} rights={rights.data?.record} alone brief />
         </aside>
       </div>
     </div>

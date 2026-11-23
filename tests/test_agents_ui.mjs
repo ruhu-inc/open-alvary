@@ -169,11 +169,20 @@ describe("web/public/agents/index.html matches web/src/site.tsx and §10 require
 
     const navMatch = html.match(/<nav[^>]*id="primary-navigation"[^>]*>([\s\S]*?)<\/nav>/);
     assert.ok(navMatch, "Missing #primary-navigation in index.html");
-    const actualLinks = [...navMatch[1].matchAll(/<a[^>]*href="([^"]+)"[^>]*>([^<]+)<\/a>/g)].map(
-      ([, href, rawLabel]) => ({ href, label: rawLabel.replace(/&amp;/g, "&").trim() }),
-    );
+    // "Sign in" joins the menu on a phone only (class nav-signin), as it does on the site.
+    const actualLinks = [...navMatch[1].matchAll(/<a([^>]*)href="([^"]+)"[^>]*>([^<]+)<\/a>/g)]
+      .filter(([, attrs]) => !attrs.includes("nav-signin"))
+      .map(([, , href, rawLabel]) => ({ href, label: rawLabel.replace(/&amp;/g, "&").trim() }));
 
     assert.deepEqual(actualLinks, expectedLinks);
+  });
+
+  it("header ends with Sign in and the Law check button, as on the site", () => {
+    assert.match(html, /<a class="nav-signin" href="\/console">Sign in<\/a>/);
+    assert.match(html, /<a class="header-signin" href="\/console">Sign in<\/a>/);
+    assert.match(html, /<a class="header-check" href="\/agents\/" aria-current="page">Law check<\/a>/);
+    assert.match(siteTsx, /className="header-signin" href="\/console"/);
+    assert.match(siteTsx, /className="button primary header-check" href="\/agents\/"/);
   });
 
   it("includes required landmarks, title, skip link, mobile nav aria, noscript, and modern tabs", () => {

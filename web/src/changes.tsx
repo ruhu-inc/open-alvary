@@ -36,10 +36,10 @@ const TYPES: [string, string][] = [
   ["treatment_recorded", "Treatment"],
   ["rights_changed", "Rights"],
 ];
-const LABEL = Object.fromEntries(TYPES.filter(([t]) => t));
+export const LABEL: Record<string, string> = Object.fromEntries(TYPES.filter(([t]) => t));
 
 // The website's own data path, as other pages read it.
-function useSite<T>(path: string) {
+export function useSite<T>(path: string) {
   const [state, set] = useState<{ path: string; data?: T; error?: string }>({ path: "" });
   useEffect(() => {
     const controller = new AbortController();

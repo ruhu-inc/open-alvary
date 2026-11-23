@@ -1725,3 +1725,198 @@ dialog.lc-dialog::backdrop {
     scroll-behavior: auto !important;
   }
 }
+
+/* ---------------------------------------------------------------------------------------------------
+   Redesign approved 2026-11-23 (UX review round 3).
+   Header: "Sign in" and the Law check button at the far right, as on every site page.
+   Empty page: the AI key pill, the title and its text, then the composer and the "Try" examples,
+   together in the middle of the window. The thread view is unchanged.
+   --------------------------------------------------------------------------------------------------- */
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding-left: 22px;
+  border-left: 1px solid var(--line);
+  margin-left: -6px;
+}
+.site-header .header-signin {
+  font-size: 14px;
+  font-weight: 500;
+  color: #3a3a3a;
+  white-space: nowrap;
+}
+.site-header .header-check {
+  display: inline-flex;
+  align-items: center;
+  padding: 11px 18px;
+  border-radius: 4px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.site-header .header-check:hover {
+  background: #333;
+}
+.nav-signin {
+  display: none !important;
+}
+.site-nav a {
+  white-space: nowrap;
+}
+@media (max-width: 1180px) {
+  .site-header {
+    position: relative;
+  }
+  .mobile-toggle {
+    display: inline-flex;
+    background: none;
+    border: none;
+    color: #3a3a3a;
+    order: 3;
+  }
+  .site-nav {
+    display: none;
+  }
+  .site-nav.expanded {
+    display: flex;
+    position: absolute;
+    top: calc(100% - 1px);
+    left: 0;
+    right: 0;
+    z-index: 10;
+    background: #fafafa;
+    padding: 20px 6%;
+    border-bottom: 1px solid var(--line);
+    flex-direction: column;
+    gap: 5px;
+  }
+  .site-nav.expanded .nav-signin {
+    display: inline-flex !important;
+  }
+  .header-actions {
+    order: 2;
+    margin-left: auto;
+    border-left: 0;
+    padding-left: 0;
+  }
+  .site-header .header-signin {
+    display: none;
+  }
+}
+@media (max-width: 480px) {
+  .site-header {
+    gap: 12px;
+  }
+  .brand {
+    font-size: 22px;
+    gap: 8px;
+  }
+  .brand-mark {
+    inline-size: 32px;
+    block-size: 32px;
+  }
+  .site-header .header-check {
+    padding: 9px 12px;
+    font-size: 13.5px;
+  }
+  .mobile-toggle {
+    margin-right: -10px;
+  }
+}
+
+/* The empty page: everything in one centred column, in the middle of the window. The wrappers that
+   hold the thread step aside (display: contents) so their parts can take their places around the
+   composer; once a thread exists the page is laid out as before. */
+.lc-chat:not(.has-thread) {
+  justify-content: center;
+  padding-block: 40px 28px;
+}
+.lc-chat:not(.has-thread) .lc-scroll,
+.lc-chat:not(.has-thread) .lc-col-thread,
+.lc-chat:not(.has-thread) .lc-thread,
+.lc-chat:not(.has-thread) .lc-welcome {
+  display: contents;
+}
+.lc-chat:not(.has-thread) .lc-chat-head,
+.lc-chat:not(.has-thread) .lc-welcome-sub,
+.lc-chat:not(.has-thread) .lc-starter-pills,
+.lc-chat:not(.has-thread) .lc-banner,
+.lc-chat:not(.has-thread) noscript,
+.lc-chat:not(.has-thread) .lc-disclosure {
+  inline-size: min(780px, 100% - 11.2vw);
+  margin-inline: auto;
+}
+.lc-chat:not(.has-thread) .lc-chat-head {
+  order: 1;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 14px;
+}
+.lc-chat:not(.has-thread) .lc-head-actions {
+  order: -1;
+  justify-content: center;
+}
+.lc-chat:not(.has-thread) .lc-chat-title {
+  flex: none;
+}
+.lc-chat:not(.has-thread) .lc-chat-head h1 {
+  font-size: clamp(2.6rem, 5vw, 3.75rem);
+  line-height: 1.04;
+  margin: 0 0 14px;
+}
+.lc-chat:not(.has-thread) .lc-lead {
+  max-width: 600px;
+  margin-inline: auto;
+  font-size: 17px;
+  color: #3a3a3a;
+}
+.lc-chat:not(.has-thread) .lc-welcome-title {
+  display: none;
+}
+.lc-chat:not(.has-thread) .lc-welcome-sub {
+  order: 2;
+  text-align: center;
+  max-width: 600px;
+  margin: 10px auto 0;
+  font-size: 17px;
+  color: #3a3a3a;
+}
+.lc-chat:not(.has-thread) .lc-banner {
+  order: 2;
+}
+.lc-chat:not(.has-thread) .lc-dock {
+  order: 3;
+  padding-block-start: 30px;
+  background: none;
+}
+.lc-chat:not(.has-thread) .lc-dock .lc-col {
+  inline-size: min(780px, 100% - 11.2vw);
+}
+.lc-chat:not(.has-thread) .lc-starter-pills {
+  order: 4;
+  margin-block-start: 6px;
+}
+.lc-chat:not(.has-thread) .lc-disclosure {
+  order: 5;
+  margin-block-start: 22px;
+  text-align: center;
+}
+.lc-chat:not(.has-thread) .lc-disclosure[open] {
+  text-align: left;
+}
+.lc-chat:not(.has-thread) .lc-thread-list:empty {
+  display: none;
+}
+@media (max-width: 800px) {
+  .lc-chat:not(.has-thread) {
+    padding-block: 28px 20px;
+  }
+  .lc-chat:not(.has-thread) .lc-lead,
+  .lc-chat:not(.has-thread) .lc-welcome-sub {
+    font-size: 15.5px;
+  }
+}

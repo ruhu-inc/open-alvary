@@ -30,6 +30,8 @@ export type Source = {
   citation: string;
   document_type: string;
   canonical_url: string;
+  url_kind?: string; // "document" when the link is the official file itself
+  status_evidence?: string | null; // where the legal status was confirmed
   legal_status: string;
   rights_status: string;
   catalogue_note: string | null;
@@ -244,7 +246,19 @@ export function SiteHeader({
             {label}
           </Link>
         ))}
+        {/* On a phone, signing in moves into the menu; the Law check button stays beside it. */}
+        <a className="nav-signin" href="/console">
+          Sign in
+        </a>
       </nav>
+      <div className="header-actions">
+        <a className="header-signin" href="/console">
+          Sign in
+        </a>
+        <a className="button primary header-check" href="/agents/">
+          Law check
+        </a>
+      </div>
     </header>
   );
 }
@@ -303,10 +317,11 @@ export function PageTitle({
 }
 
 // One catalogue search result.
+// One record in a catalogue list: its year, title, summary and kind, its status when one is known, and
+// its official site. The title links to the record; the official site opens the source itself.
 export function SourceRow({
   source: s,
   number,
-  compact = false,
   query,
 }: {
   source: Source;
@@ -314,31 +329,58 @@ export function SourceRow({
   compact?: boolean;
   query?: string; // words to mark in the title
 }) {
+  const summary = s.summary && s.summary !== s.title && s.summary !== s.citation ? s.summary : null;
+  const status = s.legal_status !== "unknown" ? statusLabel(s) : null;
   return (
-    <Link className="source-row" to={"/sources/" + s.id} data-result={query ? number : undefined}>
-      <span className="source-number" aria-hidden="true">
-        {String(number).padStart(2, "0")}
-      </span>
+    <article className="source-row" data-result={query ? number : undefined}>
+      <span className="source-year">{s.year ?? ""}</span>
       <span className="source-info">
+        <h3>
+          <Link to={"/sources/" + s.id}>
+            <Highlight text={s.title} query={query} />
+          </Link>
+        </h3>
+        {summary ? <p>{summary}</p> : null}
         <span className="source-kicker">
-          {jurisdictionName(s.jurisdiction_id)} <span>·</span>{" "}
-          {typeLabel(s.document_type)}
-          {s.year ? <> <span>·</span> {s.year}</> : null}
-          {s.legal_status !== "unknown" && s.legal_status !== "current" ? (
-            <> <span>·</span> {LEGAL_STATUS[s.legal_status] ?? s.legal_status}</>
+          {typeLabel(s.document_type)} <span aria-hidden="true">·</span>{" "}
+          {jurisdictionName(s.jurisdiction_id)}
+          {s.year ? (
+            <span className="source-kicker-year">
+              {" "}
+              <span aria-hidden="true">·</span> {s.year}
+            </span>
+          ) : null}
+          {s.has_full_text ? (
+            <>
+              {" "}
+              <span aria-hidden="true">·</span> Full text
+            </>
           ) : null}
         </span>
-        <h3>
-          <Highlight text={s.title} query={query} />
-        </h3>
-        {!compact && <p>{s.summary || s.citation}</p>}
       </span>
-      <span className={"badge " + (s.has_full_text ? "green" : "")}>
-        {s.has_full_text ? "Full text" : "Details and official link"}
+      <span className="source-side">
+        {status ? <span className={"status-chip " + s.legal_status}>{status}</span> : null}
+        <a className="source-host" href={s.canonical_url} target="_blank" rel="noreferrer">
+          {officialHost(s.canonical_url)} <ArrowUpRight size={14} aria-hidden="true" />
+          <span className="visually-hidden"> (official source of {s.title}, opens in a new tab)</span>
+        </a>
       </span>
-      <ArrowUpRight size={20} aria-hidden="true" />
-    </Link>
+    </article>
   );
+}
+
+// The official site's name for a link: the domain of a government site, or "Official document"
+// where the file sits on a storage service whose address means nothing to a reader.
+export function officialHost(url: string): string {
+  let host = "";
+  try {
+    host = new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return "Official source";
+  }
+  return /amazonaws\.com$|storage\.googleapis\.com$|blob\.core\.windows\.net$/.test(host)
+    ? "Official document"
+    : host;
 }
 
 // The source's record and what readers may do with it, beside its text.
@@ -346,10 +388,12 @@ export function SourceRecord({
   source: s,
   rights,
   alone,
+  brief,
 }: {
   source: Source;
   rights?: RightsRecord;
   alone?: boolean; // no document view beside it, whose status panel carries a judgment's note
+  brief?: boolean; // the record page shows status, text and its rights note in their own sections
 }) {
   const cleared = s.has_full_text;
   return (
@@ -381,12 +425,16 @@ export function SourceRecord({
           </dd>
           <dt>Citation</dt>
           <dd>{s.citation}</dd>
-          <dt>Status</dt>
-          <dd>{statusLabel(s)}</dd>
-          <dt>Text on this site</dt>
-          <dd>
-            {cleared ? "Full text available" : "Not yet: use the official source"}
-          </dd>
+          {brief ? null : (
+            <>
+              <dt>Status</dt>
+              <dd>{statusLabel(s)}</dd>
+              <dt>Text on this site</dt>
+              <dd>
+                {cleared ? "Full text available" : "Not yet: use the official source"}
+              </dd>
+            </>
+          )}
           <dt>Reuse</dt>
           <dd>{RIGHTS_STATUS[s.rights_status] ?? s.rights_status}</dd>
           {rights?.licence ? (
@@ -413,14 +461,14 @@ export function SourceRecord({
           <p className="record-note">{JUDGMENT_NOTE}</p>
         ) : null}
       </div>
-      <div className="notice">
+      {brief ? null : <div className="notice">
         {cleared
           ? "This text may be reused on the terms above. Always cite the official source."
           : "This text has not been cleared for republishing yet. Being published officially does not, by itself, give permission to copy it."}
         <Link to="/governance">
           How we decide <ArrowRight size={15} aria-hidden="true" />
         </Link>
-      </div>
+      </div>}
     </>
   );
 }
