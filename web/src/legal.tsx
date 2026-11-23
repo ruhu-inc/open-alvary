@@ -300,7 +300,7 @@ export function Privacy() {
           about privacy at <Email address={PRIVACY_EMAIL} />, or by post to {OPERATOR}, {ADDRESS}.
         </p>
       </section>
-      <section>
+      <section id="reading-the-website">
         <h2>Reading the website</h2>
         <p>
           Your browser requests pages, fonts and data from this site; search terms go to our server to find

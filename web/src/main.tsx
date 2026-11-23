@@ -45,6 +45,7 @@ import {
   type Source,
 } from "./site";
 import { RootBoundary } from "./safe";
+import { LiveStatsBlock } from "./livestats";
 
 // The documentation loads only when a /docs page is opened.
 const DocsSite = React.lazy(() => import("./docs/DocsSite"));
@@ -301,7 +302,6 @@ function App() {
   );
 }
 function Home() {
-  const { data, error } = useData<Coverage>("/coverage");
   const [q, setQ] = useState("");
   return (
     <>
@@ -388,42 +388,7 @@ function Home() {
           </div>
         </div>
       </section>
-      <section className="stats-strip">
-        <div>
-          <strong>
-            {data ? Object.keys(data.jurisdictions).length : "—"}
-            <span>
-              {data && Object.keys(data.jurisdictions).length === 1
-                ? "jurisdiction"
-                : "jurisdictions"}
-            </span>
-          </strong>
-          <small>Added as their sources are verified</small>
-        </div>
-        <div>
-          <strong>
-            {data?.catalogued_sources ?? "—"}
-            <span>sources catalogued</span>
-          </strong>
-          <small>Official-source references</small>
-        </div>
-        <div>
-          <strong>
-            {data?.open_full_text_sources ?? "—"}
-            <span>cleared for full text</span>
-          </strong>
-          <small>Publication follows verification</small>
-        </div>
-        <div className="stat-note">
-          <ShieldCheck size={22} />
-          <p>
-            Publicly accessible doesn’t
-            <br />
-            automatically mean redistributable.
-          </p>
-        </div>
-      </section>
-      {error && <Feedback error={error} />}
+      <LiveStatsBlock />
       <section className="section">
         <div className="section-heading">
           <div>

@@ -54,6 +54,13 @@ def test_the_search_path_bundle_covers_what_a_login_can_run_and_changes_only_the
     folder = ROOT / "rights/sql/v0050"
     manifest = json.loads((folder / "manifest.json").read_text())
     pinned = {entry["signature"] for entry in manifest["functions"]}
+    # A function a login can run that came after the bundle is created with the same path from the start.
+    for later in ("v0058",):
+        added = json.loads((ROOT / "rights/sql" / later / "manifest.json").read_text())
+        ddl = (ROOT / "rights/sql" / later / added["ddl"]).read_text()
+        for entry in added["new_functions"]:
+            assert "SECURITY DEFINER SET search_path TO 'pg_catalog', 'pg_temp'" in ddl, entry["signature"]
+            pinned.add(entry["signature"])
     runs_as_owner = {
         function.split(".", 1)[1]
         for login in logins.LOGINS.values()
@@ -88,8 +95,9 @@ def test_the_catalogues_login_reads_what_readers_may_see_and_nothing_of_anyones_
         logins.READ
     }
     assert catalogue.tables == logins.READERS_SEE and catalogue.vectors == logins.READ
-    # What an anonymous request writes, and nothing that answers about a credential or an account.
-    assert catalogue.functions == logins.ANONYMOUS_WRITES
+    # What an anonymous request writes, the public totals over everyone, and nothing that answers about a
+    # credential or an account.
+    assert catalogue.functions == logins.ANONYMOUS_WRITES + logins.PUBLIC_TOTALS
     for function in ("check_credential(jsonb)", "record_usage(jsonb)", "accounts_access(text)"):
         assert f"policy.{function}" not in catalogue.functions
 

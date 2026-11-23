@@ -1,0 +1,15 @@
+{
+  "vocabulary": "policy-vocabulary-1",
+  "literals": {},
+  "vocabulary_file": "vocabularies/v1.json",
+  "vocabulary_hash": "cac594e752fdb6c2cb6adfc63930ceea8a8fe8be3afe9570552d5c2f486d8c80",
+  "revision": "0058",
+  "functions": [],
+  "ddl": "public_usage.sql",
+  "new_functions": [
+    {
+      "signature": "public_usage_totals()",
+      "current_definition_hash": "6ec6a592caa1e8f7f655ab0a083d3115a75cf58f417c945d60ab3278d29723f8"
+    }
+  ]
+}

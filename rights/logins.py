@@ -160,13 +160,17 @@ ANONYMOUS_WRITES = (
     "policy.traffic_salt(bytea)",
 )
 
+# What the website shows of how it is used: totals over everyone for the last 30 days, a total under 10 withheld
+# (migration 0058). It reads, writes nothing, and answers about no visitor, organisation or credential.
+PUBLIC_TOTALS = ("policy.public_usage_totals()",)
+
 # The public service's catalogue: the website's data path, the downloads, the sitemaps and the old anonymous API,
 # and what the keyed API and MCP read of the catalogue once their credential has passed. A flaw in any of them
 # reaches no account: this login holds no table of the accounts schema, and no function that answers about one.
 CATALOGUE = Login(
     "open_alvary_catalogue",
     READERS_SEE,
-    ANONYMOUS_WRITES,
+    ANONYMOUS_WRITES + PUBLIC_TOTALS,
     vectors=READ,
     never_reads=(KEY_HASH, SESSION_TOKEN, SEALED_SECRET, PROVIDER_SUBJECT),
 )
@@ -217,6 +221,7 @@ SERVICE = Login(
         "policy.check_credential(jsonb)",
         "policy.record_usage(jsonb)",
         *ANONYMOUS_WRITES,
+        *PUBLIC_TOTALS,
     ),
     vectors=READ,
     never_reads=(KEY_HASH,),

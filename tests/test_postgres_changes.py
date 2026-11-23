@@ -16,6 +16,7 @@ from test_postgres import pg_engine as pg_engine
 from api.main import create_app
 from api.store import Store, seed
 from changes import admin
+from changes.feed import Feed
 from changes.record import namespace, sweep
 from rights.database import PolicyNamespace, provision_roles
 from schema.models import Amendment
@@ -99,6 +100,22 @@ def test_each_kind_of_change_is_one_event_and_one_save_shares_a_revision(feed, c
     assert restored["change_reason"] == "restored"
     assert {e["event_type"] for e in last} == {"catalogue_added", "rights_changed"}
     assert sweep_count(store) == 0
+
+
+def test_the_home_pages_change_count_is_what_the_feed_shows_from_the_last_days(feed, cleared):
+    """api.public_stats counts the events the public feed would show, not the rows the log holds."""
+    store, client = feed
+    store.save(cleared)
+    work = cleared.sources[0].id
+    edit(store, lambda c: setattr(next(r for r in c.rights if r.source_id == work), "metadata_public", False))
+    shown = client.get("/changes").json()["events"]
+    held = events(store)
+    assert len(shown) < len(held)  # the withdrawn record's earlier events are no longer shown
+    with store.engine.begin() as conn:
+        count, newest, whole = Feed(conn, None).shown_since(30)
+        assert (count, whole) == (len(shown), True)
+        assert newest == max(e["committed_at"] for e in held)
+        assert Feed(conn, None).shown_since(0)[:2] == (0, None)
 
 
 def sweep_count(store):

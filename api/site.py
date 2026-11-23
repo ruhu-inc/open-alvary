@@ -35,6 +35,7 @@ from api.admission import AdmissionConfig, AdmissionMiddleware, AdmissionStore
 from api.catalogue import FACETS, SORTS, InvalidSearch, LegacyCatalogue, SourceUnavailable
 from api.emission import CheckedFileResponse, CheckedResponse
 from api.project import project_info
+from api.public_stats import PublicStats
 from api.release_adapter import BULK_ELSEWHERE, BulkRequired, LegacyReleases, ReleaseMissing, ReleaseWithdrawn
 from api.repositories import EDGE_ORDER, LegacyRepository, PublicUnavailable, ResultTooLarge
 from api.store import Store, check_legacy_authority
@@ -236,6 +237,19 @@ def create_site_app(
         _only(request)
         with catalogue() as service:
             return service.coverage()
+
+    stats = PublicStats(
+        store.engine,
+        catalogue,
+        change_session if store.engine.dialect.name == "postgresql" else None,
+        PolicyNamespace(_policy_schema()),
+    )
+
+    @app.get("/stats")
+    def public_stats(request: Request):
+        """The home page's live totals (api.public_stats): worked out at most every 30 seconds."""
+        _only(request)
+        return stats.current()
 
     def _browse(request: Request, query: str | None):
         page = _page(request.query_params.get("page"))

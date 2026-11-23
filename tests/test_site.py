@@ -7,6 +7,7 @@ import re
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from urllib.parse import quote, urlsplit
 from xml.etree import ElementTree
@@ -17,9 +18,12 @@ from fastapi.testclient import TestClient
 
 from api import site
 from api.admission import GLOBAL_KEY, AdmissionMiddleware, pseudonym
+from api.catalogue import LegacyCatalogue
+from api.public_stats import PublicStats
 from api.repositories import LegacyRepository
 from api.service import SECURITY_HEADERS, create_service
 from exports.release import write_release
+from rights.database import PolicyNamespace
 from rights.policy import decide
 from schema.models import RightsStatus
 from tests.test_admission import SECRET, FakeStore, config
@@ -38,6 +42,7 @@ def test_every_page_of_the_website_has_its_route(client):
     for route in [
         "/site/v1/project",
         "/site/v1/coverage",
+        "/site/v1/stats",
         "/site/v1/sources",
         f"/site/v1/sources/{SOURCE}",
         f"/site/v1/sources/{SOURCE}/versions",
@@ -49,6 +54,33 @@ def test_every_page_of_the_website_has_its_route(client):
         assert response.status_code == 200, route
         assert response.headers["cache-control"] == "no-store", route
     assert client.get("/site/v1/search?q=freedom").json()["total"] == 1
+
+
+def test_the_home_pages_totals_come_from_the_catalogue_and_are_held_thirty_seconds(catalogue, store):
+    store.save(catalogue)
+    asked, now = [], [0.0]
+
+    @contextmanager
+    def counted():
+        asked.append(1)
+        with store.engine.begin() as connection:
+            yield LegacyCatalogue(LegacyRepository(connection))
+
+    stats = PublicStats(store.engine, counted, None, PolicyNamespace(), clock=lambda: now[0])
+    first = stats.current()
+    assert first["usage"] is None  # no usage totals in SQLite
+    shown = first["catalogue"]
+    assert (
+        shown["official_sources"] == 5
+        and shown["verified_texts"] == 0
+        and shown["rights_basis_share"] is None
+    )
+    assert shown["jurisdictions"] == [{"id": "ng", "name": "Nigeria", "count": 5}]
+    assert shown["kinds"] == [{"value": "act", "count": 4}, {"value": "constitution", "count": 1}]
+    now[0] = 29.9
+    assert stats.current() is first and len(asked) == 1
+    now[0] = 30.0
+    assert stats.current() is not first and len(asked) == 2
 
 
 def test_fixed_pages_of_twenty_up_to_page_25(client):

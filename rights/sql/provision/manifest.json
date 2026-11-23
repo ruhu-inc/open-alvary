@@ -320,5 +320,13 @@
       "policy.record_traffic",
       "policy.traffic_salt"
     ]
+  },
+  {
+    "revision": "0058",
+    "anchor": "policy.public_usage_totals",
+    "file": "v0058.sql",
+    "requires": [
+      "policy.public_usage_totals"
+    ]
   }
 ]

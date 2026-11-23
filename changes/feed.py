@@ -487,6 +487,30 @@ class Feed:
                     break
         return found
 
+    def shown_since(self, days: int) -> tuple[int, datetime | None, bool]:
+        """How many events the public log shows from the last ``days`` days, when the newest of them was
+        committed, and whether the count is whole: it looks at most at SCAN_BUDGET events, as recent() does.
+        For the home page's totals (api.public_stats); what it counts is exactly what the feeds would show."""
+        if self.conn.scalar(text("SELECT to_regclass(:t)"), {"t": self.t["change_event"]}) is None:
+            return 0, None, True
+        rows = (
+            self.conn.execute(
+                text(
+                    f"SELECT * FROM {self.t['change_event']} e WHERE e.committed_at > :since"
+                    " ORDER BY e.publication_revision DESC, e.event_id DESC, e.event_revision DESC LIMIT :budget"
+                ),
+                {"since": datetime.now(UTC) - timedelta(days=days), "budget": SCAN_BUDGET},
+            )
+            .mappings()
+            .all()
+        )
+        visible, shown, newest = _Visibility(self.conn), 0, None
+        for row in rows:
+            if self.project(dict(row), visible) is not None:
+                shown += 1
+                newest = row["committed_at"] if newest is None else max(newest, row["committed_at"])
+        return shown, newest, len(rows) < SCAN_BUDGET
+
     def told_of(self, work_ids) -> dict[str, dict[str, list[str]]]:
         """What the log still serves that concerns each of these records, its words and its links apart:
         every event about it, and every event on another record that names it (legal_effect, treatment), as
