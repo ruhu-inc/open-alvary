@@ -5,6 +5,7 @@ current-policy checks and admission limits; no tool can reach private staging, u
 or account data. Responses are single JSON bodies (no server-initiated streams).
 """
 
+import dataclasses
 import json
 import os
 import re
@@ -17,14 +18,17 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
 
 from api import text_index
+from api.catalogue import NO_WORDS
 from api.reach import EVERYWHERE, OutsidePlanLimited, Reach
 from api.repositories import EDGE_ORDER, ResultTooLarge
+from api.search import normalize_citation
+from api.search import words as search_words
 from changes.feed import Feed, FeedError, Filters, Withdrawals
 from changes.routes import tokens
 from retrieval.check import Checker
 from retrieval.pack import Request as EvidenceRequest
 from retrieval.pack import Retriever
-from schema.public import CheckRequest
+from schema.public import CheckRequest, SearchPage
 
 PROTOCOL_VERSIONS = ("2025-06-18", "2025-03-26")
 # Tool answers stay inside the MCP payload budget (BUD-01: 64 KiB), never shortened.
@@ -510,6 +514,67 @@ TOOLS = [
         "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
         "annotations": {"readOnlyHint": True, "openWorldHint": False},
     },
+    {
+        "name": "check_claim",
+        "title": "Check a legal claim and issue a signed receipt",
+        "description": "Preview (may change): deterministically checks whether quoted words appear in a named "
+        "part of a text Open Alvary publishes and what Open Alvary's record lists about its status on a date "
+        "(and whether it is recorded as binding in a jurisdiction), returning a publisher-signed oa-receipt-1 "
+        "receipt beside the claim. Does not give legal advice or judge whether a section supports a paraphrase.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "citation": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 300,
+                    "description": "A citation such as 'Freedom of Information Act 2011, s. 1(1)'. One of "
+                    "citation or anchor_id is required.",
+                },
+                "anchor_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 160,
+                    "description": "The part's anchor_id when already held. One of citation or anchor_id is "
+                    "required.",
+                },
+                "quote": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000,
+                    "description": "Optional exact words the claim says the law uses; at least 40 characters "
+                    "after normalisation unless the quote is the whole of the part's words.",
+                },
+                "as_of": {
+                    "type": "string",
+                    "format": "date",
+                    "description": "Optional assessment date YYYY-MM-DD, not after today in UTC. Left out, "
+                    "checks status today.",
+                },
+                "jurisdiction": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 40,
+                    "description": "Optional jurisdiction such as ng; asks whether the record is recorded as "
+                    "binding there.",
+                },
+                "language": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 35,
+                    "description": "Optional language such as en.",
+                },
+                "reading": {
+                    "type": "string",
+                    "maxLength": 600,
+                    "description": "Optional sentence this check is meant to support. Echoed beside the "
+                    "receipt; not checked, not signed, not in the claim digest, never logged.",
+                },
+            },
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
+    },
 ]
 
 
@@ -592,37 +657,107 @@ WITHDRAWN = {
 }
 
 
+class _VerifyError(Exception):
+    def __init__(self, code: str, message: str, extra: dict | None = None):
+        super().__init__(message)
+        self.code = code
+        self.message = message
+        self.extra = extra
+
+
 def _tool_result(payload, is_error=False):
     text = payload if isinstance(payload, str) else json.dumps(payload, ensure_ascii=False)
     return {"content": [{"type": "text", "text": text}], "isError": is_error}
 
 
-def _tool_error(code: str, message: str, retry_after: int | None = None) -> dict:
+def _tool_error(
+    code: str, message: str, retry_after: int | None = None, extra: dict | None = None
+) -> dict:
     """A tool that ran and failed: the message for the model as text, as before, and the same machine-
     readable code as the REST refusal's in structuredContent (MCP 2025-06-18), which clients that don't
     know it ignore."""
     structured: dict = {"code": code}
     if retry_after is not None:
         structured["retry_after_seconds"] = retry_after
+    if extra:
+        structured.update(extra)
     return _tool_result(message, is_error=True) | {"structuredContent": structured}
+
+
+def _filter_citation_view(view, allowed_source_ids: frozenset[str]):
+    kept_matches = tuple(m for m in view.matches if m.id in allowed_source_ids)
+    provision = view.provision
+    if provision is not None:
+        kept_candidates = tuple(c for c in provision.candidates if c.source_id in allowed_source_ids)
+        nearest = (
+            provision.nearest
+            if provision.nearest is not None and provision.nearest.source_id in allowed_source_ids
+            else None
+        )
+        if not kept_matches:
+            provision = None
+        elif len(kept_candidates) == 1:
+            provision = provision.model_copy(
+                update={
+                    "status": "resolved",
+                    "reason": None,
+                    "candidates": kept_candidates,
+                    "nearest": None,
+                }
+            )
+        elif len(kept_candidates) > 1:
+            reason = (
+                "several_works"
+                if len({c.source_id for c in kept_candidates}) > 1
+                else "several_texts"
+                if len({c.version_id for c in kept_candidates}) > 1
+                else "repeated_number"
+            )
+            provision = provision.model_copy(
+                update={
+                    "status": "ambiguous",
+                    "reason": reason,
+                    "candidates": kept_candidates,
+                    "nearest": None,
+                }
+            )
+        else:
+            reason = provision.reason if provision.status == "unresolved" else "not_found"
+            provision = provision.model_copy(
+                update={
+                    "status": "unresolved",
+                    "reason": reason,
+                    "candidates": (),
+                    "nearest": nearest,
+                }
+            )
+    status = "resolved" if len(kept_matches) == 1 else "ambiguous" if kept_matches else "unresolved"
+    return view.model_copy(update={"status": status, "matches": kept_matches, "provision": provision})
 
 
 def create_router(
     catalogue_factory: Callable,
     unavailable: tuple[type[Exception], ...],
     reach: Callable[[Request], Reach] = lambda request: EVERYWHERE,
+    signer: Callable[[], object] | None = None,
 ) -> APIRouter:
     """``reach`` gives the organisation's plan (api.reach): its countries at the plan's limits, every
     other jurisdiction at the Starter rate."""
     router = APIRouter()
 
-    def call_tool(name, arguments, plan: Reach, keyed: bool = False):
+    def call_tool(
+        name,
+        arguments,
+        plan: Reach,
+        keyed: bool = False,
+        allowed_source_ids: frozenset[str] | None = None,
+    ):
         """``keyed``: the credential gate admitted a key or token, so the change tools, the check and the
         record reads tell what a keyed caller is told of withdrawals (changes.feed.Withdrawals): a record
         read that finds nothing public answers ``withdrawn`` where the record or the part's text was
         public and its withdrawal may be told, as REST's reads do."""
         try:
-            return read_tool(name, arguments, plan, keyed)
+            return read_tool(name, arguments, plan, keyed, allowed_source_ids)
         except LookupError:
             if keyed and isinstance(arguments, dict):
                 with catalogue_factory() as service:
@@ -635,7 +770,13 @@ def create_router(
                                 raise ToldWithdrawn(argument) from None
             raise
 
-    def read_tool(name, arguments, plan: Reach, keyed: bool = False):
+    def read_tool(
+        name,
+        arguments,
+        plan: Reach,
+        keyed: bool = False,
+        allowed_source_ids: frozenset[str] | None = None,
+    ):
         if not isinstance(arguments, dict):
             return None
         with catalogue_factory() as service:
@@ -660,6 +801,26 @@ def create_router(
                     plan.admit(jurisdiction)
                 else:
                     jurisdiction = plan.within(j.id for j in service.jurisdictions())
+                if allowed_source_ids is not None:
+                    if not normalize_citation(query):
+                        return None
+                    if not search_words(query):
+                        return SearchPage(total=0, items=(), notices=(NO_WORDS,)).model_dump(mode="json")
+                    if not allowed_source_ids:
+                        return SearchPage(total=0, items=(), notices=()).model_dump(mode="json")
+                    by_text, notices = service._by_text(query, jurisdiction)
+                    by_text = by_text & allowed_source_ids
+                    total, pairs = service.repository.search_page(
+                        query,
+                        by_text,
+                        jurisdiction=jurisdiction,
+                        limit=limit,
+                        offset=0,
+                        access_where=service.repository._sources.c.id.in_(sorted(allowed_source_ids)),
+                    )
+                    return SearchPage(total=total, items=service._views(pairs), notices=notices).model_dump(
+                        mode="json"
+                    )
                 return service.search(query, jurisdiction=jurisdiction, limit=limit, offset=0).model_dump(
                     mode="json"
                 )
@@ -709,6 +870,8 @@ def create_router(
                 if not isinstance(anchor_id, str) or not 1 <= len(anchor_id) <= 160:
                     return None
                 view = service.anchor(anchor_id)
+                if allowed_source_ids is not None and view.source_id not in allowed_source_ids:
+                    raise LookupError("Source not available")
                 plan.admit(service.source(view.source_id).jurisdiction_id)
                 payload = view.model_dump(mode="json")
                 if len(json.dumps(payload, ensure_ascii=False).encode()) > MAX_TOOL_BYTES:
@@ -771,6 +934,8 @@ def create_router(
                 ):
                     return None
                 view = service.citations(citation, as_of=as_of, language=language)
+                if allowed_source_ids is not None:
+                    view = _filter_citation_view(view, allowed_source_ids)
                 plan.admit(*(m.jurisdiction_id for m in view.matches))
                 return _bounded(view.model_dump(mode="json"))
             if name == "retrieve_evidence" and {"query"} <= set(arguments) <= {
@@ -821,9 +986,46 @@ def create_router(
                 ):
                     return None
                 widened = applicable(jurisdictions[0], as_of, source_id) if "scope" in arguments else None
-                filters = text_index.Filters(
-                    jurisdictions=jurisdictions, language=language, as_of=as_of, source_id=source_id
-                )
+                if allowed_source_ids is not None:
+                    effective_allowed = (
+                        {source_id} & allowed_source_ids
+                        if source_id is not None
+                        else set(allowed_source_ids)
+                    )
+                    if effective_allowed:
+                        public_allowed = service._public(effective_allowed)
+                        if widened is not None:
+                            allowed_j = set(widened.jurisdictions)
+                            allowed_w = set(widened.admitted)
+                            effective_allowed = {
+                                sid
+                                for sid, (src, _) in public_allowed.items()
+                                if src.jurisdiction_id in allowed_j or sid in allowed_w
+                            }
+                        elif jurisdictions is not None:
+                            allowed_j = set(jurisdictions)
+                            effective_allowed = {
+                                sid
+                                for sid, (src, _) in public_allowed.items()
+                                if src.jurisdiction_id in allowed_j
+                            }
+                        else:
+                            effective_allowed = set(public_allowed)
+                    filters = text_index.Filters(
+                        jurisdictions=(),
+                        admitted=tuple(sorted(effective_allowed)),
+                        language=language,
+                        as_of=as_of,
+                        source_id=source_id if source_id in effective_allowed else None,
+                    )
+                    if widened is not None:
+                        widened = dataclasses.replace(
+                            widened, within=None, admitted=tuple(sorted(effective_allowed))
+                        )
+                else:
+                    filters = text_index.Filters(
+                        jurisdictions=jurisdictions, language=language, as_of=as_of, source_id=source_id
+                    )
                 pack = Retriever(service).retrieve(
                     EvidenceRequest(
                         query=query,
@@ -834,6 +1036,38 @@ def create_router(
                     )
                 )
                 return _bounded(pack.model_dump(mode="json"))
+            if name == "check_claim" and set(arguments) <= {
+                "citation",
+                "anchor_id",
+                "quote",
+                "as_of",
+                "jurisdiction",
+                "language",
+                "reading",
+            }:
+                from api.receipts import load_signer_from_env
+                from retrieval.verify import VerifyToolError, verify_claim
+
+                active_signer = signer() if signer is not None else load_signer_from_env()
+                try:
+                    result = verify_claim(
+                        service,
+                        arguments,
+                        signer=active_signer,
+                        allowed_source_ids=allowed_source_ids,
+                    )
+                except VerifyToolError as error:
+                    msg = (
+                        error.message
+                        if error.message.startswith(f"{error.code}:")
+                        else f"{error.code}: {error.message}"
+                    )
+                    raise _VerifyError(error.code, msg, error.extra) from None
+                receipt = result.get("receipt") if isinstance(result, dict) else None
+                record = receipt.get("record") if isinstance(receipt, dict) else None
+                if isinstance(record, dict) and isinstance(record.get("jurisdiction_id"), str):
+                    plan.admit(record["jurisdiction_id"])
+                return _bounded(result)
             if name == "check_currentness" and set(arguments) == {"items"}:
                 try:
                     request = CheckRequest.model_validate(arguments)
@@ -888,6 +1122,30 @@ def create_router(
         if method == "tools/call":
             if not isinstance(params, dict) or not isinstance(params.get("name"), str):
                 return _error(id_, -32602, "Invalid params")
+            access = getattr(request.state, "access", None)
+            tier = (access or {}).get("tier") or {}
+            if getattr(request.state, "law_check_internal", False) and tier.get("id") != "law-check":
+                return JSONResponse(
+                    status_code=403,
+                    content={
+                        "jsonrpc": "2.0",
+                        "id": id_,
+                        "error": {
+                            "code": 10002,
+                            "message": "Law check plan required.",
+                            "data": {"code": "plan_mismatch"},
+                        },
+                    },
+                    headers={"Cache-Control": "no-store"},
+                )
+            allowance = tier.get("allowance") or {}
+            keyed = access is not None and allowance.get("withdrawals") != "not_told"
+            raw_source_ids = allowance.get("source_ids")
+            allowed_source_ids = (
+                frozenset(raw_source_ids)
+                if "source_ids" in allowance and raw_source_ids is not None
+                else None
+            )
             try:
                 # Database work runs in a worker thread, never on the event loop.
                 payload = await run_in_threadpool(
@@ -895,8 +1153,11 @@ def create_router(
                     params["name"],
                     params.get("arguments", {}),
                     reach(request),
-                    getattr(request.state, "access", None) is not None,
+                    keyed,
+                    allowed_source_ids,
                 )
+            except _VerifyError as refused:
+                return _result(id_, _tool_error(refused.code, refused.message, extra=refused.extra))
             except TooLarge as refused:
                 return _result(id_, _tool_error("result_too_large", str(refused)))
             except unavailable:

@@ -128,6 +128,30 @@ resource "google_compute_security_policy" "edge" {
     }
   }
 
+  # Law check's public MCP endpoint (LC-3): 300 requests a minute per address; the plan's own
+  # ceilings bound everyone together.
+  rule {
+    priority    = 1200
+    action      = "throttle"
+    description = "Law check MCP: 300 requests a minute per address"
+
+    match {
+      expr {
+        expression = "request.path.startsWith('/agents/mcp')"
+      }
+    }
+
+    rate_limit_options {
+      conform_action = "allow"
+      exceed_action  = "deny(429)"
+      enforce_on_key = "IP"
+      rate_limit_threshold {
+        count        = 300
+        interval_sec = 60
+      }
+    }
+  }
+
   # Pages, the sitemap, the console, the health check: one script must not fill the service's few
   # instances and shut real readers out. High, because a mobile network can put many people on one
   # address.

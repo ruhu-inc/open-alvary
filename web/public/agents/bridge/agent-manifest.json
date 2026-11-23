@@ -1,0 +1,10 @@
+{
+  "networks": [
+    {
+      "name": "law_desk"
+    }
+  ],
+  "actions": {
+    "version": 1
+  }
+}

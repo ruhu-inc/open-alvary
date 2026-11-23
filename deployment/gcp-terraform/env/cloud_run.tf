@@ -28,6 +28,9 @@ locals {
       ALVARY_CONSOLE_CLIENT_ID = var.console_client_id
       ALVARY_CONSOLE_BASE_URL  = "https://${var.public_domain}"
     } : {},
+    contains(var.optional_secrets, "agents-admission-config") ? {
+      ALVARY_AGENTS_ADMISSION_CONFIG = "/secrets/agents-admission/config.json"
+    } : {},
   )
 
   # Environment variable → Secret Manager secret.
@@ -43,20 +46,31 @@ locals {
       ALVARY_CONSOLE_CLIENT_SECRET = "console-client-secret"
       RESEND_API_KEY               = "resend-api-key"
     } : {},
-    { for name in var.optional_secrets : local.optional_secret_env[name] => name },
+    {
+      for name in var.optional_secrets : local.optional_secret_env[name] => name
+      if contains(keys(local.optional_secret_env), name)
+    },
   )
   optional_secret_env = {
     "resend-webhook-secret"        = "RESEND_WEBHOOK_SECRET"
     "auth0-deletion-client-id"     = "ALVARY_AUTH0_DELETION_CLIENT_ID"
     "auth0-deletion-client-secret" = "ALVARY_AUTH0_DELETION_CLIENT_SECRET"
+    "law-check-key"                = "ALVARY_LAW_CHECK_KEY"
+    "receipt-signing-key"          = "ALVARY_RECEIPT_SIGNING_KEY"
+    "receipt-keys"                 = "ALVARY_RECEIPT_KEYS_JSON"
   }
 
   # The admission configurations are read as files: one secret volume each (Cloud Run mounts one
   # secret per folder), at the paths the settings above name.
-  public_secret_files = {
-    admission      = "admission-config"
-    site-admission = "site-admission-config"
-  }
+  public_secret_files = merge(
+    {
+      admission      = "admission-config"
+      site-admission = "site-admission-config"
+    },
+    contains(var.optional_secrets, "agents-admission-config") ? {
+      agents-admission = "agents-admission-config"
+    } : {},
+  )
 
   # The service's own database URLs: its login, and once database_logins_in_use names the catalogue, a
   # login of the catalogue's own for every route that serves it (api.service), which reaches no account.

@@ -5,7 +5,7 @@
 import React from "react";
 import { Link, PageTitle } from "./site";
 
-export const LEGAL_VERSION = "2026-11-03";
+export const LEGAL_VERSION = "2026-11-22";
 // Approved by the owner on 2026-10-16 (terms, acceptable use, privacy, and the security page's
 // disclosure terms); version 2026-10-18 (data a day in the terms, no request logs for the API and MCP
 // in the privacy notice) approved on 2026-10-18; version 2026-10-21 (no query strings in website request
@@ -16,8 +16,9 @@ export const LEGAL_VERSION = "2026-11-03";
 // each checked against the official copy, link to it, and the official copy prevails; the owner's own
 // words) approved on 2026-10-27; version 2026-11-02 (the website's daily totals in the privacy notice and
 // the acceptable use policy) approved on 2026-11-02; version 2026-11-03 (the estimate of different visitors
-// in the privacy notice) approved on 2026-11-02. A new version starts as a draft again: set this to false
-// until it is approved.
+// in the privacy notice) approved on 2026-11-02; version 2026-11-22 (Law check receipts in the terms,
+// Law check first-party service in the acceptable use policy, and Law check browser/check privacy in the
+// privacy notice, LC-10). A new version starts as a draft again: set this to false until it is approved.
 const APPROVED = true;
 const TO_CONFIRM: string[] = [];
 const OPERATOR = "Ruhu, Inc.";
@@ -133,6 +134,14 @@ export function Terms() {
           may not reflect the latest amendment. The official source prevails; check it before relying on any
           text.
         </p>
+        <p>
+          <b>Law check receipts.</b> A Law check receipt is Open Alvary's signed record of one check: which
+          words were looked for in a named section of a text Open Alvary publishes, and what Open Alvary's
+          record listed about that text on the date checked. A receipt is provided as is with no warranty, is
+          not legal advice, and does not certify compliance, validity, or that a law is in force. If you keep
+          or display a receipt and a later re-check finds that no published text is available for it, stop
+          showing the published text carried in that receipt.
+        </p>
       </section>
       <section>
         <h2>8. Acceptable use</h2>
@@ -239,6 +248,16 @@ export function AcceptableUse() {
         </p>
       </section>
       <section>
+        <h2>Law check</h2>
+        <p>
+          Law check (at open.alvary.ai/agents/ and open.alvary.ai/agents/mcp) is Open Alvary's own public
+          service. It offers five read-only tools (catalogue search, citation resolution, passage retrieval,
+          section reading, and quote checking with signed receipts) over Open Alvary's published Law check
+          record list without requiring a developer key, subject to per-visitor and service limits. Do not
+          send developer API keys or Authorization headers to Law check's public endpoint.
+        </p>
+      </section>
+      <section>
         <h2>Keeping copies</h2>
         <p>
           You may keep copies of the records and texts your organisation is entitled to, and index them for
@@ -296,6 +315,17 @@ export function Privacy() {
           a request whose address carries a search, or anything else after a question mark, is left out of
           them. Our pages also ask your browser to tell other sites at most that you came from Open Alvary,
           never which page or search. Please don't put personal or confidential information in searches.
+        </p>
+      </section>
+      <section>
+        <h2>Law check</h2>
+        <p>
+          When you use Law check at open.alvary.ai/agents/, any AI provider key you enter stays in your
+          browser's storage and is sent only to the AI provider you choose; Open Alvary never receives it.
+          Verified receipts are kept only in your browser tab's session storage and are cleared when you close
+          the tab. A quote check sends the citation, quoted words, and any optional reading sentence to Open
+          Alvary solely to answer that check; we do not log or store your questions, claims, quotes, readings,
+          or receipts on our servers.
         </p>
       </section>
       <section>

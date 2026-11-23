@@ -58,6 +58,7 @@ from api.bodylimit import BodyLimit
 from api.catalogue import LegacyCatalogue
 from api.console import ConsoleConfig, Provider, create_console_app
 from api.credentials import CredentialGate, FailedKeys, GateConfig, TokenVerifier
+from api.law_check import LawCheckMCP
 from api.main import create_app
 from api.mcp import create_router as create_mcp_router
 from api.repositories import LegacyRepository, PublicUnavailable
@@ -72,16 +73,41 @@ from rights.bytes import ByteLedger
 from rights.database import PolicyNamespace
 
 PROBES = ("/healthz", "/livez")  # what the platforms' probes ask for, past the edge check
-SECURITY_HEADERS = {
+BASE_SECURITY_HEADERS = {
     "Strict-Transport-Security": "max-age=31536000",
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "strict-origin-when-cross-origin",
     "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
-    "Content-Security-Policy": (
-        "default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; "
-        "connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
-    ),
 }
+DEFAULT_CSP = (
+    "default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; "
+    "connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+)
+AGENTS_CSP = (
+    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+    "font-src 'self'; connect-src 'self' https:; frame-src 'none'; worker-src 'self'; "
+    "object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+)
+AGENTS_BRIDGE_CSP = (
+    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+    "font-src 'self'; connect-src 'self' https:; frame-src 'none'; worker-src 'self'; "
+    "object-src 'none'; base-uri 'self'; form-action 'self'"
+)
+SANDBOX_WORKER_CSP = "default-src 'none'; script-src blob:; connect-src 'none'; worker-src 'none'"
+SECURITY_HEADERS = {
+    **BASE_SECURITY_HEADERS,
+    "Content-Security-Policy": DEFAULT_CSP,
+}
+
+
+def _csp_for_path(path: str) -> str:
+    if path == "/agents/runtime/sandbox-worker.js":
+        return SANDBOX_WORKER_CSP
+    if path == "/agents/bridge" or path.startswith("/agents/bridge/"):
+        return AGENTS_BRIDGE_CSP
+    if path == "/agents" or path.startswith("/agents/"):
+        return AGENTS_CSP
+    return DEFAULT_CSP
 
 
 def create_service(
@@ -142,8 +168,13 @@ def create_service(
     @service.middleware("http")
     async def security_headers(request: Request, call_next):
         response = await call_next(request)
-        for name, value in SECURITY_HEADERS.items():
+        path = request.url.path
+        for name, value in BASE_SECURITY_HEADERS.items():
             response.headers.setdefault(name, value)
+        response.headers.setdefault("Content-Security-Policy", _csp_for_path(path))
+        if path.startswith("/agents/") and path.endswith(".json"):
+            response.headers.setdefault("Access-Control-Allow-Origin", "*")
+            response.headers["Cache-Control"] = "max-age=300"
         return response
 
     @service.exception_handler(Exception)
@@ -171,6 +202,7 @@ def create_service(
     service.mount("/downloads", create_downloads_app(catalogue, release_root, site_admission, traffic))
     accounts_on = store.engine.dialect.name == "postgresql" and os.getenv("ALVARY_ACCOUNTS") == "1"
     api_origin = os.getenv("ALVARY_API_ORIGIN", "https://api.open.alvary.ai").rstrip("/")
+    mcp_gate = None
     if accounts_on:
         # Activation B (MAC-15): accounts, the console, REST v1 and MCP go live together, only when
         # switched on, and need the accounts schema (PostgreSQL only).
@@ -238,27 +270,28 @@ def create_service(
                 reach,
             )
         )
+        mcp_gate = CredentialGate(
+            mcp,
+            config=GateConfig(
+                mcp_resource,
+                "mcp",
+                "mcp",
+                mcp_metadata,
+                jsonrpc=True,
+                trusted_proxies=trusted_proxies,
+                **outside,
+            ),
+            check=accounts.check_credential,
+            record_usage=accounts.record_usage,
+            admission=AdmissionStore(store.engine, namespace),
+            ledger=ByteLedger(store.engine, namespace),
+            verifier=TokenVerifier(config.issuer) if config else None,
+            failed_keys=failed_keys,
+        )
         service.router.routes.append(
             Route(
                 "/mcp",
-                CredentialGate(
-                    mcp,
-                    config=GateConfig(
-                        mcp_resource,
-                        "mcp",
-                        "mcp",
-                        mcp_metadata,
-                        jsonrpc=True,
-                        trusted_proxies=trusted_proxies,
-                        **outside,
-                    ),
-                    check=accounts.check_credential,
-                    record_usage=accounts.record_usage,
-                    admission=AdmissionStore(store.engine, namespace),
-                    ledger=ByteLedger(store.engine, namespace),
-                    verifier=TokenVerifier(config.issuer) if config else None,
-                    failed_keys=failed_keys,
-                ),
+                mcp_gate,
                 methods=["GET", "POST", "DELETE"],
             )
         )
@@ -306,6 +339,34 @@ def create_service(
                 countries=published_countries,
             ),
         )
+    agents_admission = AdmissionConfig.from_environment("ALVARY_AGENTS_ADMISSION_CONFIG")
+    agents_admission_store = None
+    if agents_admission is not None and catalogue.engine.dialect.name == "postgresql":
+        with catalogue.engine.connect() as connection:
+            agents_namespace = PolicyNamespace(connection.scalar(text("SELECT current_schema()")))
+        agents_admission_store = AdmissionStore(catalogue.engine, agents_namespace)
+    service.router.routes.append(
+        Route(
+            "/agents/mcp",
+            LawCheckMCP(
+                mcp_gate,
+                admission_config=agents_admission,
+                admission_store=agents_admission_store,
+                require_admission=True,
+            ),
+            methods=["GET", "POST", "OPTIONS", "DELETE"],
+        )
+    )
+
+    @service.get("/.well-known/open-alvary-receipt-keys.json", include_in_schema=False)
+    def receipt_keys():
+        from api.receipts import load_jwks_from_env
+
+        return JSONResponse(
+            load_jwks_from_env(),
+            headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "max-age=300"},
+        )
+
     anonymous = create_app(catalogue, release_root, downloads_path="/downloads")
     if accounts_on:
         close_anonymous(anonymous, api_origin)
@@ -382,6 +443,7 @@ STATIC_PAGES = (
     "/governance",
     "/releases",
     "/developers",
+    "/agents/",
     "/about",
     "/privacy",
     "/terms",
@@ -466,19 +528,23 @@ class WebsiteFiles(StaticFiles):
                 address = "/" + ("" if path == "." else path) + (f"?{query}" if query else "")
                 return RedirectResponse(self.elsewhere[1] + address, status_code=308)
         page = "." not in path.rsplit("/", 1)[-1]
+        is_agents = path == "agents" or path.startswith("agents/")
         try:
             response = await super().get_response(path, scope)
         except StarletteHTTPException as error:
-            if error.status_code != 404 or not page:
+            if error.status_code != 404 or not page or is_agents:
                 raise
             response = await super().get_response("index.html", scope)
-        if response.status_code == 404 and page:
+        if response.status_code == 404 and page and not is_agents:
             response = await super().get_response("index.html", scope)
-        if page and path != "." and page_kind(path) is None and response.status_code == 200:
+        if page and path != "." and not is_agents and page_kind(path) is None and response.status_code == 200:
             response.status_code = 404  # the website's own not-found page, said as one
-        response.headers["Cache-Control"] = (
-            "public, max-age=31536000, immutable" if path.startswith("assets/") else "no-cache"
-        )
+        if is_agents and path.endswith(".json"):
+            response.headers["Cache-Control"] = "max-age=300"
+        else:
+            response.headers["Cache-Control"] = (
+                "public, max-age=31536000, immutable" if path.startswith("assets/") else "no-cache"
+            )
         # An address that is no page still counts, as a bot (api.traffic: people do not open such addresses).
         if self.traffic is not None and (page or path == ".") and response.status_code in (200, 304, 404):
             self.traffic.arrival(scope, "" if path == "." else path)

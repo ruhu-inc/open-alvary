@@ -207,5 +207,29 @@
     "listing": {
       "order": 11
     }
+  },
+  {
+    "id": "law-check",
+    "name": "Law check",
+    "description": "Open Alvary's own Law check service: MCP-only access over its approved record list, without withdrawal disclosure.",
+    "includes": [
+      "mcp"
+    ],
+    "allowance": {
+      "requests_per_minute": 300,
+      "burst": 100,
+      "concurrency": 10,
+      "bytes_per_day": 250000000,
+      "watches": 0,
+      "digest": "off",
+      "shared_watches": false,
+      "webhook_endpoints": 0,
+      "withdrawals": "not_told",
+      "source_ids": []
+    },
+    "published": false,
+    "listing": {
+      "order": 12
+    }
   }
 ]

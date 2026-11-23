@@ -10,7 +10,20 @@ locals {
   # Secret → the workloads that read it. Copied (or, access-database-url, composed) by secrets.sh.
   copied_secrets = merge(
     {
-      for name in ["feed-keys", "webhook-keys", "admission-config", "site-admission-config", "access-role-password", "key-pepper", "consent-secret", "console-client-secret"] :
+      for name in [
+        "feed-keys",
+        "webhook-keys",
+        "admission-config",
+        "site-admission-config",
+        "agents-admission-config",
+        "law-check-key",
+        "receipt-signing-key",
+        "receipt-keys",
+        "access-role-password",
+        "key-pepper",
+        "consent-secret",
+        "console-client-secret",
+      ] :
       name => ["public"]
     },
     { "resend-api-key" = var.accounts_enabled ? ["public", "workbench"] : ["public"] },

@@ -197,7 +197,7 @@ function App() {
       const url = new URL(a.href, location.href);
       if (
         url.origin !== location.origin ||
-        /^\/(site|api|downloads|assets|console)(\/|$)/.test(url.pathname) ||
+        /^\/(site|api|downloads|assets|console|agents)(\/|$)/.test(url.pathname) ||
         /\.[a-z0-9]+$/i.test(url.pathname) ||
         (url.pathname === location.pathname && url.search === location.search && url.hash)
       )
@@ -1265,7 +1265,7 @@ function Developers() {
             <dd>The same address, in the tool's settings for MCP connectors.</dd>
           </dl>
           <p>
-            Twelve read-only tools search records and published texts,
+            Thirteen read-only tools search records and published texts,
             retrieve and check evidence, resolve citations and read changes:{" "}
             <Link to="/docs/api/mcp">the MCP tools</Link>.
           </p>

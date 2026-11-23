@@ -130,7 +130,7 @@ locals {
     retrieval = google_service_account.retrieval[0].email
   } : {}
   # Jobs read neither the admission configurations nor the service's other secrets.
-  admission_settings = ["ALVARY_ADMISSION_CONFIG", "ALVARY_SITE_ADMISSION_CONFIG"]
+  admission_settings = ["ALVARY_ADMISSION_CONFIG", "ALVARY_SITE_ADMISSION_CONFIG", "ALVARY_AGENTS_ADMISSION_CONFIG"]
   job_env = {
     for name in keys(local.jobs) : name => merge(
       {

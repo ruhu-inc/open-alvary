@@ -1,0 +1,17 @@
+{
+  "protocol": "examplevendor-link/v1",
+  "exports": [
+    {
+      "network": "vendor_desk",
+      "front_man": "vendor_desk",
+      "aliases": [
+        "vendor_desk"
+      ],
+      "url": "vendor_desk"
+    }
+  ],
+  "imports": [],
+  "link_updates": {
+    "mode": "browser-local"
+  }
+}

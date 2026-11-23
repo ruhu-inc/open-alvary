@@ -1,0 +1,331 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open.alvary.ai/schemas/oa-receipt-1.schema.json",
+  "title": "Open Alvary Law check receipt envelope (oa-receipt-1)",
+  "description": "Schema for an Open Alvary Law check signed receipt and its accompanying claim envelope.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["receipt", "claim"],
+  "properties": {
+    "receipt": {
+      "$ref": "#/$defs/Receipt"
+    },
+    "claim": {
+      "$ref": "#/$defs/Claim"
+    }
+  },
+  "$defs": {
+    "Claim": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "citation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "anchor_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "quote": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "as_of": {
+          "type": "string",
+          "format": "date"
+        },
+        "jurisdiction": {
+          "type": "string",
+          "minLength": 1
+        },
+        "language": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reading": {
+          "type": "string",
+          "maxLength": 600,
+          "description": "Unchecked model reading echoed for display; excluded from claim.digest and not signed."
+        }
+      },
+      "anyOf": [
+        { "required": ["citation"] },
+        { "required": ["anchor_id"] }
+      ]
+    },
+    "Receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "receipt_id",
+        "issued_at",
+        "key",
+        "mechanism",
+        "dataset",
+        "claim",
+        "part",
+        "nearest",
+        "alternatives",
+        "findings",
+        "status",
+        "statement",
+        "signature"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "oa-receipt-1"
+        },
+        "receipt_id": {
+          "type": "string",
+          "pattern": "^rcp_[A-Za-z0-9_-]+$"
+        },
+        "issued_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "key": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["alg", "kid"],
+          "properties": {
+            "alg": { "const": "ES256" },
+            "kid": { "type": "string", "minLength": 1 }
+          }
+        },
+        "mechanism": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "version"],
+          "properties": {
+            "name": { "type": "string", "minLength": 1 },
+            "version": { "type": "string", "minLength": 1 }
+          }
+        },
+        "dataset": {
+          "type": "string",
+          "minLength": 1
+        },
+        "claim": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["digest", "assessed_at", "date_sent", "jurisdiction"],
+          "properties": {
+            "digest": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "assessed_at": {
+              "type": "string",
+              "format": "date"
+            },
+            "date_sent": {
+              "type": "boolean"
+            },
+            "jurisdiction": {
+              "type": ["string", "null"]
+            }
+          }
+        },
+        "part": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/ReceiptPart" }
+          ]
+        },
+        "nearest": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/ReceiptNearest" }
+          ]
+        },
+        "alternatives": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ReceiptAlternative" }
+        },
+        "findings": {
+          "$ref": "#/$defs/ReceiptFindings"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "not_in_catalogue",
+            "no_part_named",
+            "text_not_available",
+            "not_in_that_language",
+            "ambiguous",
+            "part_not_found",
+            "not_in_force",
+            "does_not_bind",
+            "wording_differs",
+            "located",
+            "words_found_with_omissions",
+            "matches",
+            "words_found"
+          ]
+        },
+        "statement": {
+          "type": "string",
+          "minLength": 1
+        },
+        "signature": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{86}$",
+          "description": "Raw 64-byte ES256 (r||s) signature encoded as unpadded base64url."
+        }
+      }
+    },
+    "ReceiptPart": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_id",
+        "title",
+        "version_id",
+        "anchor_id",
+        "pinpoint",
+        "language",
+        "span_hash",
+        "record_url",
+        "official_url"
+      ],
+      "properties": {
+        "source_id": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "version_id": { "type": "string", "minLength": 1 },
+        "anchor_id": { "type": "string", "minLength": 1 },
+        "pinpoint": { "type": "string", "minLength": 1 },
+        "language": { "type": "string", "minLength": 1 },
+        "span_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "record_url": { "type": "string", "format": "uri" },
+        "official_url": { "type": ["string", "null"] }
+      }
+    },
+    "ReceiptNearest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_id", "title", "anchor_id", "pinpoint"],
+      "properties": {
+        "source_id": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "anchor_id": { "type": "string", "minLength": 1 },
+        "pinpoint": { "type": "string", "minLength": 1 }
+      }
+    },
+    "ReceiptAlternative": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_id", "title", "anchor_id", "pinpoint", "reason"],
+      "properties": {
+        "source_id": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "anchor_id": { "type": ["string", "null"] },
+        "pinpoint": { "type": ["string", "null"] },
+        "reason": { "type": "string", "minLength": 1 }
+      }
+    },
+    "OmittedSpan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start", "end"],
+      "properties": {
+        "start": { "type": "integer", "minimum": 0 },
+        "end": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "ReceiptCurrentness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "basis", "assessed_at"],
+      "properties": {
+        "state": {
+          "type": "string",
+          "enum": ["in_force", "not_in_force", "partly_in_force", "unknown", "contested"]
+        },
+        "basis": {
+          "type": "string",
+          "enum": ["provision", "record"]
+        },
+        "assessed_at": {
+          "type": "string",
+          "format": "date"
+        }
+      }
+    },
+    "ReceiptApplicability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["binds", "relation"],
+      "properties": {
+        "binds": {
+          "type": "string",
+          "enum": ["bound", "not_bound", "unknown"]
+        },
+        "relation": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "ReceiptNewerText": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version_id", "anchor_id", "record_url"],
+      "properties": {
+        "version_id": { "type": "string", "minLength": 1 },
+        "anchor_id": { "type": ["string", "null"] },
+        "record_url": { "type": "string", "format": "uri" }
+      }
+    },
+    "ReceiptFindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "quote",
+        "matched_text",
+        "opening_text",
+        "context_before",
+        "context_after",
+        "omitted",
+        "currentness",
+        "applicability",
+        "newer_text"
+      ],
+      "properties": {
+        "quote": {
+          "type": ["string", "null"],
+          "enum": ["exact", "normalised", "with_omissions", "absent", "not_given", null]
+        },
+        "matched_text": { "type": ["string", "null"] },
+        "opening_text": { "type": ["string", "null"], "maxLength": 400 },
+        "context_before": { "type": ["string", "null"], "maxLength": 200 },
+        "context_after": { "type": ["string", "null"], "maxLength": 200 },
+        "omitted": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/OmittedSpan" }
+        },
+        "currentness": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/ReceiptCurrentness" }
+          ]
+        },
+        "applicability": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/ReceiptApplicability" }
+          ]
+        },
+        "newer_text": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/ReceiptNewerText" }
+          ]
+        }
+      }
+    }
+  }
+}

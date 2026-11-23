@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Conformance · Example Vendor Demo</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div class="demo-banner" role="note">
+    Demonstration. The companies here are fictional.
+  </div>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="./index.html">Example Vendor</a>
+      <nav class="nav" aria-label="Demo navigation">
+        <a href="./index.html">Vendor demo</a>
+        <a href="./conformance.html" aria-current="page">Conformance</a>
+        <a href="./index.html?dev=1">Developer trace (?dev=1)</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <h1>Stage One Conformance</h1>
+    <p class="lead">
+      Each button below runs one refusal case against the vendored challenge runtime using a
+      scripted router (no AI key needed), and displays what the runtime itself reports beside its
+      trace line.
+    </p>
+
+    <section class="panel" aria-labelledby="cases-heading">
+      <h2 id="cases-heading">Refusal cases</h2>
+      <div class="button-row">
+        <button type="button" data-case="invalid_network">Invalid network</button>
+        <button type="button" data-case="cycle">Cycle</button>
+        <button type="button" data-case="over_budget">Over-budget request</button>
+        <button type="button" data-case="denied_origin">Denied origin</button>
+      </div>
+      <div id="conformance-output" aria-live="polite"></div>
+    </section>
+  </main>
+
+  <script type="module">
+    import { CONFORMANCE_CASES } from "./conformance.js";
+
+    const out = document.getElementById("conformance-output");
+    document.querySelectorAll("button[data-case]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const key = btn.getAttribute("data-case");
+        const runner = CONFORMANCE_CASES[key];
+        if (!runner) return;
+        const result = await runner();
+        out.textContent = "";
+
+        const box = document.createElement("div");
+        box.className = "conformance-result";
+
+        const heading = document.createElement("h3");
+        heading.textContent = `${result.title} — ${result.stopped ? "Stopped by runtime" : "Not stopped"}`;
+        box.appendChild(heading);
+
+        const reportLabel = document.createElement("p");
+        reportLabel.textContent = `Runtime report: ${result.report}`;
+        box.appendChild(reportLabel);
+
+        const tracePre = document.createElement("pre");
+        tracePre.textContent = JSON.stringify(result.trace, null, 2);
+        box.appendChild(tracePre);
+
+        out.appendChild(box);
+      });
+    });
+  </script>
+</body>
+</html>

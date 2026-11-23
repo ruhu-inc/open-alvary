@@ -4,15 +4,27 @@ NOTICE_DAYS before a new version takes effect (terms of service, "Changes"), wit
 python -m accounts.operator --operator <you> terms-notice VERSION --effective DATE --reason R."""
 
 CURRENT = {
-    "terms": "2026-11-03",
-    "acceptable_use": "2026-11-03",
-    "privacy": "2026-11-03",
+    "terms": "2026-11-22",
+    "acceptable_use": "2026-11-22",
+    "privacy": "2026-11-22",
 }
 PATHS = {"terms": "/terms", "acceptable_use": "/acceptable-use", "privacy": "/privacy"}
 NOTICE_DAYS = 30
 
 # What each version changes, as the owner approved it, for the notice emailed to owners.
 CHANGES = {
+    "2026-11-22": (
+        "- Terms of service: added a clause for Law check receipts explaining what a signed receipt"
+        " describes (a published text and what Open Alvary's record lists on a date, with no warranty and"
+        " not legal advice) and asking holders to stop showing a receipt's text once a re-check finds no"
+        " published text.\n"
+        "- Acceptable use policy: stated that Law check at open.alvary.ai/agents/ is Open Alvary's own"
+        " service offering five read-only tools without a key for approved records, outside the rule"
+        " against third-party apps passing on API or MCP access.\n"
+        "- Privacy notice: explained that on Law check, any AI provider key stays in the visitor's"
+        " browser, verified receipts stay in the browser tab, and quote checks send the citation, quote"
+        " and optional reading only to answer the check and are neither logged nor stored."
+    ),
     "2026-11-03": (
         "- We set no cookies on the website and use no advertising. We count how the website is used as daily"
         " totals: pages opened, searches and whether they found anything, records opened and files downloaded,"

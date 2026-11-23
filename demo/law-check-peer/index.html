@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Example Vendor · Legal-Basis Gate Demo</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div class="demo-banner" role="note">
+    Demonstration. The companies here are fictional.
+  </div>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="./index.html">Example Vendor</a>
+      <nav class="nav" aria-label="Demo navigation">
+        <a href="./index.html" aria-current="page">Vendor demo</a>
+        <a href="./conformance.html">Conformance</a>
+        <a href="./index.html?dev=1">Developer trace (?dev=1)</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <h1>Records-request contract clauses</h1>
+    <p class="lead">
+      Example Vendor drafts contract clauses that cite Nigerian law. Every clause that cites a law
+      must pass a code-built legal-basis gate backed by Open Alvary's
+      <code>check_claim</code> signed receipt. Made-up wording fails; accepted clauses show the
+      published text beside Open Alvary's receipt card.
+    </p>
+
+    <section class="panel" aria-labelledby="gate-heading">
+      <h2 id="gate-heading">Legal-basis gate (code, not a model)</h2>
+      <p>
+        Try running a clause with altered wording (refused) or with the exact published wording of
+        Freedom of Information Act 2011, s. 1(1). Before contacting
+        <code>open.alvary.ai</code>, this page shows one unified consent card.
+      </p>
+      <div class="button-row">
+        <button type="button" id="btn-try-altered">Try altered wording (refused)</button>
+        <button type="button" id="btn-try-published">Try published wording (live check)</button>
+        <button type="button" class="secondary" id="btn-reset-consent">Reset consent</button>
+      </div>
+      <div id="clause-list" class="clause-stack" aria-live="polite"></div>
+    </section>
+
+    <section class="panel" aria-labelledby="agent-heading">
+      <h2 id="agent-heading">Example Vendor drafting assistant</h2>
+      <p>
+        The <code>vendor_desk</code> network calls
+        <code>https://open.alvary.ai/agents/check/law_check</code> with only
+        <code>country: "ng"</code> allowed in downstream private context
+        (<code>allow.to_downstream.sly_data: ["country"]</code>).
+      </p>
+      <div id="vendor-agent-app"></div>
+    </section>
+  </main>
+
+  <dialog id="consent-dialog" class="consent-dialog" aria-labelledby="consent-heading">
+    <h2 id="consent-heading" class="consent-title">Contact Open Alvary?</h2>
+    <p data-consent-message></p>
+    <div class="button-row">
+      <button type="button" data-consent-allow>Allow</button>
+      <button type="button" class="secondary" data-consent-decline>Not now</button>
+    </div>
+  </dialog>
+
+  <script type="module" src="./demo.js"></script>
+</body>
+</html>

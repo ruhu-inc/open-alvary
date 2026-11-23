@@ -1,0 +1,463 @@
+{
+  "schema_version": "oa-receipt-1",
+  "now": "2027-01-10T10:22:31Z",
+  "jwks": {
+    "keys": [
+      {
+        "kty": "EC",
+        "crv": "P-256",
+        "x": "e-OIGaHSfHrJ46IQeGcrVSAbTx9SSz3I8nwjpF-w2ZE",
+        "y": "HF5tQdukzemkrVTPkBoae-MPes6oB7y3H6KCEdtMLvo",
+        "use": "sig",
+        "alg": "ES256",
+        "kid": "oa-receipt-2026-12",
+        "valid_from": "2026-12-01T00:00:00Z",
+        "valid_to": null,
+        "revoked_at": null
+      },
+      {
+        "kty": "EC",
+        "crv": "P-256",
+        "x": "7TlX_fFng3TcTfC2b3UCVAg-1_XCgASuPF1ZGZMaayE",
+        "y": "I36bB4v72PRIIBFoVE_Ml4FqlH1_gY6hpWgVZEGDIQw",
+        "use": "sig",
+        "alg": "ES256",
+        "kid": "oa-receipt-2026-06",
+        "valid_from": "2026-06-01T00:00:00Z",
+        "valid_to": "2026-11-30T23:59:59Z",
+        "revoked_at": null
+      },
+      {
+        "kty": "EC",
+        "crv": "P-256",
+        "x": "ezuM3FIwekHXIvbymnuSZgVPvQNDHmCn8iKFeRb_6CY",
+        "y": "sMbz8LmeanCdZC2rFZNtl0ggn3-XVetXKbHfE8HlJ2E",
+        "use": "sig",
+        "alg": "ES256",
+        "kid": "oa-receipt-2026-09-revoked",
+        "valid_from": "2026-09-01T00:00:00Z",
+        "valid_to": null,
+        "revoked_at": "2026-12-15T00:00:00Z"
+      }
+    ]
+  },
+  "cases": [
+    {
+      "name": "valid_matches",
+      "description": "Valid ES256 receipt with matching claim digest and active key",
+      "receipt": {
+        "schema_version": "oa-receipt-1",
+        "receipt_id": "rcp_01JDVECTOR0000000000000001",
+        "issued_at": "2027-01-05T10:22:31Z",
+        "key": {
+          "alg": "ES256",
+          "kid": "oa-receipt-2026-12"
+        },
+        "mechanism": {
+          "name": "oa-verify",
+          "version": "1.0"
+        },
+        "dataset": "ep1-rev42",
+        "claim": {
+          "digest": "420ef9293638725bb5906c7ceb3117004bcae5fae9d4d9d019c0e263a05997a5",
+          "assessed_at": "2027-01-05",
+          "date_sent": false,
+          "jurisdiction": "ng"
+        },
+        "part": {
+          "source_id": "ng-foi-act-2011",
+          "title": "Freedom of Information Act 2011",
+          "version_id": "ver_foi_2011_en_1",
+          "anchor_id": "ng-foi-act-2011:s1-1",
+          "pinpoint": "s. 1(1)",
+          "language": "en",
+          "span_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "record_url": "https://open.alvary.ai/sources/ng-foi-act-2011",
+          "official_url": "https://placng.org/i/documents/freedom-of-information-act-2011/"
+        },
+        "nearest": null,
+        "alternatives": [],
+        "findings": {
+          "quote": "exact",
+          "matched_text": "Notwithstanding anything contained in any other Act, law or regulation, the right of any person to access or request information",
+          "opening_text": null,
+          "context_before": "1. (1) ",
+          "context_after": ", whether or not contained in any written form, which is in the custody or possession of any public official, agency or institution howsoever described, is established.",
+          "omitted": [],
+          "currentness": {
+            "state": "in_force",
+            "basis": "provision",
+            "assessed_at": "2027-01-05"
+          },
+          "applicability": {
+            "binds": "bound",
+            "relation": "national"
+          },
+          "newer_text": null
+        },
+        "status": "matches",
+        "statement": "The quoted words are in s. 1(1) of the Freedom of Information Act 2011, in the text Open Alvary publishes from the official source linked here. Open Alvary’s record lists the law as in force on 2027-01-05 from reviewed legal events. This describes a published text; it is not legal advice.",
+        "signature": "3l4gZHYtZPptm1zYaSb2rvcEh7fWMqK7QhcERsfj3lCagx7PBVRs0zVSc8oIUgqh_v0VubwEVfe7OhcDGav8Uw"
+      },
+      "claim": {
+        "citation": "Freedom of Information Act 2011, s. 1(1)",
+        "quote": "Notwithstanding anything contained in any other Act, law or regulation, the right of any person to access or request information",
+        "jurisdiction": "ng",
+        "language": "en"
+      },
+      "expected": {
+        "ok": true,
+        "status": "matches",
+        "reason": null,
+        "ageDays": 5
+      }
+    },
+    {
+      "name": "valid_with_unchecked_reading",
+      "description": "Valid receipt with extra reading field in claim (excluded from claim.digest)",
+      "receipt": {
+        "schema_version": "oa-receipt-1",
+        "receipt_id": "rcp_01JDVECTOR0000000000000001",
+        "issued_at": "2027-01-05T10:22:31Z",
+        "key": {
+          "alg": "ES256",
+          "kid": "oa-receipt-2026-12"
+        },
+        "mechanism": {
+          "name": "oa-verify",
+          "version": "1.0"
+        },
+        "dataset": "ep1-rev42",
+        "claim": {
+          "digest": "420ef9293638725bb5906c7ceb3117004bcae5fae9d4d9d019c0e263a05997a5",
+          "assessed_at": "2027-01-05",
+          "date_sent": false,
+          "jurisdiction": "ng"
+        },
+        "part": {
+          "source_id": "ng-foi-act-2011",
+          "title": "Freedom of Information Act 2011",
+          "version_id": "ver_foi_2011_en_1",
+          "anchor_id": "ng-foi-act-2011:s1-1",
+          "pinpoint": "s. 1(1)",
+          "language": "en",
+          "span_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "record_url": "https://open.alvary.ai/sources/ng-foi-act-2011",
+          "official_url": "https://placng.org/i/documents/freedom-of-information-act-2011/"
+        },
+        "nearest": null,
+        "alternatives": [],
+        "findings": {
+          "quote": "exact",
+          "matched_text": "Notwithstanding anything contained in any other Act, law or regulation, the right of any person to access or request information",
+          "opening_text": null,
+          "context_before": "1. (1) ",
+          "context_after": ", whether or not contained in any written form, which is in the custody or possession of any public official, agency or institution howsoever described, is established.",
+          "omitted": [],
+          "currentness": {
+            "state": "in_force",
+            "basis": "provision",
+            "assessed_at": "2027-01-05"
+          },
+          "applicability": {
+            "binds": "bound",
+            "relation": "national"
+          },
+          "newer_text": null
+        },
+        "status": "matches",
+        "statement": "The quoted words are in s. 1(1) of the Freedom of Information Act 2011, in the text Open Alvary publishes from the official source linked here. Open Alvary’s record lists the law as in force on 2027-01-05 from reviewed legal events. This describes a published text; it is not legal advice.",
+        "signature": "3l4gZHYtZPptm1zYaSb2rvcEh7fWMqK7QhcERsfj3lCagx7PBVRs0zVSc8oIUgqh_v0VubwEVfe7OhcDGav8Uw"
+      },
+      "claim": {
+        "citation": "Freedom of Information Act 2011, s. 1(1)",
+        "quote": "Notwithstanding anything contained in any other Act, law or regulation, the right of any person to access or request information",
+        "jurisdiction": "ng",
+        "language": "en",
+        "reading": "Anyone can ask a Nigerian public institution for information."
+      },
+      "expected": {
+        "ok": true,
+        "status": "matches",
+        "reason": null,
+        "ageDays": 5
+      }
+    },
+    {
+      "name": "tampered_byte",
+      "description": "Receipt modified by one character after signing fails signature verification",
+      "receipt": {
+        "schema_version": "oa-receipt-1",
+        "receipt_id": "rcp_01JDVECTOR0000000000000001",
+        "issued_at": "2027-01-05T10:22:31Z",
+        "key": {
+          "alg": "ES256",
+          "kid": "oa-receipt-2026-12"
+        },
+        "mechanism": {
+          "name": "oa-verify",
+          "version": "1.0"
+        },
+        "dataset": "ep1-rev42",
+        "claim": {
+          "digest": "420ef9293638725bb5906c7ceb3117004bcae5fae9d4d9d019c0e263a05997a5",
+          "assessed_at": "2027-01-05",
+          "date_sent": false,
+          "jurisdiction": "ng"
+        },
+        "part": {
+          "source_id": "ng-foi-act-2011",
+          "title": "Freedom of Information Act 2011",
+          "version_id": "ver_foi_2011_en_1",
+          "anchor_id": "ng-foi-act-2011:s1-1",
+          "pinpoint": "s. 1(1)",
+          "language": "en",
+          "span_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "record_url": "https://open.alvary.ai/sources/ng-foi-act-2011",
+          "official_url": "https://placng.org/i/documents/freedom-of-information-act-2011/"
+        },
+        "nearest": null,
+        "alternatives": [],
+        "findings": {
+          "quote": "exact",
+          "matched_text": "Notwithstanding anything contained in any other Act, law or regulation, the right of any person to access or request information",
+          "opening_text": null,
+          "context_before": "1. (1) ",
+          "context_after": ", whether or not contained in any written form, which is in the custody or possession of any public official, agency or institution howsoever described, is established.",
+          "omitted": [],
+          "currentness": {
+            "state": "in_force",
+            "basis": "provision",
+            "assessed_at": "2027-01-05"
+          },
+          "applicability": {
+            "binds": "bound",
+            "relation": "national"
+          },
+          "newer_text": null
+        },
+        "status": "matches",
+        "statement": "The quoted words are in s. 1(1) of the Freedom of Information Act 2011, in the text Open Alvary publishes from the official source linked here. Open Alvary’s record lists the law as in force on 2027-01-06 from reviewed legal events. This describes a published text; it is not legal advice.",
+        "signature": "3l4gZHYtZPptm1zYaSb2rvcEh7fWMqK7QhcERsfj3lCagx7PBVRs0zVSc8oIUgqh_v0VubwEVfe7OhcDGav8Uw"
+      },
+      "claim": {
+        "citation": "Freedom of Information Act 2011, s. 1(1)",
+        "quote": "Notwithstanding anything contained in any other Act, law or regulation, the right of any person to access or request information",
+        "jurisdiction": "ng",
+        "language": "en"
+      },
+      "expected": {
+        "ok": false,
+        "status": null,
+        "reason": "invalid_signature"
+      }
+    },
+    {
+      "name": "retired_key_still_valid",
+      "description": "Receipt issued within a retired key validity window still verifies after valid_to",
+      "receipt": {
+        "schema_version": "oa-receipt-1",
+        "receipt_id": "rcp_01JDVECTOR0000000000000002",
+        "issued_at": "2026-10-15T12:00:00Z",
+        "key": {
+          "alg": "ES256",
+          "kid": "oa-receipt-2026-06"
+        },
+        "mechanism": {
+          "name": "oa-verify",
+          "version": "1.0"
+        },
+        "dataset": "ep1-rev42",
+        "claim": {
+          "digest": "420ef9293638725bb5906c7ceb3117004bcae5fae9d4d9d019c0e263a05997a5",
+          "assessed_at": "2026-10-15",
+          "date_sent": false,
+          "jurisdiction": "ng"
+        },
+        "part": {
+          "source_id": "ng-foi-act-2011",
+          "title": "Freedom of Information Act 2011",
+          "version_id": "ver_foi_2011_en_1",
+          "anchor_id": "ng-foi-act-2011:s1-1",
+          "pinpoint": "s. 1(1)",
+          "language": "en",
+          "span_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "record_url": "https://open.alvary.ai/sources/ng-foi-act-2011",
+          "official_url": "https://placng.org/i/documents/freedom-of-information-act-2011/"
+        },
+        "nearest": null,
+        "alternatives": [],
+        "findings": {
+          "quote": "exact",
+          "matched_text": "Notwithstanding anything contained in any other Act, law or regulation, the right of any person to access or request information",
+          "opening_text": null,
+          "context_before": "1. (1) ",
+          "context_after": ", whether or not contained in any written form, which is in the custody or possession of any public official, agency or institution howsoever described, is established.",
+          "omitted": [],
+          "currentness": {
+            "state": "in_force",
+            "basis": "record",
+            "assessed_at": "2026-10-15"
+          },
+          "applicability": {
+            "binds": "bound",
+            "relation": "national"
+          },
+          "newer_text": null
+        },
+        "status": "words_found",
+        "statement": "The quoted words are in s. 1(1) of the Freedom of Information Act 2011, in the text Open Alvary publishes from the official source linked here. Open Alvary’s record lists the law as in force on 2027-01-05 from reviewed legal events. This describes a published text; it is not legal advice.",
+        "signature": "fQpXNyhR1A_DWj0Y5s_dKs-UHcKabDyyMe_0NnGxVIztxazfyvwHfNVJ9Ctl0OZtaHveeiv3AtgNiI-NT-8MSg"
+      },
+      "claim": {
+        "citation": "Freedom of Information Act 2011, s. 1(1)",
+        "quote": "Notwithstanding anything contained in any other Act, law or regulation, the right of any person to access or request information",
+        "jurisdiction": "ng",
+        "language": "en"
+      },
+      "expected": {
+        "ok": true,
+        "status": "words_found",
+        "reason": null
+      }
+    },
+    {
+      "name": "revoked_key_fails",
+      "description": "Receipt signed by a revoked key fails even if issued before revoked_at",
+      "receipt": {
+        "schema_version": "oa-receipt-1",
+        "receipt_id": "rcp_01JDVECTOR0000000000000003",
+        "issued_at": "2026-10-20T09:00:00Z",
+        "key": {
+          "alg": "ES256",
+          "kid": "oa-receipt-2026-09-revoked"
+        },
+        "mechanism": {
+          "name": "oa-verify",
+          "version": "1.0"
+        },
+        "dataset": "ep1-rev42",
+        "claim": {
+          "digest": "420ef9293638725bb5906c7ceb3117004bcae5fae9d4d9d019c0e263a05997a5",
+          "assessed_at": "2027-01-05",
+          "date_sent": false,
+          "jurisdiction": "ng"
+        },
+        "part": {
+          "source_id": "ng-foi-act-2011",
+          "title": "Freedom of Information Act 2011",
+          "version_id": "ver_foi_2011_en_1",
+          "anchor_id": "ng-foi-act-2011:s1-1",
+          "pinpoint": "s. 1(1)",
+          "language": "en",
+          "span_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "record_url": "https://open.alvary.ai/sources/ng-foi-act-2011",
+          "official_url": "https://placng.org/i/documents/freedom-of-information-act-2011/"
+        },
+        "nearest": null,
+        "alternatives": [],
+        "findings": {
+          "quote": "exact",
+          "matched_text": "Notwithstanding anything contained in any other Act, law or regulation, the right of any person to access or request information",
+          "opening_text": null,
+          "context_before": "1. (1) ",
+          "context_after": ", whether or not contained in any written form, which is in the custody or possession of any public official, agency or institution howsoever described, is established.",
+          "omitted": [],
+          "currentness": {
+            "state": "in_force",
+            "basis": "provision",
+            "assessed_at": "2027-01-05"
+          },
+          "applicability": {
+            "binds": "bound",
+            "relation": "national"
+          },
+          "newer_text": null
+        },
+        "status": "matches",
+        "statement": "The quoted words are in s. 1(1) of the Freedom of Information Act 2011, in the text Open Alvary publishes from the official source linked here. Open Alvary’s record lists the law as in force on 2027-01-05 from reviewed legal events. This describes a published text; it is not legal advice.",
+        "signature": "Xnua0iX_lci8bGrZ_txcOjzQwRWOJ2sLvpePg3FgYr9POWynMcKRbzZ2C7scl2sfdDZSXPSeIvdNIpJTbpoo9g"
+      },
+      "claim": {
+        "citation": "Freedom of Information Act 2011, s. 1(1)",
+        "quote": "Notwithstanding anything contained in any other Act, law or regulation, the right of any person to access or request information",
+        "jurisdiction": "ng",
+        "language": "en"
+      },
+      "expected": {
+        "ok": false,
+        "status": null,
+        "reason": "key_revoked"
+      }
+    },
+    {
+      "name": "wrong_claim_digest_fails",
+      "description": "Valid receipt paired with a different claim fails claim digest verification",
+      "receipt": {
+        "schema_version": "oa-receipt-1",
+        "receipt_id": "rcp_01JDVECTOR0000000000000001",
+        "issued_at": "2027-01-05T10:22:31Z",
+        "key": {
+          "alg": "ES256",
+          "kid": "oa-receipt-2026-12"
+        },
+        "mechanism": {
+          "name": "oa-verify",
+          "version": "1.0"
+        },
+        "dataset": "ep1-rev42",
+        "claim": {
+          "digest": "420ef9293638725bb5906c7ceb3117004bcae5fae9d4d9d019c0e263a05997a5",
+          "assessed_at": "2027-01-05",
+          "date_sent": false,
+          "jurisdiction": "ng"
+        },
+        "part": {
+          "source_id": "ng-foi-act-2011",
+          "title": "Freedom of Information Act 2011",
+          "version_id": "ver_foi_2011_en_1",
+          "anchor_id": "ng-foi-act-2011:s1-1",
+          "pinpoint": "s. 1(1)",
+          "language": "en",
+          "span_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "record_url": "https://open.alvary.ai/sources/ng-foi-act-2011",
+          "official_url": "https://placng.org/i/documents/freedom-of-information-act-2011/"
+        },
+        "nearest": null,
+        "alternatives": [],
+        "findings": {
+          "quote": "exact",
+          "matched_text": "Notwithstanding anything contained in any other Act, law or regulation, the right of any person to access or request information",
+          "opening_text": null,
+          "context_before": "1. (1) ",
+          "context_after": ", whether or not contained in any written form, which is in the custody or possession of any public official, agency or institution howsoever described, is established.",
+          "omitted": [],
+          "currentness": {
+            "state": "in_force",
+            "basis": "provision",
+            "assessed_at": "2027-01-05"
+          },
+          "applicability": {
+            "binds": "bound",
+            "relation": "national"
+          },
+          "newer_text": null
+        },
+        "status": "matches",
+        "statement": "The quoted words are in s. 1(1) of the Freedom of Information Act 2011, in the text Open Alvary publishes from the official source linked here. Open Alvary’s record lists the law as in force on 2027-01-05 from reviewed legal events. This describes a published text; it is not legal advice.",
+        "signature": "3l4gZHYtZPptm1zYaSb2rvcEh7fWMqK7QhcERsfj3lCagx7PBVRs0zVSc8oIUgqh_v0VubwEVfe7OhcDGav8Uw"
+      },
+      "claim": {
+        "citation": "Freedom of Information Act 2011, s. 1(1)",
+        "quote": "Notwithstanding anything contained in any other Act, law or regulation, the right of NO person to access or request information",
+        "jurisdiction": "ng",
+        "language": "en"
+      },
+      "expected": {
+        "ok": false,
+        "status": null,
+        "reason": "claim_digest_mismatch"
+      }
+    }
+  ]
+}

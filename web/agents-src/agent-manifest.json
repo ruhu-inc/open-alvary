@@ -1,0 +1,73 @@
+{
+  "brand": "Open Alvary law check",
+  "theme": {
+    "primary": "#1a1a1a"
+  },
+  "networks": [
+    {
+      "name": "law_desk",
+      "front_man": "law_desk",
+      "hocon": "./law_desk.network.json",
+      "description": "Checks what an agent says the law says against the texts Open Alvary publishes, and returns a signed receipt.",
+      "tags": [
+        "agentified-website"
+      ],
+      "sample_queries": [
+        "What does the Freedom of Information Act 2011 say about who can ask for information?"
+      ]
+    }
+  ],
+  "llm_router": {
+    "base_url": "https://api.otari.ai/api/v1",
+    "mock": false,
+    "byok_router": "https://api.otari.ai/api/v1"
+  },
+  "allowed_peers": [
+    "https://open.alvary.ai"
+  ],
+  "peer_policy": {
+    "mode": "closed",
+    "deny_origins": []
+  },
+  "agent_mcp": {
+    "protocol": "openalvary-agent-mcp/v1",
+    "network": "law_desk",
+    "front_man": "law_desk",
+    "available": false,
+    "reason": "The data tools are at https://open.alvary.ai/agents/mcp"
+  },
+  "linking": {
+    "protocol": "openalvary-link/v1",
+    "exports": [
+      {
+        "network": "law_desk",
+        "front_man": "law_desk",
+        "aliases": [
+          "law_desk"
+        ],
+        "url": "law_desk"
+      }
+    ],
+    "imports": [],
+    "link_updates": {
+      "mode": "browser-local"
+    }
+  },
+  "deployment": {
+    "mode": "static",
+    "self_contained_runtime": true,
+    "browser_mock": false,
+    "direct_byok": true,
+    "direct_mcp_requires_cors": true,
+    "public_mcp_facade": false
+  },
+  "actions": {
+    "version": 1,
+    "module": "./site-actions.js",
+    "bridge": "./bridge/action-bridge.html",
+    "agentTools": [
+      "open_section",
+      "show_receipt"
+    ]
+  }
+}

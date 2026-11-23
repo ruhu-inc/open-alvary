@@ -12,6 +12,9 @@ must preserve notices required by those licences.
 - IBM Plex Sans and IBM Plex Mono fonts (the developer console): SIL Open Font
   License 1.1; files from @fontsource/ibm-plex-sans 5.2.8 and @fontsource/ibm-plex-mono
   5.2.7, in web/src/console/fonts/.
+- Cognizant agentic-web browser runtime (web/public/agents/runtime/, pinned to
+  cognizant-ai-labs/agentic-web commit f154be8): Apache License 2.0; see
+  web/public/agents/runtime/LICENSE.txt.
 
 Bundled font licence notices are shipped in web/public/font-licenses/. The lockfiles
 record dependency versions. This list highlights shipped visual assets and is not

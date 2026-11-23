@@ -1,0 +1,17 @@
+{
+  "protocol": "openalvary-link/v1",
+  "exports": [
+    {
+      "network": "law_check",
+      "front_man": "law_check",
+      "aliases": [
+        "law_check"
+      ],
+      "url": "law_check"
+    }
+  ],
+  "imports": [],
+  "link_updates": {
+    "mode": "browser-local"
+  }
+}

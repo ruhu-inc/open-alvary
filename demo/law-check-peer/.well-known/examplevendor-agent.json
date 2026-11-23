@@ -1,0 +1,7 @@
+{
+  "protocol": "examplevendor-agent-mcp/v1",
+  "network": "vendor_desk",
+  "front_man": "vendor_desk",
+  "available": false,
+  "reason": "Static demonstration peer site."
+}

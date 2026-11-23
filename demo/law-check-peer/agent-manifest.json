@@ -1,0 +1,65 @@
+{
+  "brand": "Example Vendor Demo",
+  "theme": {
+    "primary": "#1d4ed8"
+  },
+  "networks": [
+    {
+      "name": "vendor_desk",
+      "front_man": "vendor_desk",
+      "hocon": "./vendor_desk.network.json",
+      "description": "Drafts records-request contract clauses for Example Vendor and checks legal wording through Open Alvary law check.",
+      "tags": [
+        "agentified-website",
+        "demo"
+      ],
+      "sample_queries": [
+        "Draft a clause stating who can request information under the Freedom of Information Act 2011."
+      ]
+    }
+  ],
+  "llm_router": {
+    "base_url": "https://api.otari.ai/api/v1",
+    "mock": false,
+    "byok_router": "https://api.otari.ai/api/v1"
+  },
+  "allowed_peers": [
+    "https://open.alvary.ai"
+  ],
+  "peer_policy": {
+    "mode": "closed",
+    "deny_origins": []
+  },
+  "agent_mcp": {
+    "protocol": "examplevendor-agent-mcp/v1",
+    "network": "vendor_desk",
+    "front_man": "vendor_desk",
+    "available": false,
+    "reason": "Static demonstration peer site."
+  },
+  "linking": {
+    "protocol": "examplevendor-link/v1",
+    "exports": [
+      {
+        "network": "vendor_desk",
+        "front_man": "vendor_desk",
+        "aliases": [
+          "vendor_desk"
+        ],
+        "url": "vendor_desk"
+      }
+    ],
+    "imports": [],
+    "link_updates": {
+      "mode": "browser-local"
+    }
+  },
+  "deployment": {
+    "mode": "static",
+    "self_contained_runtime": true,
+    "browser_mock": false,
+    "direct_byok": true,
+    "direct_mcp_requires_cors": true,
+    "public_mcp_facade": false
+  }
+}

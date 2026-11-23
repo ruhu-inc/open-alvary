@@ -519,5 +519,60 @@
       "readOnlyHint": true,
       "openWorldHint": false
     }
+  },
+  {
+    "name": "check_claim",
+    "title": "Check a legal quote (preview)",
+    "description": "Preview tool (format oa-receipt-1; may change until stable). Deterministically checks whether quoted words appear in a named section of a text Open Alvary publishes and reports what Open Alvary's record lists about its status and jurisdiction binding, returning a signed receipt and the echoed claim. Requires either citation or anchor_id. Never gives legal advice or interprets meaning.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "citation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300,
+          "description": "A citation such as \"Freedom of Information Act 2011, s. 1(1)\". One of citation or anchor_id is required."
+        },
+        "anchor_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "description": "The part's anchor_id when you already hold it. One of citation or anchor_id is required."
+        },
+        "quote": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000,
+          "description": "Optional. The exact words the claim says the section uses (at least 40 characters after normalisation, unless the quote is the whole section)."
+        },
+        "as_of": {
+          "type": "string",
+          "format": "date",
+          "description": "Optional date (YYYY-MM-DD, not after today in UTC) to check the record's status as of. Without it, status is checked as of today."
+        },
+        "jurisdiction": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 40,
+          "description": "Optional jurisdiction ID such as ng; asks whether the catalogue records the law as binding there."
+        },
+        "language": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 35,
+          "description": "Optional language code such as en."
+        },
+        "reading": {
+          "type": "string",
+          "maxLength": 600,
+          "description": "Optional plain sentence this check is meant to support. Echoed beside the receipt for display; not checked, not signed, not in the claim digest, and never logged."
+        }
+      },
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false
+    }
   }
 ]

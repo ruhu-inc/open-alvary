@@ -93,6 +93,7 @@ PAGES = {
     "terms": "terms",
     "acceptable-use": "terms",
     "docs": "docs",
+    "agents": "agents",
 }
 
 # Every metric that can be written, and what its labels are.
@@ -176,7 +177,7 @@ def page_kind(path: str) -> str | None:
     kind = PAGES.get(first)
     if kind == "record":
         return kind if len(below) == 1 else None
-    return kind if not below or kind == "docs" else None
+    return kind if not below or kind in ("docs", "agents") else None
 
 
 def add_to_sketch(registers: list[int], salt: bytes, who: str) -> None:

@@ -1232,3 +1232,135 @@ class PublicContracts(WireModel):
     anchors: tuple[AnchorView, ...] = ()
     rights_histories: tuple[RightsHistory, ...] = ()
     text_searches: tuple[TextSearchPage, ...] = ()
+
+
+# --- Law check signed receipts (oa-receipt-1) ---------------------------------------------------------
+
+RECEIPT_STATUS = Literal[
+    "not_in_catalogue",
+    "no_part_named",
+    "text_not_available",
+    "not_in_that_language",
+    "ambiguous",
+    "part_not_found",
+    "not_in_force",
+    "does_not_bind",
+    "wording_differs",
+    "located",
+    "words_found_with_omissions",
+    "matches",
+    "words_found",
+]
+
+QUOTE_FINDING = Literal["exact", "normalised", "with_omissions", "absent", "not_given"]
+
+
+class ReceiptKey(WireModel):
+    """Signing algorithm and key identifier committed inside the signed receipt payload."""
+
+    alg: Literal["ES256"] = "ES256"
+    kid: Nonempty
+
+
+class ReceiptMechanism(WireModel):
+    """Deterministic verifier identity and version."""
+
+    name: Literal["oa-verify"] = "oa-verify"
+    version: Literal["1.0"] = "1.0"
+
+
+class ReceiptClaim(WireModel):
+    """Digest of caller-sent checked fields and the date/jurisdiction basis of the check."""
+
+    digest: Hash
+    assessed_at: date
+    date_sent: bool
+    jurisdiction: str | None = None
+
+
+class ReceiptPart(WireModel):
+    """Server-resolved part of a published text checked by Law check."""
+
+    source_id: ID
+    title: Nonempty
+    version_id: ID
+    anchor_id: ID
+    pinpoint: str
+    language: ID
+    span_hash: Hash
+    record_url: Nonempty
+    official_url: Nonempty
+
+
+class ReceiptNearest(WireModel):
+    """Nearest enclosing part when a cited pinpoint was not found in the published text."""
+
+    source_id: ID
+    title: Nonempty
+    anchor_id: ID
+    pinpoint: str
+
+
+class ReceiptAlternative(WireModel):
+    """One candidate work or part when a citation is ambiguous."""
+
+    source_id: ID
+    title: Nonempty
+    anchor_id: ID | None = None
+    pinpoint: str | None = None
+    reason: Nonempty
+
+
+class ReceiptCurrentness(WireModel):
+    """Currentness finding recorded on a receipt."""
+
+    state: CURRENTNESS
+    basis: Literal["provision", "record", "none"]
+    assessed_at: date
+
+
+class ReceiptApplicability(WireModel):
+    """Applicability finding recorded on a receipt when a jurisdiction was asked."""
+
+    binds: Literal["bound", "not_bound", "unknown"]
+    relation: APPLICABILITY
+
+
+class ReceiptFindings(WireModel):
+    """Deterministic findings of a Law check: quote match, published words, currentness, applicability."""
+
+    quote: QUOTE_FINDING | None = None
+    matched_text: str | None = None
+    opening_text: str | None = None
+    context_before: str | None = None
+    context_after: str | None = None
+    omitted: tuple[tuple[int, int], ...] = ()
+    currentness: ReceiptCurrentness | None = None
+    applicability: ReceiptApplicability | None = None
+    newer_text: dict[str, str | bool | None] | None = None
+
+
+class Receipt(WireModel):
+    """Signed deterministic verification receipt (oa-receipt-1)."""
+
+    schema_version: Literal["oa-receipt-1"] = "oa-receipt-1"
+    receipt_id: Nonempty
+    issued_at: Nonempty
+    key: ReceiptKey
+    mechanism: ReceiptMechanism
+    dataset: str
+    claim: ReceiptClaim
+    part: ReceiptPart | None = None
+    nearest: ReceiptNearest | None = None
+    alternatives: tuple[ReceiptAlternative, ...] = ()
+    findings: ReceiptFindings
+    status: RECEIPT_STATUS
+    statement: Nonempty
+    signature: Nonempty
+
+
+class CheckClaimResponse(WireModel):
+    """Output of the check_claim tool: signed receipt alongside the echoed caller claim."""
+
+    receipt: Receipt
+    claim: dict[str, object]

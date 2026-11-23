@@ -1,0 +1,7 @@
+{
+  "protocol": "openalvary-agent-mcp/v1",
+  "network": "law_check",
+  "front_man": "law_check",
+  "available": false,
+  "reason": "The data tools are at https://open.alvary.ai/agents/mcp"
+}

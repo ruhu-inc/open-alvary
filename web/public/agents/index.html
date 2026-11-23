@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Law check · Open Alvary</title>
+  <meta name="description" content="Checks quoted words against the legal texts Open Alvary publishes and returns a signed receipt." />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="stylesheet" href="./law-check.css" />
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+
+  <header class="site-header">
+    <a class="brand" href="/" aria-label="Open Alvary home">
+      <svg class="brand-mark" width="40" height="40" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+        <g fill="none" stroke="currentColor" stroke-width="2.2">
+          <polygon points="32,6.59 19.59,33.04 32,41.01 44.41,33.04" />
+          <polygon points="17.56,37.37 28.81,44.31 8.31,57.1" />
+          <polygon points="46.44,37.37 55.69,57.1 35.19,44.31" />
+        </g>
+      </svg>
+      <span>open<span class="brand-light">alvary</span></span>
+    </a>
+    <button
+      type="button"
+      class="mobile-toggle"
+      id="mobile-nav-toggle"
+      aria-label="Toggle navigation"
+      aria-expanded="false"
+      aria-controls="primary-navigation"
+    >
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false">
+        <line x1="3" y1="6" x2="21" y2="6" />
+        <line x1="3" y1="12" x2="21" y2="12" />
+        <line x1="3" y1="18" x2="21" y2="18" />
+      </svg>
+    </button>
+    <nav id="primary-navigation" class="site-nav" aria-label="Main navigation">
+      <a href="/browse">Explore the corpus</a>
+      <a href="/coverage">Coverage</a>
+      <a href="/changes">Changes</a>
+      <a href="/governance">Rights &amp; governance</a>
+      <a href="/releases">Releases</a>
+      <a href="/developers">Developers</a>
+    </nav>
+  </header>
+
+  <main id="main-content" class="law-check-main" tabindex="-1">
+    <div class="lc-page-header">
+      <h1>Law check</h1>
+      <p class="lc-lead">Checks quoted words against the legal texts Open Alvary publishes.</p>
+      <div class="lc-meta-row">
+        <p class="lc-meta-note" id="coverage-summary">
+          Nigerian laws; <span id="record-count">3</span> published so far. Information, not legal advice.
+        </p>
+        <details class="lc-disclosure" id="what-is-checked">
+          <summary>What is checked?</summary>
+          <div class="lc-what-checked">
+            <p>
+              A receipt is Open Alvary's signed record of one check: which words were looked for,
+              in which section, and what was found.
+            </p>
+            <div class="lc-checked-table-wrap">
+              <table class="lc-checked-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Checked by code</th>
+                    <th scope="col">Not checked by code</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>The quoted words are in the named section of the text Open Alvary publishes, with the words around them</td>
+                    <td>That the AI's sentence means what the section means</td>
+                  </tr>
+                  <tr>
+                    <td>What Open Alvary's record lists about status on a date, and what that rests on</td>
+                    <td>That the section is in fact in force, where the record is silent or wrong</td>
+                  </tr>
+                  <tr>
+                    <td>Whether the catalogue records the law as binding in the country asked</td>
+                    <td>That the law applies to a person's situation</td>
+                  </tr>
+                  <tr>
+                    <td>That the receipt came from Open Alvary and was not altered</td>
+                    <td>Anything about compliance, validity or rights</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <noscript>
+      <div class="lc-noscript">
+        Law check needs JavaScript. The laws themselves can be read without it in
+        <a href="/browse">Explore the corpus</a>.
+      </div>
+    </noscript>
+
+    <div id="global-banner" class="lc-banner" role="status" hidden></div>
+
+    <div class="lc-workspace" id="lc-workspace" data-panel-open="false">
+      <div class="lc-input-col">
+        <div class="lc-chatbox">
+          <!-- Unified composer top bar: mode switch + panel toggle + AI provider status pill -->
+          <div class="lc-chatbox-bar">
+            <div class="lc-tabs" role="tablist" aria-label="Law check modes" focusgroup="tablist nomemory">
+              <button type="button" role="tab" class="lc-tab" id="tab-check" data-tab="check" aria-selected="true" tabindex="0">
+                Check a quote
+              </button>
+              <button type="button" role="tab" class="lc-tab" id="tab-ask" data-tab="ask" aria-selected="false" tabindex="-1">
+                Ask AI
+              </button>
+            </div>
+            <div class="lc-bar-actions">
+              <button type="button" class="lc-verified-toggle" id="toggle-verified-panel" aria-expanded="false" aria-controls="verified-side-panel" hidden>
+                Verified text (<span id="verified-count">0</span>)
+              </button>
+              <button type="button" class="lc-provider-pill" id="open-provider-modal" aria-haspopup="dialog">
+                <span class="lc-provider-dot" id="provider-dot" aria-hidden="true"></span>
+                <span id="provider-pill-label">Set up AI key</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Optional slash-command menu for keyboard users typing / -->
+          <div id="slash-menu" class="lc-slash-menu" role="listbox" aria-label="Quick commands" hidden>
+            <button type="button" role="option" class="lc-slash-item" data-cmd="quote">
+              <span class="lc-slash-cmd">/quote</span>
+              <span class="lc-slash-desc">Check a quote against published law (no AI)</span>
+            </button>
+            <button type="button" role="option" class="lc-slash-item" data-cmd="ask">
+              <span class="lc-slash-cmd">/ask</span>
+              <span class="lc-slash-desc">Ask a question with your AI provider</span>
+            </button>
+            <button type="button" role="option" class="lc-slash-item" data-cmd="verify">
+              <span class="lc-slash-cmd">/verify</span>
+              <span class="lc-slash-desc">Verify a saved proof (.json) file</span>
+            </button>
+          </div>
+
+          <!-- Mode 1: Check a quote (no AI, free-text Citation with typeahead + Quote) -->
+          <section id="panel-check" role="tabpanel" aria-labelledby="tab-check" data-panel="check">
+            <div class="lc-panel-inner">
+              <div class="lc-welcome-prompt">
+                <p class="lc-welcome-title">Verify any legal quote against Open Alvary's published text</p>
+                <p class="lc-welcome-sub">Type any law and section, paste the exact words, and get a signed browser-verified check — no AI or API key required.</p>
+                <div class="lc-starter-pills">
+                  <button type="button" class="lc-starter-pill" id="try-true-quote">Try a true quote</button>
+                  <button type="button" class="lc-starter-pill" id="try-altered-quote">Try with one word changed</button>
+                </div>
+              </div>
+
+              <form id="check-form" class="lc-composer-form" novalidate>
+                <div class="lc-composer-box">
+                  <div class="lc-field lc-citation-field">
+                    <label for="citation-input">Citation</label>
+                    <p class="lc-hint" id="citation-hint">Type any law and section, e.g. Freedom of Information Act 2011, s. 1(1)</p>
+                    <input
+                      id="citation-input"
+                      name="citation"
+                      type="text"
+                      class="lc-input"
+                      list="law-suggestions"
+                      required
+                      maxlength="300"
+                      autocomplete="off"
+                      aria-invalid="false"
+                      data-error="citation-error"
+                      aria-describedby="citation-hint"
+                    />
+                    <datalist id="law-suggestions"></datalist>
+                    <p class="lc-error" id="citation-error" hidden></p>
+                  </div>
+
+                  <div class="lc-field lc-quote-field">
+                    <label for="quote-input">Quoted words</label>
+                    <p class="lc-hint" id="quote-hint">Paste the exact words from the section.</p>
+                    <textarea
+                      id="quote-input"
+                      name="quote"
+                      class="lc-textarea lc-quote-textarea"
+                      required
+                      aria-invalid="false"
+                      data-error="quote-error"
+                      aria-describedby="quote-hint"
+                    ></textarea>
+                    <p class="lc-char-counter" id="quote-counter" hidden></p>
+                    <p class="lc-error" id="quote-error" hidden></p>
+                  </div>
+
+                  <div class="lc-composer-footer">
+                    <span class="lc-no-ai-note">Deterministic check · no AI used</span>
+                    <button type="submit" class="lc-btn-primary" id="check-submit">Check quote</button>
+                  </div>
+                </div>
+              </form>
+
+              <details class="lc-verify-disclosure" id="verify-proof-disclosure">
+                <summary>Verify a saved proof (.json)</summary>
+                <div class="lc-verify-body">
+                  <p class="lc-hint">Check a saved proof file against Open Alvary's current published text.</p>
+                  <div class="lc-dropzone" id="verify-dropzone">
+                    <label for="recheck-file" class="lc-file-label">Choose or drop a proof (.json) file</label>
+                    <input id="recheck-file" type="file" accept=".json,application/json" class="lc-file-input" />
+                  </div>
+                  <form id="recheck-form" novalidate>
+                    <div class="lc-field">
+                      <label for="recheck-input">Or paste saved proof JSON</label>
+                      <textarea
+                        id="recheck-input"
+                        name="receiptJson"
+                        class="lc-textarea lc-recheck-textarea"
+                        required
+                        aria-invalid="false"
+                        data-error="recheck-error"
+                      ></textarea>
+                      <p class="lc-error" id="recheck-error" hidden></p>
+                    </div>
+                    <div class="lc-form-actions">
+                      <button type="submit" class="lc-btn-primary" id="recheck-submit">Verify &amp; re-check</button>
+                    </div>
+                  </form>
+                </div>
+              </details>
+            </div>
+          </section>
+
+          <!-- Mode 2: Ask AI (modern chatbox + clear provider setup prompt when unconfigured) -->
+          <section id="panel-ask" role="tabpanel" aria-labelledby="tab-ask" data-panel="ask" hidden="until-found">
+            <div class="lc-panel-inner">
+              <div id="ask-status" class="lc-notice-card" hidden></div>
+
+              <!-- Shown clearly whenever no AI provider/key is configured -->
+              <div id="provider-required-card" class="lc-setup-card">
+                <h3>Connect an AI provider to ask questions</h3>
+                <p>
+                  Ask AI runs in your browser using your own API key (OpenAI, Claude / Anthropic, Google Gemini,
+                  OpenRouter, Otari, or any OpenAI-compatible provider). Your key stays in this browser and is
+                  never sent to Open Alvary.
+                </p>
+                <div class="lc-setup-actions">
+                  <button type="button" class="lc-btn-primary" id="setup-provider-cta">Configure AI provider</button>
+                  <button type="button" class="lc-btn-secondary" id="switch-to-check-cta">Check a quote without AI</button>
+                </div>
+              </div>
+
+              <div id="agent-app">
+                <details class="lc-settings-disclosure" id="settings-disclosure" hidden>
+                  <summary id="settings-summary">Advanced runtime settings</summary>
+                  <div data-ns-slot="settings"></div>
+                </details>
+                <div data-ns-slot="header"></div>
+                <div data-ns-slot="chat"></div>
+                <div id="answer-summary" class="lc-answer-summary" hidden></div>
+                <details class="lc-disclosure lc-agents-disclosure" id="agents-disclosure">
+                  <summary>Show the agents at work</summary>
+                  <div data-ns-slot="agents"></div>
+                </details>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <!-- Verified text side panel (opens progressively when checks run) -->
+      <section class="lc-receipts-col" id="verified-side-panel" aria-labelledby="receipts-heading">
+        <div class="lc-receipts-header">
+          <h2 id="receipts-heading">Verified text</h2>
+          <button type="button" class="lc-panel-close" id="close-verified-panel" aria-label="Close verified text panel">×</button>
+        </div>
+        <div id="recheck-diff" class="lc-recheck-diff" hidden></div>
+        <div id="receipts-list" class="lc-receipts-list">
+          <p class="lc-empty-receipts" id="empty-receipts">
+            Checked passages appear here. Try a true quote.
+          </p>
+        </div>
+        <p class="lc-session-note">
+          Checked passages stay in this tab only. Save a proof file if you want to keep one.
+        </p>
+      </section>
+    </div>
+
+    <!-- Clean native modal dialog for configuring AI provider & API key -->
+    <dialog id="provider-dialog" class="lc-dialog" closedby="any" aria-labelledby="provider-dialog-title">
+      <div class="lc-dialog-head">
+        <h2 id="provider-dialog-title">Configure AI provider</h2>
+        <button type="button" class="lc-dialog-close" id="provider-dialog-close" aria-label="Close">×</button>
+      </div>
+      <p class="lc-dialog-sub">
+        Your API key is stored only in this browser and sent directly to your chosen provider. Open Alvary never receives it.
+      </p>
+
+      <div class="lc-provider-presets" role="group" aria-label="Choose AI provider">
+        <button type="button" class="lc-preset-btn" data-preset="openai" aria-pressed="true">
+          <span class="lc-preset-name">OpenAI</span>
+          <span class="lc-preset-sub">GPT-4o mini</span>
+        </button>
+        <button type="button" class="lc-preset-btn" data-preset="anthropic" aria-pressed="false">
+          <span class="lc-preset-name">Claude</span>
+          <span class="lc-preset-sub">Anthropic</span>
+        </button>
+        <button type="button" class="lc-preset-btn" data-preset="gemini" aria-pressed="false">
+          <span class="lc-preset-name">Gemini</span>
+          <span class="lc-preset-sub">Google AI</span>
+        </button>
+        <button type="button" class="lc-preset-btn" data-preset="openrouter" aria-pressed="false">
+          <span class="lc-preset-name">OpenRouter</span>
+          <span class="lc-preset-sub">Many models</span>
+        </button>
+        <button type="button" class="lc-preset-btn" data-preset="otari" aria-pressed="false">
+          <span class="lc-preset-name">Otari</span>
+          <span class="lc-preset-sub">Hosted router</span>
+        </button>
+        <button type="button" class="lc-preset-btn" data-preset="custom" aria-pressed="false">
+          <span class="lc-preset-name">Custom</span>
+          <span class="lc-preset-sub">OpenAI-compatible</span>
+        </button>
+      </div>
+
+      <form id="provider-form" class="lc-dialog-form" novalidate>
+        <div class="lc-field">
+          <label for="provider-key-input">API key</label>
+          <p class="lc-hint" id="provider-key-hint">
+            Get a key from <a id="provider-key-link" href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer">OpenRouter ↗</a>
+          </p>
+          <div class="lc-key-input-row">
+            <input
+              id="provider-key-input"
+              name="apiKey"
+              type="password"
+              class="lc-input"
+              required
+              autocomplete="off"
+              autofocus
+              placeholder="Paste your API key"
+              aria-invalid="false"
+              data-error="provider-key-error"
+              aria-describedby="provider-key-hint"
+            />
+            <button type="button" class="lc-btn-secondary lc-toggle-key" id="toggle-key-visibility" aria-pressed="false">Show</button>
+          </div>
+          <p class="lc-error" id="provider-key-error" hidden></p>
+        </div>
+
+        <div class="lc-field">
+          <label for="provider-model-input">Model</label>
+          <p class="lc-hint" id="provider-model-hint">Pre-filled for the chosen provider; edit if you prefer another model.</p>
+          <input
+            id="provider-model-input"
+            name="model"
+            type="text"
+            class="lc-input"
+            required
+            autocomplete="off"
+            aria-invalid="false"
+            data-error="provider-model-error"
+            aria-describedby="provider-model-hint"
+          />
+          <p class="lc-error" id="provider-model-error" hidden></p>
+        </div>
+
+        <div class="lc-field" id="provider-url-field" hidden>
+          <label for="provider-url-input">OpenAI-compatible base URL</label>
+          <p class="lc-hint" id="provider-url-hint">Must allow browser CORS requests (HTTPS).</p>
+          <input
+            id="provider-url-input"
+            name="baseUrl"
+            type="url"
+            class="lc-input"
+            autocomplete="off"
+            placeholder="https://api.example.com/v1"
+            aria-invalid="false"
+            data-error="provider-url-error"
+            aria-describedby="provider-url-hint"
+          />
+          <p class="lc-error" id="provider-url-error" hidden></p>
+        </div>
+
+        <div class="lc-dialog-actions">
+          <button type="button" class="lc-btn-danger" id="provider-remove-btn" hidden>Remove key</button>
+          <div class="lc-dialog-actions-right">
+            <button type="button" class="lc-btn-secondary" id="provider-cancel-btn">Cancel</button>
+            <button type="submit" class="lc-btn-primary" id="provider-save-btn">Save &amp; connect</button>
+          </div>
+        </div>
+      </form>
+    </dialog>
+
+    <div class="lc-page-foot">
+      Checks describe a published text and what Open Alvary's record lists. They are not legal advice.
+      <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a>
+    </div>
+
+    <div id="live-status" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+  </main>
+
+  <footer class="site-footer">
+    <a class="footer-brand" href="/">
+      <svg class="brand-mark" width="28" height="28" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+        <g fill="none" stroke="currentColor" stroke-width="3.2">
+          <polygon points="32,7.77 20.23,32.85 32,40.42 43.77,32.85" />
+          <polygon points="17.78,38.09 27.86,44.31 9.48,55.78" />
+          <polygon points="46.22,38.09 54.52,55.78 36.14,44.31" />
+        </g>
+      </svg>
+      <span class="footer-brand-name">
+        open alvary<span>Public legal infrastructure for Africa.</span>
+      </span>
+    </a>
+    <p>Public legal data. Clear provenance. Open possibilities.</p>
+    <div class="footer-links">
+      <a href="/about">About &amp; contribute</a>
+      <a href="/docs">Docs</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/terms">Terms</a>
+      <a href="/security">Security</a>
+    </div>
+  </footer>
+
+  <script type="module" src="./site.js"></script>
+</body>
+</html>

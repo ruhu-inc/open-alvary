@@ -1,0 +1,17 @@
+{
+  "protocol": "openalvary-link/v1",
+  "exports": [
+    {
+      "network": "law_desk",
+      "front_man": "law_desk",
+      "aliases": [
+        "law_desk"
+      ],
+      "url": "law_desk"
+    }
+  ],
+  "imports": [],
+  "link_updates": {
+    "mode": "browser-local"
+  }
+}

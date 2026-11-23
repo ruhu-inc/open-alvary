@@ -46,6 +46,7 @@ def test_initialize_negotiates_protocol_and_declares_read_only_tools(client):
         "get_change",
         "retrieve_evidence",
         "check_currentness",
+        "check_claim",
     }
     assert all(t["annotations"]["readOnlyHint"] for t in tools)
 
