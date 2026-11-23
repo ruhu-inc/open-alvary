@@ -676,7 +676,7 @@ class LawCheckController {
     const input = $("composer-input");
     const slashMenu = $("slash-menu");
 
-    // With a thread on screen the composer folds to one row. It opens when a text field in it is
+    // On a phone, with a thread on screen, the composer folds to one row. It opens when a text field in it is
     // focused, clicked or typed in, and folds again when the focus leaves it or a message is sent.
     // Buttons alone do not open it, so a press on Send in the folded row lands on Send.
     const dock = $("composer-dock");
@@ -913,8 +913,9 @@ class LawCheckController {
   _clearComposerText() {
     const input = $("composer-input");
     input.value = "";
-    // Sending folds the composer, so the result has the window. The focus stays in the box, and the
-    // next key or click opens it again. On a touch screen the keyboard is put away as well.
+    // On a phone sending folds the composer, so the result has the window (law-check.css folds it
+    // there only). The focus stays in the box, and the next key or click opens it again. On a touch
+    // screen the keyboard is put away as well.
     $("composer-dock")?.classList.remove("is-open");
     if (globalThis.matchMedia?.("(pointer: coarse)").matches) document.activeElement?.blur?.();
     delete input.dataset.edited;

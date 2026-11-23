@@ -896,8 +896,9 @@ main:focus {
   padding-block: 10px calc(10px + env(safe-area-inset-bottom, 0px));
   background: var(--page-bg);
 }
-.lc-chat.has-thread .lc-dock {
-  border-block-start: 1px solid var(--line);
+/* No rule above the composer (owner, 2026-11-23): the thread fades out softly where it meets it. */
+.lc-chat.has-thread .lc-scroll {
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 18px), transparent);
 }
 
 .lc-composer {
@@ -1069,55 +1070,53 @@ main:focus {
   }
 }
 
-/* With a thread on screen the composer folds to one row while it is not in use: the message box
-   and its buttons. Clicking or tabbing into the box opens it with every field. The page sets
-   "is-open" when a text field in the composer takes the focus and removes it when the focus leaves
-   the composer, so pressing a button never moves that button from under the pointer. */
-.lc-chat.has-thread .lc-dock:not(.is-open) .lc-composer {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 10px;
-}
-.lc-chat.has-thread .lc-dock:not(.is-open) .lc-message-field {
-  flex: 1 1 0;
-  min-inline-size: 0;
-  border: 0;
-  padding: 0;
-}
-.lc-chat.has-thread .lc-dock:not(.is-open) .lc-citation-field,
-.lc-chat.has-thread .lc-dock:not(.is-open) .lc-composer-note,
-.lc-chat.has-thread .lc-dock:not(.is-open) .lc-dock-foot,
-.lc-chat.has-thread .lc-dock:not(.is-open) .lc-char-counter,
-.lc-chat.has-thread .lc-dock:not(.is-open) .lc-error {
-  display: none;
-}
-/* The label stays for screen readers while folded */
-.lc-chat.has-thread .lc-dock:not(.is-open) #composer-label {
-  position: absolute;
-  inline-size: 1px;
-  block-size: 1px;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-}
-.lc-chat.has-thread .lc-dock:not(.is-open) .lc-composer-bar {
-  flex: none;
-  flex-wrap: nowrap;
-  padding: 0;
-  border: 0;
-}
-.lc-chat.has-thread .lc-dock:not(.is-open) .lc-composer-textarea {
-  max-block-size: 1lh;
-  overflow: hidden;
-}
-@media (max-width: 760px) {
-  .lc-chat.has-thread .lc-dock:not(.is-open) .lc-attach-btn {
+/* On a phone, with a thread on screen, the composer folds to one row while it is not in use: the
+   message box and its buttons. Clicking or tabbing into the box opens it with every field. The page
+   sets "is-open" when a text field in the composer takes the focus and removes it when the focus
+   leaves the composer, so pressing a button never moves that button from under the pointer. On a
+   wider window it never folds: folding resized the thread on every click and made it jump (owner,
+   2026-11-23). */
+@media (max-width: 520px) {
+  .lc-chat.has-thread .lc-dock:not(.is-open) .lc-composer {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+  }
+  .lc-chat.has-thread .lc-dock:not(.is-open) .lc-message-field {
+    flex: 1 1 0;
+    min-inline-size: 0;
+    border: 0;
+    padding: 0;
+  }
+  .lc-chat.has-thread .lc-dock:not(.is-open) .lc-citation-field,
+  .lc-chat.has-thread .lc-dock:not(.is-open) .lc-composer-note,
+  .lc-chat.has-thread .lc-dock:not(.is-open) .lc-dock-foot,
+  .lc-chat.has-thread .lc-dock:not(.is-open) .lc-char-counter,
+  .lc-chat.has-thread .lc-dock:not(.is-open) .lc-error {
     display: none;
   }
-}
-@media (max-width: 520px) {
+  /* The label stays for screen readers while folded */
+  .lc-chat.has-thread .lc-dock:not(.is-open) #composer-label {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+  .lc-chat.has-thread .lc-dock:not(.is-open) .lc-composer-bar {
+    flex: none;
+    flex-wrap: nowrap;
+    padding: 0;
+    border: 0;
+  }
+  .lc-chat.has-thread .lc-dock:not(.is-open) .lc-composer-textarea {
+    max-block-size: 1lh;
+    overflow: hidden;
+  }
+  .lc-chat.has-thread .lc-dock:not(.is-open) .lc-attach-btn,
   .lc-chat.has-thread .lc-dock:not(.is-open) .lc-mode {
     display: none;
   }
@@ -2202,35 +2201,28 @@ dialog.lc-dialog::backdrop {
     background: CanvasText;
   }
 }
-/* Folded under a thread, the composer keeps "Check a quote | Ask AI" at its bottom left, as in the
-   approved design: the message on one line, the buttons on the line under it. */
-.lc-chat.has-thread .lc-dock:not(.is-open) .lc-composer {
-  flex-wrap: wrap;
-  row-gap: 6px;
-}
-.lc-chat.has-thread .lc-dock:not(.is-open) .lc-message-field {
-  flex: 1 1 100%;
-}
-.lc-chat.has-thread .lc-dock:not(.is-open) .lc-composer-bar {
-  flex: 1 1 100%;
-}
-.lc-chat.has-thread .lc-dock:not(.is-open) .lc-composer-bar #composer-send {
-  margin-inline-start: auto;
-}
+/* Folded on a phone: the message and Send on one short line. */
 @media (max-width: 520px) {
-  /* A phone hides the mode switch while folded, so the message and the button share one line. */
+  .lc-chat.has-thread .lc-dock:not(.is-open) .lc-composer {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+  /* The mode switch is hidden while folded, so the message and the button share one line. */
   .lc-chat.has-thread .lc-dock:not(.is-open) .lc-message-field {
     flex: 1 1 0;
   }
   .lc-chat.has-thread .lc-dock:not(.is-open) .lc-composer-bar {
     flex: none;
   }
-}
-/* Two short lines when folded: the thread keeps most of the window. */
-.lc-chat.has-thread .lc-dock:not(.is-open) {
-  padding-block: 8px calc(8px + env(safe-area-inset-bottom, 0px));
-}
-.lc-chat.has-thread .lc-dock:not(.is-open) .lc-composer {
-  padding: 8px 12px 6px;
-  row-gap: 2px;
+  .lc-chat.has-thread .lc-dock:not(.is-open) .lc-composer-bar #composer-send {
+    margin-inline-start: auto;
+  }
+  /* Two short lines when folded: the thread keeps most of the window. */
+  .lc-chat.has-thread .lc-dock:not(.is-open) {
+    padding-block: 8px calc(8px + env(safe-area-inset-bottom, 0px));
+  }
+  .lc-chat.has-thread .lc-dock:not(.is-open) .lc-composer {
+    padding: 8px 12px 6px;
+    row-gap: 2px;
+  }
 }

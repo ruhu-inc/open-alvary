@@ -154,7 +154,7 @@ test.describe("the composer", () => {
     await expect(page.locator("#citation-field")).toBeHidden();
   });
 
-  test("with a thread on screen only the thread scrolls, and the composer folds @smoke", async ({ page }) => {
+  test("with a thread on screen only the thread scrolls, and the composer keeps its size @smoke", async ({ page }) => {
     await page.goto("/agents/");
     await page.getByRole("button", { name: "Try a true quote" }).click();
     await expect(bands(page).first()).toBeVisible();
@@ -183,20 +183,24 @@ test.describe("the composer", () => {
     expect(after.headerTop).toBe(0);
     expect(after.dockBottom).toBe(after.windowHeight);
     expect(after.threadScrolls).toBe(true);
-    // Sending folds the composer to its message line and, under it, the buttons, so the thread
-    // has most of the window.
-    expect(after.dockHeight).toBeLessThan(120);
-    expect(after.threadHeight).toBeGreaterThan(after.windowHeight * 0.6);
+    // On a desktop window the composer never folds, so the thread does not jump as the focus moves
+    // between them (owner, 2026-11-23); the thread still has most of the window.
+    expect(after.threadHeight).toBeGreaterThan(after.windowHeight * 0.55);
+    await expect(page.locator("#citation-input")).toBeVisible();
+    await expect(page.locator("#citation-input")).toHaveValue(CITATION);
 
     await page.locator("#thread-scroll").evaluate((el) => el.scrollTo(0, 0));
+    await page.locator("#thread-scroll").click({ position: { x: 5, y: 5 } });
     const scrolled = await measure();
     expect(scrolled.windowScroll).toBe(0);
     expect(scrolled.headerTop).toBe(0);
+    expect(scrolled.dockHeight).toBe(after.dockHeight);
+    expect(scrolled.threadHeight).toBe(after.threadHeight);
 
-    // A key in the box opens the composer again, with the law and section still there.
     await messageBox(page).click();
-    await expect(page.locator("#citation-input")).toBeVisible();
-    await expect(page.locator("#citation-input")).toHaveValue(CITATION);
+    const typing = await measure();
+    expect(typing.dockHeight).toBe(after.dockHeight);
+    expect(typing.threadHeight).toBe(after.threadHeight);
   });
 
   test("at 320px nothing scrolls sideways and the folded composer leaves the thread the screen", async ({ page }) => {

@@ -369,7 +369,11 @@ describe("page behaviour the 2026-11-23 review found broken", () => {
     assert.doesNotMatch(css, /position: sticky;\s*inset-block-end: 0;\s*\}\s*\.lc-welcome/);
   });
 
-  it("with a thread on screen the composer folds to one row and the header is short", () => {
+  it("on a phone the composer folds to one row, on a wider window it never does, and the header is short", () => {
+    // Folding resized the thread on every click and made it jump: only a phone folds.
+    assert.match(css, /@media \(max-width: 520px\) \{\s*\.lc-chat\.has-thread \.lc-dock:not\(\.is-open\) \.lc-composer \{/);
+    assert.doesNotMatch(css, /^\.lc-chat\.has-thread \.lc-dock:not\(\.is-open\)/m);
+    assert.doesNotMatch(css, /\.lc-chat\.has-thread \.lc-dock \{\s*border-block-start/);
     // Folding follows a class the page sets, not :focus-within: a press on a button must never
     // move that button from under the pointer between the press and the release.
     assert.match(css, /\.lc-chat\.has-thread \.lc-dock:not\(\.is-open\) \.lc-composer \{/);
