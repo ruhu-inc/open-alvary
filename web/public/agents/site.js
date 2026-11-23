@@ -492,6 +492,7 @@ class LawCheckController {
     $("mode-quote")?.setAttribute("aria-pressed", quote ? "true" : "false");
     $("mode-ask")?.setAttribute("aria-pressed", quote ? "false" : "true");
     $("citation-field").hidden = !quote;
+    $("composer-form").dataset.mode = this.mode;
     label.textContent = quote ? "Quoted words" : "Your question";
     label.classList.toggle("sr-only", !quote);
     input.placeholder = quote
@@ -669,6 +670,20 @@ class LawCheckController {
     const datalist = $("law-suggestions");
     const input = $("composer-input");
     const slashMenu = $("slash-menu");
+
+    // With a thread on screen the composer folds to one row. It opens when a text field in it is
+    // focused, clicked or typed in, and folds again when the focus leaves it or a message is sent.
+    // Buttons alone do not open it, so a press on Send in the folded row lands on Send.
+    const dock = $("composer-dock");
+    const isTextField = (el) =>
+      el instanceof HTMLTextAreaElement || (el instanceof HTMLInputElement && el.type === "text");
+    const openDock = (e) => {
+      if (isTextField(e.target)) dock.classList.add("is-open");
+    };
+    for (const type of ["focusin", "input", "keydown", "pointerdown"]) dock.addEventListener(type, openDock);
+    dock.addEventListener("focusout", (e) => {
+      if (!dock.contains(e.relatedTarget)) dock.classList.remove("is-open");
+    });
 
     $("mode-quote")?.addEventListener("click", () => this._setMode("quote", { focus: true }));
     $("mode-ask")?.addEventListener("click", () => this._setMode("ask", { focus: true }));
@@ -885,7 +900,9 @@ class LawCheckController {
   _clearComposerText() {
     const input = $("composer-input");
     input.value = "";
-    // On a touch screen, sending puts the keyboard away and lets the composer fold, so the result shows.
+    // Sending folds the composer, so the result has the window. The focus stays in the box, and the
+    // next key or click opens it again. On a touch screen the keyboard is put away as well.
+    $("composer-dock")?.classList.remove("is-open");
     if (globalThis.matchMedia?.("(pointer: coarse)").matches) document.activeElement?.blur?.();
     delete input.dataset.edited;
     delete $("citation-input").dataset.edited;

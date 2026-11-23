@@ -359,6 +359,17 @@ describe("page behaviour the 2026-11-23 review found broken", () => {
     assert.doesNotMatch(css, /position: sticky;\s*inset-block-end: 0;\s*\}\s*\.lc-welcome/);
   });
 
+  it("with a thread on screen the composer folds to one row and the header is short", () => {
+    // Folding follows a class the page sets, not :focus-within: a press on a button must never
+    // move that button from under the pointer between the press and the release.
+    assert.match(css, /\.lc-chat\.has-thread \.lc-dock:not\(\.is-open\) \.lc-composer \{/);
+    assert.doesNotMatch(css, /\.lc-dock:not\(:focus-within\)/);
+    assert.match(siteSrc, /for \(const type of \["focusin", "input", "keydown", "pointerdown"\]\) dock\.addEventListener\(type, openDock\);/);
+    assert.match(siteSrc, /if \(!dock\.contains\(e\.relatedTarget\)\) dock\.classList\.remove\("is-open"\);/);
+    assert.match(css, /body\.lc-threaded \.site-header \{[^}]*min-block-size: 64px;/);
+    assert.match(css, /\.lc-composer\[data-mode="quote"\] \{\s*display: grid;/);
+  });
+
   it("a restored thread does not scroll the page, and a paused service still verifies a saved proof", () => {
     assert.match(siteSrc, /this\._appendUser\(item, \{ save: false, reveal: false \}\)/);
     assert.match(siteSrc, /persist: false, announce: false, reveal: false/);
