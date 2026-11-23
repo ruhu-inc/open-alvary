@@ -18,7 +18,8 @@ export const LEGAL_VERSION = "2026-11-22";
 // the acceptable use policy) approved on 2026-11-02; version 2026-11-03 (the estimate of different visitors
 // in the privacy notice) approved on 2026-11-02; version 2026-11-22 (Law check receipts in the terms,
 // Law check first-party service in the acceptable use policy, and Law check browser/check privacy in the
-// privacy notice, LC-10). A new version starts as a draft again: set this to false until it is approved.
+// privacy notice, LC-10) approved on 2026-11-23. A new version starts as a draft again: set this to false
+// until it is approved.
 const APPROVED = true;
 const TO_CONFIRM: string[] = [];
 const OPERATOR = "Ruhu, Inc.";
