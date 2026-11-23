@@ -134,14 +134,19 @@ summary:focus-visible {
   outline-offset: 5px;
 }
 
-/* A field with the focus: a slightly darker edge and a faint ring, never a heavy outline. The transparent
+/* A field with the focus: a slightly darker edge, never a heavy outline or a ring. The transparent
    outline is for forced colours, which draw it in the system's colour. */
 input:focus-visible,
 textarea:focus-visible {
   outline: 2px solid transparent;
   outline-offset: -1px;
   border-color: var(--input-focus);
-  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.04);
+}
+
+/* The law field suggests laws as it is typed in (a datalist); the browser's own arrow is not shown. */
+.lc-input::-webkit-calendar-picker-indicator,
+.lc-input::-webkit-list-button {
+  display: none !important;
 }
 
 .sr-only {
@@ -976,7 +981,6 @@ main:focus {
 }
 .lc-mode-btn {
   border: 0;
-  border-block-end: 2px solid transparent;
   background: transparent;
   padding: 5px 12px;
   border-radius: 6px;
@@ -989,13 +993,18 @@ main:focus {
 .lc-mode-btn:hover {
   color: var(--ink);
 }
-/* The chosen mode keeps an underline, which forced colours preserves */
+/* The chosen mode is the white one on the grey track: no underline, no shadow (owner, 2026-11-23). Forced
+   colours drop the backgrounds, so there it is underlined instead. */
 .lc-mode-btn[aria-pressed="true"] {
   background: var(--card);
   color: var(--ink);
   font-weight: 600;
-  border-block-end: 2px solid var(--accent);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+@media (forced-colors: active) {
+  .lc-mode-btn[aria-pressed="true"] {
+    text-decoration: underline 2px;
+    text-underline-offset: 4px;
+  }
 }
 .lc-mode-btn:focus-visible {
   outline-offset: 1px;
