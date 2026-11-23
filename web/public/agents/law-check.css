@@ -749,8 +749,8 @@ main:focus {
   background: #efefef;
   color: var(--ink);
   border-radius: 14px 14px 4px 14px;
-  padding: 10px 14px;
-  font-size: 15px;
+  padding: 9px 14px;
+  font-size: 14.5px;
   line-height: 1.55;
   overflow-wrap: break-word;
 }
@@ -765,6 +765,7 @@ main:focus {
   display: block;
   margin-block-start: 4px;
   font-family: Georgia, "Times New Roman", serif;
+  font-size: 15px;
   color: #3a3a3a;
 }
 
@@ -775,7 +776,7 @@ main:focus {
 .lc-msg-caption {
   margin: 0 0 6px;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--muted);
 }
 
@@ -788,11 +789,11 @@ main:focus {
   padding-block-end: 6px;
   border-block-end: 1px solid var(--line);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--muted);
 }
 .lc-ai-text {
-  font-size: 16px;
+  font-size: 15px;
   line-height: 1.65;
   color: var(--ink);
   overflow-wrap: break-word;
@@ -819,10 +820,10 @@ main:focus {
 }
 .lc-ai-summary {
   margin: 10px 0 0;
-  padding: 8px 12px;
-  border-radius: 5px;
-  font-size: 14px;
-  background: var(--grey-bg);
+  padding: 7px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  background: #f6f6f5;
   color: var(--grey-fg);
 }
 .lc-ai-summary[data-tone="red"] {
@@ -970,6 +971,14 @@ main:focus {
   gap: 8px 10px;
   padding-block-start: 8px;
   border-block-start: 1px solid var(--line);
+}
+
+/* Check quote / Send: the same height and type as the mode buttons beside it (owner, 2026-11-23). */
+.lc-composer-bar #composer-send {
+  min-block-size: 32px;
+  padding: 5px 14px;
+  font-size: 13.5px;
+  border-radius: 6px;
 }
 
 .lc-mode {

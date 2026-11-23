@@ -292,6 +292,12 @@ function createSvgIcon(kind, size = 18) {
     // Pin
     add("path", { d: "M10 18s5.5-5.1 5.5-9.5a5.5 5.5 0 1 0-11 0C4.5 12.9 10 18 10 18Z", fill: "none", stroke: "currentColor", "stroke-width": "1.6", "stroke-linejoin": "round" });
     add("circle", { cx: "10", cy: "8.5", r: "2", fill: "currentColor" });
+  } else if (kind === "copy") {
+    add("rect", { x: "6.5", y: "6.5", width: "10", height: "10", rx: "2", fill: "none", stroke: "currentColor", "stroke-width": "1.5" });
+    add("path", { d: "M13.5 6.5V5a1.5 1.5 0 0 0-1.5-1.5H5A1.5 1.5 0 0 0 3.5 5v7A1.5 1.5 0 0 0 5 13.5h1.5", fill: "none", stroke: "currentColor", "stroke-width": "1.5" });
+  } else if (kind === "save") {
+    add("path", { d: "M10 3.5v9M6.5 9 10 12.5 13.5 9", fill: "none", stroke: "currentColor", "stroke-width": "1.5", "stroke-linecap": "round", "stroke-linejoin": "round" });
+    add("path", { d: "M3.5 13v2a1.5 1.5 0 0 0 1.5 1.5h10a1.5 1.5 0 0 0 1.5-1.5v-2", fill: "none", stroke: "currentColor", "stroke-width": "1.5", "stroke-linecap": "round" });
   } else if (kind === "tick") {
     add("path", { d: "M4.5 10.4 8.2 14 15.5 6.4", fill: "none", stroke: "currentColor", "stroke-width": "2", "stroke-linecap": "round", "stroke-linejoin": "round" });
   } else if (kind === "exclamation") {
@@ -369,10 +375,10 @@ const CARD_CSS = `
   }
   .diff-text {
     margin: 4px 0 0;
-    padding: 12px 14px;
-    border-radius: 8px;
-    background: #faf5ef;
-    font: 16px/1.6 Georgia, "Times New Roman", serif;
+    padding: 10px 12px;
+    border-radius: 6px;
+    background: #faf8f5;
+    font: 15px/1.6 Georgia, "Times New Roman", serif;
     color: #3a3a3a;
   }
   .diff-text del {
@@ -405,8 +411,8 @@ const CARD_CSS = `
     align-items: center;
     justify-content: space-between;
     gap: 10px;
-    padding: 10px 16px;
-    font-size: 14px;
+    padding: 9px 16px;
+    font-size: 13px;
     font-weight: 500;
   }
   .band-left {
@@ -443,19 +449,19 @@ const CARD_CSS = `
   .collapse-toggle {
     flex: none;
     background: transparent;
-    border: 1px solid #e0e0e0;
-    border-radius: 4px;
+    border: 1px solid #e6e6e6;
+    border-radius: 6px;
     padding: 2px 10px;
-    font-size: 13px;
+    font-size: 12.5px;
     font-weight: 500;
     min-block-size: 28px;
     min-inline-size: 28px;
   }
   .body {
-    padding: 16px;
+    padding: 12px 16px 14px;
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 12px;
   }
   .header-block {
     padding: 14px 16px 0;
@@ -475,7 +481,7 @@ const CARD_CSS = `
   }
   .title {
     margin: 0;
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 600;
     line-height: 1.3;
     color: #1a1a1a;
@@ -494,7 +500,7 @@ const CARD_CSS = `
     display: flex;
     align-items: flex-start;
     gap: 8px;
-    font-size: 15px;
+    font-size: 14px;
     line-height: 1.5;
   }
   .finding-line .icon {
@@ -503,23 +509,22 @@ const CARD_CSS = `
   }
   .finding-line.secondary {
     padding-inline-start: 26px;
-    font-size: 14px;
+    font-size: 13px;
     color: #6b6b6b;
   }
+  /* Quiet sentence-case labels; the passage and the quote carry the weight. */
   .section-label {
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
+    font-size: 12px;
+    font-weight: 500;
     color: #6b6b6b;
-    margin: 0 0 6px;
+    margin: 0 0 4px;
   }
   .published-block {
     border-inline-start: 2px solid #e3d6c4;
     padding-inline-start: 14px;
     font-family: Georgia, "Times New Roman", serif;
-    font-size: 17px;
-    line-height: 1.7;
+    font-size: 15.5px;
+    line-height: 1.65;
     color: #1a1a1a;
     overflow-wrap: break-word;
     max-inline-size: 72ch;
@@ -551,11 +556,11 @@ const CARD_CSS = `
   .quote-sent,
   .ai-reading {
     margin: 0;
-    padding: 10px 12px;
+    padding: 8px 12px;
     background: #fafafa;
     border: 1px solid #f0f0f0;
-    border-radius: 4px;
-    font-size: 14px;
+    border-radius: 6px;
+    font-size: 13.5px;
     line-height: 1.55;
     overflow-wrap: break-word;
   }
@@ -565,7 +570,7 @@ const CARD_CSS = `
   }
   .grey-note {
     margin: 0;
-    font-size: 15px;
+    font-size: 14px;
     line-height: 1.55;
     text-wrap: pretty;
   }
@@ -633,11 +638,12 @@ const CARD_CSS = `
   details.statement-details {
     border-top: 1px solid #f2f2f2;
     padding-top: 10px;
-    font-size: 14px;
+    font-size: 13px;
   }
   details.statement-details > summary {
     cursor: pointer;
     font-weight: 500;
+    color: #3a3a3a;
     min-block-size: 28px;
     display: list-item;
   }
@@ -668,27 +674,61 @@ const CARD_CSS = `
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     overflow-wrap: anywhere;
   }
+  /* Links, then quiet actions in the manner of a chat message's: an icon and a word, no border, a light
+     background only on hover. */
   .actions {
     display: flex;
     flex-wrap: wrap;
-    gap: 10px 14px;
+    gap: 4px 14px;
     align-items: center;
     border-top: 1px solid #f2f2f2;
-    padding-top: 12px;
-    font-size: 14px;
+    padding-top: 10px;
+    font-size: 13px;
+  }
+  .actions a {
+    color: #3a3a3a;
+    text-underline-offset: 3px;
+    text-decoration-color: #c8c8c8;
+  }
+  .actions a:hover {
+    color: #1a1a1a;
+    text-decoration-color: currentColor;
+  }
+  .action-group {
+    display: inline-flex;
+    gap: 2px;
+    margin-inline-start: -8px;
+  }
+  /* Beside the links the actions sit at the right; on a narrow card they take their own line, at the left. */
+  .actions a ~ .action-group {
+    margin-inline-start: auto;
+  }
+  @container (max-width: 480px) {
+    .actions a ~ .action-group {
+      flex-basis: 100%;
+      margin-inline-start: -8px;
+    }
   }
   .action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     background: transparent;
-    border: 1px solid #e0e0e0;
-    border-radius: 4px;
-    padding: 5px 10px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    padding: 4px 8px;
     font-size: 13px;
     font-weight: 500;
+    color: #3a3a3a;
     min-block-size: 28px;
     min-inline-size: 28px;
   }
+  .action-btn .icon {
+    color: #6b6b6b;
+  }
   .action-btn:hover {
-    background: #fafafa;
+    background: #f2f2f2;
+    color: #1a1a1a;
   }
   .copy-fallback {
     width: 100%;
@@ -1309,22 +1349,30 @@ export class OaReceiptElement extends BaseElement {
       actionsEl.appendChild(this._makeNewTabLink(officialHref, "Official source ↗"));
     }
 
-    const copyTextBtn = document.createElement("button");
-    copyTextBtn.type = "button";
-    copyTextBtn.className = "action-btn";
-    copyTextBtn.textContent = "Copy summary";
+    const actionButton = (icon, text) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "action-btn";
+      const label = document.createElement("span");
+      label.className = "action-label";
+      label.textContent = text;
+      button.append(createSvgIcon(icon, 16), label);
+      return button;
+    };
+    const group = document.createElement("span");
+    group.className = "action-group";
+
+    const copyTextBtn = actionButton("copy", "Copy summary");
     copyTextBtn.addEventListener("click", () => {
       const text = this._formatAsPlainText();
       this._copyWithFeedback(copyTextBtn, text, "Copy summary");
     });
-    actionsEl.appendChild(copyTextBtn);
+    group.appendChild(copyTextBtn);
 
-    const downloadBtn = document.createElement("button");
-    downloadBtn.type = "button";
-    downloadBtn.className = "action-btn";
-    downloadBtn.textContent = "Save proof";
+    const downloadBtn = actionButton("save", "Save proof");
     downloadBtn.addEventListener("click", () => this.saveProof());
-    actionsEl.appendChild(downloadBtn);
+    group.appendChild(downloadBtn);
+    actionsEl.appendChild(group);
 
     this._updateCollapseUi();
   }
@@ -1449,12 +1497,14 @@ export class OaReceiptElement extends BaseElement {
     try {
       if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
         await navigator.clipboard.writeText(text);
-        button.textContent = "Copied";
+        // A button with an icon keeps it: only its words change.
+        const label = button.querySelector(".action-label") || button;
+        label.textContent = "Copied";
         this.dispatchEvent(
           new CustomEvent("oa-receipt-announce", { bubbles: true, composed: true, detail: { text: "Copied." } }),
         );
         setTimeout(() => {
-          button.textContent = originalLabel;
+          label.textContent = originalLabel;
         }, 2000);
         return;
       }
