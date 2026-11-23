@@ -2374,7 +2374,9 @@ def cbn_circular(found: Found, record: dict, listing_url: str) -> None:
     else:
         rel = link if link.startswith("/") else "/" + link
         url = urljoin("https://www.cbn.gov.ng/", quote(rel, safe="/%&:@!$'()*+,;=-._~"))
-    why = on_path(url, {"www.cbn.gov.ng", "cbn.gov.ng"}, r"^/(?:out|documents)/.+\.(pdf|docx?)$") or sane_title(title)
+    why = on_path(
+        url, {"www.cbn.gov.ng", "cbn.gov.ng"}, r"^/(?:out|documents)/.+\.(pdf|docx?)$"
+    ) or sane_title(title)
     if why:
         found.reject(why, url=url, title=title)
         return

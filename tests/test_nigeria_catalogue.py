@@ -977,9 +977,7 @@ def test_cbn_circulars_catalogue():
             "filesize": "100",
         },
     ]
-    client = Site(
-        {"https://www.cbn.gov.ng/api/GetAllCirculars?format=json": json.dumps(payload)}
-    )
+    client = Site({"https://www.cbn.gov.ng/api/GetAllCirculars?format=json": json.dumps(payload)})
     found = nigeria.Found("cbn")
     nigeria.read_cbn(client, found, {})
     items = list(found.items.values())
