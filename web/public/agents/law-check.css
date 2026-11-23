@@ -48,7 +48,8 @@
   --accent: #8a5a2b;
   --muted: #6b6b6b;
   --line: #e5e5e5;
-  --input-border: #8c8c8c;
+  --input-border: #dcdcdc;
+  --input-focus: #b5b5b5;
   --surface: #ffffff;
   --page-bg: #fafafa;
   --serif: "Libre Caslon Display", Georgia, serif;
@@ -56,8 +57,9 @@
   --green-bg: #ddebe3;
   --amber-fg: #6e4a23;
   --amber-bg: #f3e9d9;
-  --red-fg: #8c2f2b;
-  --red-bg: #f6e1df;
+  /* "Not found", errors and refusals: plain grey, never red (owner, 2026-11-23); the words and the icon say it. */
+  --alert-fg: #3a3a3a;
+  --alert-bg: #f6f6f5;
   --grey-fg: #3a3a3a;
   --grey-bg: #f0f0f0;
   scroll-padding-block: 24px;
@@ -132,11 +134,14 @@ summary:focus-visible {
   outline-offset: 5px;
 }
 
+/* A field with the focus: a slightly darker edge and a faint ring, never a heavy outline. The transparent
+   outline is for forced colours, which draw it in the system's colour. */
 input:focus-visible,
 textarea:focus-visible {
-  outline: 2px solid #1a1a1a;
+  outline: 2px solid transparent;
   outline-offset: -1px;
-  border-color: #1a1a1a;
+  border-color: var(--input-focus);
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.04);
 }
 
 .sr-only {
@@ -446,9 +451,9 @@ main:focus {
 }
 
 .lc-banner[data-tone="red"] {
-  background: var(--red-bg);
-  color: var(--red-fg);
-  border-color: #dfb4b1;
+  background: var(--alert-bg);
+  color: var(--alert-fg);
+  border-color: #e6e6e6;
 }
 
 .lc-banner[data-tone="grey"] {
@@ -494,7 +499,7 @@ main:focus {
   line-height: 1.5;
   color: var(--primary);
   background: var(--surface);
-  border: 1.5px solid var(--input-border);
+  border: 1px solid var(--input-border);
   border-radius: 5px;
   min-block-size: 42px;
 }
@@ -506,15 +511,15 @@ main:focus {
 .lc-input[aria-invalid="true"],
 .lc-select[aria-invalid="true"],
 .lc-textarea[aria-invalid="true"] {
-  border-color: var(--red-fg);
-  background: #fffafa;
+  border-color: var(--alert-fg);
+  background: var(--surface);
 }
 
 .lc-error {
   margin: 6px 0 0;
   font-size: 14px;
   font-weight: 500;
-  color: var(--red-fg);
+  color: var(--alert-fg);
 }
 
 .lc-char-counter {
@@ -524,7 +529,7 @@ main:focus {
 }
 
 .lc-char-counter.over-limit {
-  color: var(--red-fg);
+  color: var(--alert-fg);
   font-weight: 600;
 }
 
@@ -622,9 +627,9 @@ main:focus {
 }
 
 .lc-notice-card[data-tone="red"] {
-  border-color: #dfb4b1;
-  background: var(--red-bg);
-  color: var(--red-fg);
+  border-color: #e6e6e6;
+  background: var(--alert-bg);
+  color: var(--alert-fg);
 }
 
 .lc-notice-card[data-tone="amber"] {
@@ -816,8 +821,8 @@ main:focus {
   color: var(--grey-fg);
 }
 .lc-ai-summary[data-tone="red"] {
-  background: var(--red-bg);
-  color: var(--red-fg);
+  background: var(--alert-bg);
+  color: var(--alert-fg);
 }
 
 /* What is happening now */
@@ -895,9 +900,9 @@ main:focus {
   gap: 8px;
   padding: 12px 14px 10px;
   background: var(--card);
-  border: 1.5px solid var(--input-border);
+  border: 1px solid var(--input-border);
   border-radius: 16px;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.03);
 }
 /* The composer keeps the same light border whether or not its message box has the focus; the text
    cursor in the box shows where typing goes. The transparent outline is there for forced colours,
@@ -949,8 +954,8 @@ main:focus {
   min-block-size: 1lh;
 }
 .lc-composer-textarea[aria-invalid="true"] {
-  background: #fffafa;
-  box-shadow: inset 0 -2px 0 var(--red-fg);
+  background: transparent;
+  box-shadow: inset 0 -1px 0 var(--alert-fg);
 }
 
 .lc-composer-bar {
@@ -1509,10 +1514,10 @@ dialog.lc-dialog::backdrop {
 }
 .lc-btn-danger {
   padding: 8px 12px;
-  border: 1px solid #f6e1df;
+  border: 1px solid #e0e0e0;
   border-radius: 6px;
-  background: #f6e1df;
-  color: #8c2f2b;
+  background: #f6f6f5;
+  color: #3a3a3a;
   font: inherit;
   font-size: 13px;
   font-weight: 500;

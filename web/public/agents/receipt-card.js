@@ -360,7 +360,7 @@ const CARD_CSS = `
 @layer components {
   .card {
     background: #ffffff;
-    border: 1px solid #e5e5e5;
+    border: 1px solid #ededed;
     border-radius: 6px;
     overflow: hidden;
   }
@@ -376,13 +376,13 @@ const CARD_CSS = `
     color: #3a3a3a;
   }
   .diff-text del {
-    background: #f3dcd2;
-    color: #7a2e12;
+    background: #eeeeee;
+    color: #6b6b6b;
     padding: 0 2px;
   }
   .diff-text ins {
-    background: #e6eddc;
-    color: #2f4a16;
+    background: #edf3ea;
+    color: #1a1a1a;
     text-decoration: none;
     padding: 0 2px;
   }
@@ -393,22 +393,21 @@ const CARD_CSS = `
   :host([panel]) [data-ref="details"] {
     display: none;
   }
+  /* The chosen card is told apart by a slightly darker edge only: no shadow, no colour. */
   :host([selected]) .card {
-    border-color: #cdb79c;
-    box-shadow: 0 0 0 3px #f3e9dd;
+    border-color: #d6d6d6;
   }
   .card.highlighted {
-    border-color: #8a5a2b;
-    box-shadow: 0 0 0 2px #8a5a2b33;
+    border-color: #cfcfcf;
   }
   .band {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 10px;
-    padding: 11px 16px;
+    padding: 10px 16px;
     font-size: 14px;
-    font-weight: 600;
+    font-weight: 500;
   }
   .band-left {
     display: flex;
@@ -420,30 +419,31 @@ const CARD_CSS = `
     overflow-wrap: break-word;
   }
   .band[data-look="green"] {
-    background: #ddebe3;
+    background: #f1f7f3;
     color: #2f6b4f;
   }
   .band[data-look="amber"] {
-    background: #f3e9d9;
+    background: #faf5ec;
     color: #6e4a23;
   }
+  /* Not found and the like: told by the words and the icon, in plain grey, never in red. */
   .band[data-look="red"] {
-    background: #f6e1df;
-    color: #8c2f2b;
+    background: #f6f6f5;
+    color: #3a3a3a;
   }
   .band[data-look="grey"] {
-    background: #f0f0f0;
+    background: #f6f6f5;
     color: #3a3a3a;
   }
   .band[data-look="neutral"] {
     background: #ffffff;
     color: #1a1a1a;
-    border-block-end: 1px solid #e5e5e5;
+    border-block-end: 1px solid #f0f0f0;
   }
   .collapse-toggle {
     flex: none;
     background: transparent;
-    border: 1px solid currentColor;
+    border: 1px solid #e0e0e0;
     border-radius: 4px;
     padding: 2px 10px;
     font-size: 13px;
@@ -515,7 +515,7 @@ const CARD_CSS = `
     margin: 0 0 6px;
   }
   .published-block {
-    border-inline-start: 3px solid #8a5a2b;
+    border-inline-start: 2px solid #e3d6c4;
     padding-inline-start: 14px;
     font-family: Georgia, "Times New Roman", serif;
     font-size: 17px;
@@ -525,11 +525,11 @@ const CARD_CSS = `
     max-inline-size: 72ch;
   }
   .published-block mark {
-    background: #f6e3ae;
+    background: #fbf3dc;
     color: #1a1a1a;
     text-decoration: underline;
-    text-decoration-color: #8a5a2b;
-    text-decoration-thickness: 2px;
+    text-decoration-color: #c9ab83;
+    text-decoration-thickness: 1px;
     text-underline-offset: 3px;
     padding: 0 2px;
     border-radius: 2px;
@@ -542,7 +542,7 @@ const CARD_CSS = `
   .show-all-btn {
     margin-top: 8px;
     background: transparent;
-    border: 1px solid #8c8c8c;
+    border: 1px solid #e0e0e0;
     border-radius: 4px;
     padding: 4px 10px;
     font-size: 13px;
@@ -553,7 +553,7 @@ const CARD_CSS = `
     margin: 0;
     padding: 10px 12px;
     background: #fafafa;
-    border: 1px solid #e5e5e5;
+    border: 1px solid #f0f0f0;
     border-radius: 4px;
     font-size: 14px;
     line-height: 1.55;
@@ -572,7 +572,7 @@ const CARD_CSS = `
   .nearest-box {
     padding: 10px 12px;
     background: #fafafa;
-    border: 1px solid #e5e5e5;
+    border: 1px solid #f0f0f0;
     border-radius: 4px;
     font-size: 14px;
   }
@@ -592,7 +592,7 @@ const CARD_CSS = `
     gap: 10px;
     padding: 10px 12px;
     background: #fafafa;
-    border: 1px solid #e5e5e5;
+    border: 1px solid #f0f0f0;
     border-radius: 4px;
   }
   .alt-meta {
@@ -631,7 +631,7 @@ const CARD_CSS = `
     margin: 0;
   }
   details.statement-details {
-    border-top: 1px solid #e5e5e5;
+    border-top: 1px solid #f2f2f2;
     padding-top: 10px;
     font-size: 14px;
   }
@@ -673,13 +673,13 @@ const CARD_CSS = `
     flex-wrap: wrap;
     gap: 10px 14px;
     align-items: center;
-    border-top: 1px solid #e5e5e5;
+    border-top: 1px solid #f2f2f2;
     padding-top: 12px;
     font-size: 14px;
   }
   .action-btn {
     background: transparent;
-    border: 1px solid #8c8c8c;
+    border: 1px solid #e0e0e0;
     border-radius: 4px;
     padding: 5px 10px;
     font-size: 13px;
@@ -696,13 +696,13 @@ const CARD_CSS = `
     font-size: 12px;
     min-block-size: 80px;
     padding: 8px;
-    border: 1px solid #8c8c8c;
+    border: 1px solid #e0e0e0;
     border-radius: 4px;
   }
   .reader-link-row {
     padding: 8px 12px;
     background: #fafafa;
-    border: 1px solid #e5e5e5;
+    border: 1px solid #f0f0f0;
     border-radius: 4px;
     font-size: 14px;
   }
