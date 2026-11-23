@@ -1,7 +1,7 @@
 // The console's pages (MAC-10), in the words people use: access, keys, connected apps, members.
 
-import React, { useEffect, useState } from "react";
-import { BarChart3, BookOpen, ExternalLink, KeyRound, PauseCircle, Plug, Plus } from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
+import { BarChart3, BookOpen, ExternalLink, KeyRound, MoreHorizontal, PauseCircle, Plug, Plus, RefreshCw, Trash2 } from "lucide-react";
 import {
   ApiError,
   STEP_UP,
@@ -898,13 +898,15 @@ export function Keys({ org }: PageProps) {
       {list.loading && !list.data ? <Loading /> : null}
       {list.error ? <Problem error={list.error} /> : null}
       {keys.length ? (
-        <div className="table-wrap">
+        <div className="table-wrap keys-table">
           <table>
             <thead>
               <tr>
                 <th scope="col">Name</th>
+                <th scope="col">Key</th>
                 <th scope="col">Type</th>
                 <th scope="col">Created by</th>
+                <th scope="col">Created</th>
                 <th scope="col">Expires</th>
                 <th scope="col">Last used</th>
                 <th scope="col">
@@ -913,48 +915,50 @@ export function Keys({ org }: PageProps) {
               </tr>
             </thead>
             <tbody>
-              {keys.map((key) => (
-                <tr key={key.id} className={key.state !== "active" ? "dim" : ""}>
-                  <td>
-                    {key.name}
-                    <small className="mono" dir="ltr">
-                      {maskedKey(key.id, key.last_four)}
-                    </small>
-                  </td>
-                  <td>
-                    <Pill>{key.kind === "personal" ? "Personal" : "Shared, for servers"}</Pill>
-                  </td>
-                  <td>{key.created_by ?? "—"}</td>
-                  <td>
-                    {key.state === "revoked" ? (
-                      <Pill tone="bad">Revoked</Pill>
-                    ) : key.state === "expired" ? (
-                      <Pill tone="bad">Expired</Pill>
-                    ) : key.replaced ? (
-                      <>
-                        <Pill tone="warn">Replaced</Pill> until {when(key.expires_at, true)}
-                      </>
-                    ) : (
-                      when(key.expires_at)
-                    )}
-                  </td>
-                  <td>{active || key.state !== "active" ? ago(key.last_used_at) : <Pill tone="bad">Paused</Pill>}</td>
-                  <td className="actions">
-                    {key.state === "active" && (key.mine || MANAGERS.has(org.role)) ? (
-                      <>
-                        {active && !key.replaced && (key.mine || key.kind === "service") ? (
-                          <button className="link" type="button" onClick={() => rotate(key)}>
-                            Rotate
-                          </button>
-                        ) : null}
-                        <button className="link danger" type="button" onClick={() => setConfirm(key)}>
-                          Revoke
-                        </button>
-                      </>
-                    ) : null}
-                  </td>
-                </tr>
-              ))}
+              {keys.map((key) => {
+                const manage = key.state === "active" && (key.mine || MANAGERS.has(org.role));
+                const canRotate = manage && active && !key.replaced && (key.mine || key.kind === "service");
+                return (
+                  <tr key={key.id} className={key.state !== "active" ? "dim" : ""}>
+                    <td className="key-name">{key.name}</td>
+                    <td data-label="Key">
+                      <span className="token mono" dir="ltr">
+                        {maskedKey(key.id, key.last_four)}
+                      </span>
+                    </td>
+                    <td data-label="Type">
+                      <Pill>{key.kind === "personal" ? "Personal" : "Shared, for servers"}</Pill>
+                    </td>
+                    <td data-label="Created by">{key.created_by ?? "—"}</td>
+                    <td data-label="Created">{when(key.created_at)}</td>
+                    <td data-label="Expires">
+                      {key.state === "revoked" ? (
+                        <Pill tone="bad">Revoked</Pill>
+                      ) : key.state === "expired" ? (
+                        <Pill tone="bad">Expired</Pill>
+                      ) : key.replaced ? (
+                        <>
+                          <Pill tone="warn">Replaced</Pill> until {when(key.expires_at, true)}
+                        </>
+                      ) : (
+                        when(key.expires_at)
+                      )}
+                    </td>
+                    <td data-label="Last used">
+                      {active || key.state !== "active" ? ago(key.last_used_at) : <Pill tone="bad">Paused</Pill>}
+                    </td>
+                    <td className="actions">
+                      {manage ? (
+                        <KeyMenu
+                          name={key.name}
+                          onRotate={canRotate ? () => rotate(key) : undefined}
+                          onRevoke={() => setConfirm(key)}
+                        />
+                      ) : null}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -974,9 +978,7 @@ export function Keys({ org }: PageProps) {
       {active ? (
         <div className="card">
           <h3>First request</h3>
-          <div className="code" dir="ltr">
-            {`curl ${API_ORIGIN}/api/v1/search?q=constitution \\\n  -H "Authorization: Bearer $OPEN_ALVARY_KEY"`}
-          </div>
+          <FirstRequest />
           <p className="fine">
             <External href="/docs/api">API reference, limits and errors</External>
           </p>
@@ -1011,6 +1013,129 @@ export function Keys({ org }: PageProps) {
           </div>
         </Dialog>
       ) : null}
+    </>
+  );
+}
+
+// The menu on a key's row: Rotate (where allowed) and Revoke, so the red word is not on every line.
+function KeyMenu({ name, onRotate, onRevoke }: { name: string; onRotate?: () => void; onRevoke: () => void }) {
+  // Placed against the window, so the table's scrolling box never clips it; it closes on scroll.
+  const [place, setPlace] = useState<{ top: number; right: number } | null>(null);
+  const open = place !== null;
+  const ref = useRef<HTMLDivElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
+  const setOpen = (next: boolean) => {
+    const box = button.current?.getBoundingClientRect();
+    setPlace(next && box ? { top: box.bottom + 6, right: window.innerWidth - box.right } : null);
+  };
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && setPlace(null);
+    const escape = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setPlace(null);
+      button.current?.focus();
+    };
+    const away = () => setPlace(null);
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", escape);
+    window.addEventListener("scroll", away, true);
+    window.addEventListener("resize", away);
+    ref.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", escape);
+      window.removeEventListener("scroll", away, true);
+      window.removeEventListener("resize", away);
+    };
+  }, [open]);
+  const choose = (action: () => void) => () => {
+    setOpen(false);
+    action();
+  };
+  return (
+    <div className="row-menu" ref={ref}>
+      <button
+        ref={button}
+        className="icon-button"
+        type="button"
+        aria-label={`Actions for ${name}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+      >
+        <MoreHorizontal size={18} aria-hidden="true" />
+      </button>
+      {open ? (
+        <div
+          className="popover row-popover"
+          role="menu"
+          aria-label={`Actions for ${name}`}
+          style={place ? { top: place.top, right: place.right } : undefined}
+        >
+          {onRotate ? (
+            <button role="menuitem" type="button" onClick={choose(onRotate)}>
+              <RefreshCw size={16} aria-hidden="true" />
+              Rotate
+            </button>
+          ) : null}
+          <button role="menuitem" type="button" className="danger" onClick={choose(onRevoke)}>
+            <Trash2 size={16} aria-hidden="true" />
+            Revoke
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// A first request in the language the reader uses: curl, Python or JavaScript, all the same call.
+const FIRST_REQUEST: [string, string][] = [
+  ["curl", `curl ${API_ORIGIN}/api/v1/search?q=constitution \\\n  -H "Authorization: Bearer $OPEN_ALVARY_KEY"`],
+  [
+    "Python",
+    `import os, requests\n\nr = requests.get(\n    "${API_ORIGIN}/api/v1/search",\n    params={"q": "constitution"},\n    headers={"Authorization": f"Bearer {os.environ['OPEN_ALVARY_KEY']}"},\n)\nprint(r.json())`,
+  ],
+  [
+    "JavaScript",
+    `const r = await fetch("${API_ORIGIN}/api/v1/search?q=constitution", {\n  headers: { Authorization: \`Bearer \${process.env.OPEN_ALVARY_KEY}\` },\n});\nconsole.log(await r.json());`,
+  ],
+];
+function FirstRequest() {
+  const [shown, setShown] = useState(0);
+  const tabs = useRef<(HTMLButtonElement | null)[]>([]);
+  const move = (e: React.KeyboardEvent, index: number) => {
+    if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+    e.preventDefault();
+    const next = (index + (e.key === "ArrowRight" ? 1 : FIRST_REQUEST.length - 1)) % FIRST_REQUEST.length;
+    setShown(next);
+    tabs.current[next]?.focus();
+  };
+  return (
+    <>
+      <div className="code-tabs" role="tablist" aria-label="Language">
+        {FIRST_REQUEST.map(([label], index) => (
+          <button
+            key={label}
+            ref={(el) => {
+              tabs.current[index] = el;
+            }}
+            id={`first-request-${index}`}
+            type="button"
+            role="tab"
+            aria-selected={shown === index}
+            aria-controls="first-request-code"
+            tabIndex={shown === index ? 0 : -1}
+            onClick={() => setShown(index)}
+            onKeyDown={(e) => move(e, index)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <div className="code" id="first-request-code" role="tabpanel" aria-labelledby={`first-request-${shown}`} dir="ltr" tabIndex={0}>
+        {FIRST_REQUEST[shown][1]}
+      </div>
     </>
   );
 }

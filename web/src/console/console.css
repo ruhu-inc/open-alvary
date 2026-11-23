@@ -1382,3 +1382,123 @@ details.card summary {
   gap: 6px;
   font-size: 13.5px;
 }
+
+/* ---- API keys (redesign approved 2026-11-23): the key in its own column, a menu on each row, code
+   in three languages, and cards on a phone instead of a table wider than the screen. ---- */
+.token {
+  display: inline-block;
+  font-size: 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 2px 7px;
+  white-space: nowrap;
+}
+.keys-table td {
+  vertical-align: middle;
+}
+.keys-table td.key-name {
+  font-weight: 500;
+}
+.keys-table td.actions {
+  width: 1%;
+}
+.row-menu {
+  position: relative;
+  display: inline-block;
+}
+.icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+}
+.icon-button:hover,
+.icon-button[aria-expanded="true"] {
+  background: var(--panel);
+  color: var(--ink);
+}
+.row-menu .row-popover {
+  position: fixed;
+  left: auto;
+  bottom: auto;
+  min-width: 160px;
+}
+.popover button.danger {
+  color: var(--bad-ink);
+}
+.code-tabs {
+  display: flex;
+  gap: 4px;
+  margin: 0 0 8px;
+}
+.code-tabs button {
+  border: 0;
+  background: none;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.code-tabs button[aria-selected="true"] {
+  background: var(--panel);
+  color: var(--ink);
+  font-weight: 500;
+}
+@media (max-width: 640px) {
+  /* Each key becomes a card: its name and menu on top, then labelled lines. */
+  .keys-table {
+    border: 0;
+    background: none;
+    overflow: visible;
+  }
+  .keys-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+  .keys-table table,
+  .keys-table tbody {
+    display: block;
+  }
+  .keys-table tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 4px 12px;
+    padding: 12px 14px;
+    margin-bottom: 8px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+  }
+  .keys-table td {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 0;
+    border: 0;
+    grid-column: 1 / -1;
+    min-width: 0;
+  }
+  .keys-table td[data-label]::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-size: 12.5px;
+  }
+  .keys-table td.key-name {
+    grid-column: 1;
+    grid-row: 1;
+    align-self: center;
+  }
+  .keys-table td.actions {
+    grid-column: 2;
+    grid-row: 1;
+    width: auto;
+  }
+}

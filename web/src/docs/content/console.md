@@ -83,9 +83,9 @@ curl "https://api.open.alvary.ai/api/v1/search?q=constitution" \
   -H "Authorization: Bearer $OPEN_ALVARY_KEY"
 ```
 
-The list shows each key's type, who made it, when it expires and when it was last used. **Rotate** gives a new key in its place, even when you have as many keys as allowed. The old one keeps working for 24 hours, marked **Replaced**, and isn't counted meanwhile. **Revoke** stops a key at once.
+The list shows each key's visible part, its type, who made it, when it was made, when it expires and when it was last used. The menu (**⋯**) on each key has **Rotate** and **Revoke**. **Rotate** gives a new key in its place, even when you have as many keys as allowed. The old one keeps working for 24 hours, marked **Replaced**, and isn't counted meanwhile. **Revoke** stops a key at once.
 
-![The API keys list with one personal key, Rotate and Revoke](/guide/keys-list.webp)
+![The API keys list with two personal keys, and the menu on one of them open with Rotate and Revoke](/guide/keys-list.webp)
 
 ## Connect an AI tool {#apps}
 
