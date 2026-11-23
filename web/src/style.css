@@ -3173,8 +3173,9 @@ a.record-card:hover {
     font-size: 24px;
   }
 }
-/* With "Sign in" and Law check beside six links, the header folds into the menu below 1180px. */
-nav a {
+/* With "Sign in" and Law check beside six links, the header folds into the menu below 1180px.
+   Only the header's links stay on one line: other navigation, such as a document's contents, wraps. */
+header nav a {
   white-space: nowrap;
 }
 @media (max-width: 1180px) {
