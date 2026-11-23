@@ -263,6 +263,7 @@ def test_mcp_needs_a_credential_and_answers_tools_within_the_access(api):
         "get_change",
         "retrieve_evidence",
         "check_currentness",
+        "check_claim",  # Law check's verifier, offered to every keyed app
     }
     found = client.post(
         "/mcp",

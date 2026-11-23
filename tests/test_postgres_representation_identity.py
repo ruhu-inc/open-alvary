@@ -181,7 +181,7 @@ def test_current_resource_verifier_tracks_replacement_and_new_trigger(pg_engine,
 
     with pg_engine.connect() as conn:
         verify(conn)
-    assert "141 installed" in capsys.readouterr().out
+    assert "142 installed" in capsys.readouterr().out  # 0058 added public_usage_totals()
 
 
 @pytest.mark.parametrize(
