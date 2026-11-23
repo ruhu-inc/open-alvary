@@ -343,7 +343,8 @@ def test_claim_tokens_grace_window_and_api_header_wiring():
         _harness_preamble()
         + """
 (async () => {
-  const now = Date.parse("2026-11-20T12:00:00Z");
+  // Today, not a fixed day: storeClaimTokens prunes against the real clock (Date.now()).
+  const now = Date.now();
   const expired2h = new Date(now - 2 * 3600 * 1000).toISOString();
   const expired25h = new Date(now - 25 * 3600 * 1000).toISOString();
   const future1h = new Date(now + 3600 * 1000).toISOString();
