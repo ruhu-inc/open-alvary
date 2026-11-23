@@ -1920,3 +1920,294 @@ dialog.lc-dialog::backdrop {
     font-size: 15.5px;
   }
 }
+
+/* ---- The receipt panel (design approved 2026-11-23) ------------------------------------------ */
+/* On a wide window the chosen check shows in full beside the thread; each card stays its verdict. */
+.lc-panel[hidden] {
+  display: none;
+}
+.lc-msg-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  margin-block-end: 6px;
+}
+.lc-msg-head .lc-msg-caption {
+  margin-block-end: 0;
+}
+.lc-panel-btn {
+  display: none;
+  margin-inline-start: 6px;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--ink);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+.lc-panel-btn:hover {
+  border-color: var(--accent);
+}
+@media (min-width: 1100px) {
+  .law-check-main.has-panel {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 440px;
+    align-items: stretch;
+  }
+  .law-check-main.has-panel .lc-panel-btn {
+    display: inline-flex;
+  }
+  body.lc-threaded .law-check-main.has-panel {
+    display: grid;
+    grid-template-rows: minmax(0, 1fr);
+    min-block-size: 0;
+    overflow: hidden;
+  }
+  body.lc-threaded .law-check-main.has-panel > .lc-chat {
+    min-block-size: 0;
+  }
+  .lc-panel {
+    /* Its hidden labels are absolutely placed: they stay inside the panel's own scrolling box. */
+    position: relative;
+    border-inline-start: 1px solid var(--line);
+    background: #fff;
+    padding: 22px 26px 28px;
+    overflow-y: auto;
+    min-block-size: 0;
+  }
+  body:not(.lc-threaded) .lc-panel {
+    position: sticky;
+    top: 0;
+    max-block-size: 100dvh;
+  }
+}
+.rp-tabs {
+  display: flex;
+  gap: 18px;
+  border-block-end: 1px solid var(--line);
+  margin-block: -4px 20px;
+}
+.rp-tab-btn {
+  border: 0;
+  background: none;
+  padding: 0 0 12px;
+  font-size: 14px;
+  color: var(--muted);
+}
+.rp-tab-btn[aria-selected="true"] {
+  color: var(--primary);
+  box-shadow: 0 1.5px 0 var(--primary);
+}
+.rp-tab-btn:focus-visible,
+.rp-btn:focus-visible,
+.rp-link:focus-visible,
+.rp-json:focus-visible {
+  outline: 3px solid #737373;
+  outline-offset: 3px;
+}
+.rp-tab[hidden] {
+  display: none;
+}
+.rp-kicker {
+  margin: 0 0 8px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.rp-title {
+  margin: 0 0 4px;
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 400;
+  line-height: 1.2;
+  color: var(--primary);
+}
+.rp-sub {
+  margin: 0 0 14px;
+  font-size: 13.5px;
+  color: var(--muted);
+}
+.rp-lines {
+  margin: 0 0 16px;
+  padding-inline-start: 18px;
+  font-size: 13.5px;
+  color: #3a3a3a;
+}
+.rp-lines .secondary {
+  color: var(--muted);
+}
+.rp-label {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.rp-passage {
+  margin: 0 0 16px;
+  padding: 2px 0 2px 14px;
+  border-inline-start: 2px solid var(--accent);
+  font: 15px/1.65 Georgia, "Times New Roman", serif;
+  color: #3a3a3a;
+  overflow-wrap: anywhere;
+}
+.rp-passage mark {
+  background: #f3e7d8;
+  color: var(--primary);
+}
+.rp-quote {
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  background: #f4f4f4;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #3a3a3a;
+}
+.rp-verified {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin: 4px 0 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #f4f4f4;
+  font-size: 13.5px;
+}
+.rp-verified b {
+  font-weight: 600;
+}
+.rp-tick {
+  flex: none;
+  inline-size: 24px;
+  block-size: 24px;
+  border-radius: 50%;
+  background: var(--primary);
+  position: relative;
+}
+.rp-tick::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 5px;
+  inline-size: 6px;
+  block-size: 11px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.rp-muted {
+  color: var(--muted);
+}
+.rp-meta {
+  margin: 18px 0 0;
+  border-block-start: 1px solid var(--line);
+  font-size: 13.5px;
+}
+.rp-meta div {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 9px 0;
+  border-block-end: 1px solid #efefef;
+}
+.rp-meta dt {
+  color: var(--muted);
+  flex: none;
+}
+.rp-meta dd {
+  margin: 0;
+  text-align: end;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+.rp-mono {
+  font: 500 12.5px ui-monospace, Menlo, monospace;
+}
+.rp-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin: 14px 0 0;
+  font-size: 13.5px;
+  font-weight: 500;
+}
+.rp-buttons {
+  display: flex;
+  gap: 8px;
+  margin-block-start: 16px;
+}
+.rp-btn {
+  flex: none;
+  padding: 9px 14px;
+  border: 1px solid #d6d6d6;
+  border-radius: 8px;
+  background: #fff;
+  color: var(--primary);
+  font-size: 14px;
+  font-weight: 500;
+}
+.rp-btn-dark {
+  flex: 1;
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+.rp-json {
+  margin: 0;
+  max-block-size: 60vh;
+  overflow: auto;
+  padding: 12px;
+  background: #f6f6f6;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: 12px/1.5 ui-monospace, Menlo, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+@media (forced-colors: active) {
+  .rp-tab-btn[aria-selected="true"] {
+    text-decoration: underline;
+  }
+  .rp-passage mark {
+    background: Mark;
+    color: MarkText;
+  }
+  .rp-tick {
+    background: CanvasText;
+  }
+}
+/* Folded under a thread, the composer keeps "Check a quote | Ask AI" at its bottom left, as in the
+   approved design: the message on one line, the buttons on the line under it. */
+.lc-chat.has-thread .lc-dock:not(.is-open) .lc-composer {
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
+.lc-chat.has-thread .lc-dock:not(.is-open) .lc-message-field {
+  flex: 1 1 100%;
+}
+.lc-chat.has-thread .lc-dock:not(.is-open) .lc-composer-bar {
+  flex: 1 1 100%;
+}
+.lc-chat.has-thread .lc-dock:not(.is-open) .lc-composer-bar #composer-send {
+  margin-inline-start: auto;
+}
+@media (max-width: 520px) {
+  /* A phone hides the mode switch while folded, so the message and the button share one line. */
+  .lc-chat.has-thread .lc-dock:not(.is-open) .lc-message-field {
+    flex: 1 1 0;
+  }
+  .lc-chat.has-thread .lc-dock:not(.is-open) .lc-composer-bar {
+    flex: none;
+  }
+}
+/* Two short lines when folded: the thread keeps most of the window. */
+.lc-chat.has-thread .lc-dock:not(.is-open) {
+  padding-block: 8px calc(8px + env(safe-area-inset-bottom, 0px));
+}
+.lc-chat.has-thread .lc-dock:not(.is-open) .lc-composer {
+  padding: 8px 12px 6px;
+  row-gap: 2px;
+}

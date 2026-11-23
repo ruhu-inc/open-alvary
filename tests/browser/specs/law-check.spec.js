@@ -183,7 +183,8 @@ test.describe("the composer", () => {
     expect(after.headerTop).toBe(0);
     expect(after.dockBottom).toBe(after.windowHeight);
     expect(after.threadScrolls).toBe(true);
-    // Sending folds the composer to one row, so the thread has most of the window.
+    // Sending folds the composer to its message line and, under it, the buttons, so the thread
+    // has most of the window.
     expect(after.dockHeight).toBeLessThan(120);
     expect(after.threadHeight).toBeGreaterThan(after.windowHeight * 0.6);
 
@@ -210,6 +211,45 @@ test.describe("the composer", () => {
     }));
     expect(sizes.sideways).toBeLessThanOrEqual(0);
     expect(sizes.dock).toBeLessThan(120);
+  });
+});
+
+test.describe("the receipt panel", () => {
+  test("a wide window shows the chosen check in full beside the thread @smoke", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/agents/");
+    await page.getByRole("button", { name: "Try a true quote" }).click();
+    await expect(bands(page).first()).toBeVisible();
+    const panel = page.locator("#receipt-panel");
+    await expect(panel).toBeVisible();
+    await expect(panel.locator(".rp-kicker")).toContainText("Quoted words found");
+    await expect(panel.locator(".rp-passage mark")).toContainText("the right of any person");
+    // Beside the panel the card is the verdict: its passage is in the panel.
+    await expect(page.locator("oa-receipt .published-block").first()).toBeHidden();
+
+    await checkQuote(page, ALTERED_QUOTE);
+    await expect(bands(page)).toHaveCount(2);
+    await expect(panel.locator(".rp-kicker")).toContainText("not found");
+    // The card says which word differs.
+    await expect(page.locator("oa-receipt .diff-text del").last()).toContainText("citizen");
+    await expect(page.locator("oa-receipt .diff-text ins").last()).toContainText("person");
+
+    // An earlier check can be chosen again; the panel follows, and the tabs work from the keyboard.
+    await page.getByRole("button", { name: "Show the receipt" }).first().click();
+    await expect(panel.locator(".rp-kicker")).toContainText("Quoted words found");
+    await expect(page.getByRole("tab", { name: "Receipt" })).toBeFocused();
+    await page.keyboard.press("ArrowRight");
+    await expect(page.getByRole("tab", { name: "Proof JSON" })).toHaveAttribute("aria-selected", "true");
+    await expect(panel.locator(".rp-json")).toContainText('"receipt_id"');
+  });
+
+  test("a narrow window keeps each card whole and shows no panel", async ({ page }) => {
+    await page.setViewportSize({ width: 900, height: 800 });
+    await page.goto("/agents/");
+    await page.getByRole("button", { name: "Try a true quote" }).click();
+    await expect(bands(page).first()).toBeVisible();
+    await expect(page.locator("#receipt-panel")).toBeHidden();
+    await expect(page.locator("oa-receipt .published-block mark").first()).toContainText("the right of any person");
   });
 });
 

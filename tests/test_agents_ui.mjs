@@ -19,6 +19,7 @@ import {
   recordLinesForReceipt,
   bandHeadlineForReceipt,
   safeLinkHref,
+  wordDifference,
 } from "../web/public/agents/receipt-card.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -458,5 +459,44 @@ describe("the thread: what is checked without AI, and what the AI's words may dr
     assert.ok(made >= 4, "expected the form, saved-proof, agent and restore paths");
     assert.match(siteSrc, /if \(!verification\.ok\) \{\s*this\._appendNotice\(verificationErrorMessage/);
     assert.match(siteSrc, /if \(!verification\.ok\) continue;/);
+  });
+});
+
+describe("where a quote that was not found differs (design approved 2026-11-23)", () => {
+  const section =
+    "(1) Notwithstanding anything contained in any other Act, law or regulation, the right of any person to access or request information, whether or not contained in any written form, which is in the custody or possession of any public official, agency or institution howsoever described, is established.";
+  const quote = section.slice(4);
+
+  it("names the one word changed, with words around it", () => {
+    const d = wordDifference(quote.replace("any person", "any citizen"), section);
+    assert.equal(d.quoteWords, "citizen");
+    assert.equal(d.sectionWords, "person");
+    assert.match(d.before, /the right of any$/);
+    assert.match(d.after, /^to access or request/);
+  });
+
+  it("names a word left out and a word added", () => {
+    assert.equal(wordDifference(quote.replace("or request ", ""), section).sectionWords, "or request");
+    assert.equal(wordDifference(quote.replace("any written", "any lawful written"), section).quoteWords, "lawful");
+  });
+
+  it("says nothing when it cannot line the two up", () => {
+    assert.equal(wordDifference(quote, section), null); // nothing differs
+    assert.equal(wordDifference("A sentence from some other law entirely, about fishing rights.", section), null);
+    assert.equal(wordDifference("Notwithstanding anything contained in a completely different ending of many words here", section), null);
+    assert.equal(wordDifference(null, section), null);
+  });
+});
+
+describe("the receipt panel (design approved 2026-11-23)", () => {
+  const panelSrc = fs.readFileSync(path.join(repoRoot, "web/public/agents/receipt-panel.js"), "utf8");
+  const pageHtml = fs.readFileSync(path.join(repoRoot, "web/public/agents/index.html"), "utf8");
+
+  it("is in the page, hidden until there is a check to show", () => {
+    assert.match(pageHtml, /<aside class="lc-panel" id="receipt-panel" aria-label="The chosen check" hidden><\/aside>/);
+  });
+
+  it("never puts receipt data into innerHTML", () => {
+    assert.doesNotMatch(panelSrc, /innerHTML|insertAdjacentHTML|outerHTML/);
   });
 });

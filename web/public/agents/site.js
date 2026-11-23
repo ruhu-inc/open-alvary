@@ -24,6 +24,7 @@ import {
   wordsLineForReceipt,
   recordLinesForReceipt,
 } from "./receipt-card.js";
+import { renderReceiptPanel } from "./receipt-panel.js";
 
 const STORAGE_KEY = "oa_law_check_thread_v2";
 const OLD_STORAGE_KEY = "oa_law_check_receipts_v1";
@@ -384,6 +385,9 @@ class LawCheckController {
     this.jwks = null;
     this.items = []; // what the thread holds, as saved in the tab: user, ai, result, divider
     this.cardByReceiptId = new Map();
+    // The check shown in full in the receipt panel, on a window wide enough for it.
+    this.selectedCard = null;
+    this.panelWide = typeof matchMedia === "function" ? matchMedia("(min-width: 1100px)") : null;
     this.cardsBySourceId = new Map();
     this.runtime = null; // { engine, trace } once the challenge runtime has started
     this.runtimeLoaded = false;
@@ -447,6 +451,7 @@ class LawCheckController {
       },
     });
 
+    this.panelWide?.addEventListener?.("change", () => this._syncPanel());
     this._bindMobileNav();
     this._bindSlashMenu();
     this._bindComposer();
@@ -1542,6 +1547,7 @@ class LawCheckController {
           ? "Saved proof, checked by Open Alvary"
           : "Checked by Open Alvary. No AI was used.";
     const card = document.createElement("oa-receipt");
+    if (this.panelWide?.matches) card.setAttribute("panel", "");
     card.setData({
       receipt: entry.receipt,
       claim: entry.claim,
@@ -1551,8 +1557,22 @@ class LawCheckController {
       collapsed,
     });
     card.dataset.turn = String(this.turnSeq);
-    li.append(caption, card);
+    // Beside the receipt panel, a card is chosen with this button, or by clicking the card.
+    const show = document.createElement("button");
+    show.type = "button";
+    show.className = "lc-panel-btn";
+    show.textContent = "Show the receipt";
+    show.addEventListener("click", () => this._selectCard(card, { focusPanel: true }));
+    const head = document.createElement("div");
+    head.className = "lc-msg-head";
+    head.append(caption, show);
+    card.addEventListener("click", (event) => {
+      const interactive = event.composedPath().some((node) => ["A", "BUTTON", "SUMMARY", "TEXTAREA"].includes(node?.tagName));
+      if (!interactive) this._selectCard(card);
+    });
+    li.append(head, card);
     this._appendItem(li, { reveal });
+    if (reveal || !collapsed) this._selectCard(card);
 
     if (entry.receipt.receipt_id) this.cardByReceiptId.set(entry.receipt.receipt_id, card);
     const sid = entry.receipt.part?.source_id;
@@ -1573,6 +1593,30 @@ class LawCheckController {
       this._announce(`${title}. ${wl}. ${rl}`);
     }
     return card;
+  }
+
+  // Shows a card's check in full in the receipt panel and marks the card as the one shown.
+  _selectCard(card, { focusPanel = false } = {}) {
+    this.selectedCard = card;
+    for (const other of $("thread-list").querySelectorAll("oa-receipt")) {
+      other.toggleAttribute("selected", other === card);
+    }
+    this._syncPanel();
+    if (focusPanel && this.panelWide?.matches) $("receipt-panel")?.querySelector('[role="tab"][aria-selected="true"]')?.focus();
+  }
+
+  // The panel shows on a wide window once there is a check to show; on a narrow one each card
+  // keeps its own details, as before.
+  _syncPanel() {
+    const panel = $("receipt-panel");
+    if (!panel) return;
+    const wide = Boolean(this.panelWide?.matches && this.selectedCard?.isConnected);
+    for (const card of $("thread-list").querySelectorAll("oa-receipt")) {
+      card.toggleAttribute("panel", Boolean(this.panelWide?.matches));
+    }
+    panel.hidden = !wide;
+    document.querySelector(".law-check-main")?.classList.toggle("has-panel", wide);
+    if (wide) renderReceiptPanel(panel, this.selectedCard, { tab: panel.dataset.tab });
   }
 
   async _restoreThread() {

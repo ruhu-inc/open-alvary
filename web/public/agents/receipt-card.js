@@ -185,6 +185,67 @@ export function recordLinesForReceipt(receipt) {
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
+// Where a quote that was not found departs from the section's opening words. Both are split into
+// words; the quote's first words are looked for in the section, then the shared words at each end
+// are set aside, and what is left is the difference. Returns null when the two cannot be lined up
+// with confidence (the quote starts outside the opening the receipt carries, or differs too much).
+export function wordDifference(quote, sectionText) {
+  if (typeof quote !== "string" || typeof sectionText !== "string") return null;
+  const split = (t) => t.trim().split(/\s+/).filter(Boolean);
+  const norm = (w) => w.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+  const q = split(quote);
+  const s = split(sectionText);
+  if (q.length < 4 || s.length < 4) return null;
+  const qn = q.map(norm);
+  const sn = s.map(norm);
+  const anchor = 3;
+  let start = -1;
+  for (let i = 0; i + anchor <= sn.length; i++) {
+    if (qn.slice(0, anchor).every((w, k) => w === sn[i + k])) {
+      start = i;
+      break;
+    }
+  }
+  if (start < 0) return null;
+  let p = 0;
+  while (p < qn.length && start + p < sn.length && qn[p] === sn[start + p]) p++;
+  if (p === qn.length) return null; // the whole quote is there: nothing to show
+  // Line the ends up: the quote's last words, found in the section after the shared start.
+  let best = null;
+  for (let qEnd = qn.length; qEnd > p; qEnd--) {
+    const tail = qn.slice(qEnd - Math.min(anchor, qEnd - p), qEnd);
+    for (let j = start + p; j + tail.length <= sn.length; j++) {
+      if (tail.every((w, k) => w === sn[j + k])) {
+        best = { qEnd, sEnd: j + tail.length };
+        break;
+      }
+    }
+    if (best) break;
+  }
+  if (!best) return null;
+  // The quote's own last words must line up, unless the section's opening ends first.
+  if (best.qEnd < qn.length && best.sEnd < sn.length) return null;
+  let qa = best.qEnd;
+  let sa = best.sEnd;
+  // Walk back over the shared words at the end.
+  while (qa > p && sa > start + p && qn[qa - 1] === sn[sa - 1]) {
+    qa--;
+    sa--;
+  }
+  const quoteWords = q.slice(p, qa);
+  const sectionWords = s.slice(start + p, sa);
+  if (quoteWords.length > 12 || sectionWords.length > 12) return null;
+  if (!quoteWords.length && !sectionWords.length) return null;
+  return {
+    before: q.slice(Math.max(0, p - 6), p).join(" "),
+    quoteWords: quoteWords.join(" "),
+    sectionWords: sectionWords.join(" "),
+    after: q.slice(qa, Math.min(q.length, qa + 6)).join(" "),
+    leadingCut: p > 6,
+    trailingCut: qa + 6 < q.length,
+  };
+}
+
 function createSvgIcon(kind, size = 18) {
   const svg = document.createElementNS(SVG_NS, "svg");
   svg.setAttribute("viewBox", "0 0 20 20");
@@ -292,6 +353,39 @@ const CARD_CSS = `
     border: 1px solid #e5e5e5;
     border-radius: 6px;
     overflow: hidden;
+  }
+  .diff {
+    margin-block: 4px 2px;
+  }
+  .diff-text {
+    margin: 4px 0 0;
+    padding: 12px 14px;
+    border-radius: 8px;
+    background: #faf5ef;
+    font: 16px/1.6 Georgia, "Times New Roman", serif;
+    color: #3a3a3a;
+  }
+  .diff-text del {
+    background: #f3dcd2;
+    color: #7a2e12;
+    padding: 0 2px;
+  }
+  .diff-text ins {
+    background: #e6eddc;
+    color: #2f4a16;
+    text-decoration: none;
+    padding: 0 2px;
+  }
+  /* Beside the receipt panel, the card is the verdict; the passage, the quote and the signature
+     details are in the panel. */
+  :host([panel]) [data-ref="published-section"],
+  :host([panel]) [data-ref="quote-section"],
+  :host([panel]) [data-ref="details"] {
+    display: none;
+  }
+  :host([selected]) .card {
+    border-color: #cdb79c;
+    box-shadow: 0 0 0 3px #f3e9dd;
   }
   .card.highlighted {
     border-color: #8a5a2b;
@@ -698,6 +792,10 @@ function getCardTemplate() {
         </div>
         <div class="body" data-ref="body">
           <ul class="lines" data-ref="lines" hidden></ul>
+          <div class="diff" data-ref="diff" hidden>
+            <p class="section-label">Where your quote differs from the section</p>
+            <p class="diff-text" data-ref="diff-text" dir="auto"></p>
+          </div>
           <div data-ref="grey-area" hidden></div>
           <div data-ref="newer-text" class="newer-text-note" hidden></div>
           <div data-ref="published-section" hidden>
@@ -801,6 +899,39 @@ export class OaReceiptElement extends BaseElement {
       window.removeEventListener("beforeprint", this._onBeforePrint);
       window.removeEventListener("afterprint", this._onAfterPrint);
     }
+  }
+
+  get receipt() {
+    return this._receipt;
+  }
+
+  get claim() {
+    return this._claim;
+  }
+
+  get verification() {
+    return this._verification;
+  }
+
+  get source() {
+    return this._source;
+  }
+
+  // The plain-text summary the card's "Copy summary" button copies, for the receipt panel.
+  summaryText() {
+    return this._formatAsPlainText();
+  }
+
+  // Saves the receipt and its claim as a proof file, as the card's "Save proof" button does.
+  saveProof() {
+    const payload = JSON.stringify({ receipt: this._receipt, claim: this._claim }, null, 2);
+    const blob = new Blob([payload], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${this._receipt?.receipt_id || "open-alvary-receipt"}.json`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
   get receiptId() {
@@ -944,6 +1075,36 @@ export class OaReceiptElement extends BaseElement {
       }
     } else {
       linesEl.hidden = true;
+    }
+
+    // Where a quote that was not found departs from the section's opening words
+    const diffBox = this._els.diff;
+    const diffText = this._els["diff-text"];
+    diffText.replaceChildren();
+    const difference =
+      r.status === "wording_differs" && c?.quote && r.findings?.opening_text
+        ? wordDifference(c.quote, r.findings.opening_text)
+        : null;
+    if (difference) {
+      diffBox.hidden = false;
+      if (r.part?.language) diffText.setAttribute("lang", r.part.language);
+      const add = (node) => diffText.appendChild(node);
+      const text = (t) => document.createTextNode(t);
+      const marked = (tag, label, words) => {
+        const el = document.createElement(tag);
+        const sr = document.createElement("span");
+        sr.className = "sr-only";
+        sr.textContent = label;
+        el.append(sr, text(words));
+        return el;
+      };
+      add(text((difference.leadingCut ? "…" : "") + (difference.before ? difference.before + " " : "")));
+      if (difference.quoteWords) add(marked("del", "your quote says: ", difference.quoteWords));
+      if (difference.quoteWords && difference.sectionWords) add(text(" "));
+      if (difference.sectionWords) add(marked("ins", "the section says: ", difference.sectionWords));
+      add(text((difference.after ? " " + difference.after : "") + (difference.trailingCut ? "…" : "")));
+    } else {
+      diffBox.hidden = true;
     }
 
     // Grey-card guidance, nearest, alternatives
@@ -1152,16 +1313,7 @@ export class OaReceiptElement extends BaseElement {
     downloadBtn.type = "button";
     downloadBtn.className = "action-btn";
     downloadBtn.textContent = "Save proof";
-    downloadBtn.addEventListener("click", () => {
-      const payload = JSON.stringify({ receipt: r, claim: c }, null, 2);
-      const blob = new Blob([payload], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${r.receipt_id || "open-alvary-receipt"}.json`;
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-    });
+    downloadBtn.addEventListener("click", () => this.saveProof());
     actionsEl.appendChild(downloadBtn);
 
     this._updateCollapseUi();
