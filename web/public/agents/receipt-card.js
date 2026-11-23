@@ -212,17 +212,27 @@ export function wordDifference(quote, sectionText) {
   if (p === qn.length) return null; // the whole quote is there: nothing to show
   // Line the ends up: the quote's last words, found in the section after the shared start.
   let best = null;
-  for (let qEnd = qn.length; qEnd > p; qEnd--) {
-    const tail = qn.slice(qEnd - Math.min(anchor, qEnd - p), qEnd);
-    for (let j = start + p; j + tail.length <= sn.length; j++) {
-      if (tail.every((w, k) => w === sn[j + k])) {
-        best = { qEnd, sEnd: j + tail.length };
-        break;
+  for (let qEnd = qn.length; qEnd > p && !best; qEnd--) {
+    // At the quote's very end one shared word is enough to line up, so a slip in its last words
+    // (a typo in "writen form") is still shown.
+    const longest = Math.min(anchor, qEnd - p);
+    const shortest = qEnd === qn.length ? 1 : longest;
+    for (let size = longest; size >= shortest && !best; size--) {
+      const tail = qn.slice(qEnd - size, qEnd);
+      for (let j = start + p; j + tail.length <= sn.length; j++) {
+        if (tail.every((w, k) => w === sn[j + k])) {
+          best = { qEnd, sEnd: j + tail.length };
+          break;
+        }
       }
     }
-    if (best) break;
   }
-  if (!best) return null;
+  if (!best) {
+    // The quote departs only in its last word or two: set them beside the section's words in their place.
+    const left = qn.length - p;
+    if (left > 2 || start + p + left > sn.length) return null;
+    best = { qEnd: qn.length, sEnd: start + p + left };
+  }
   // The quote's own last words must line up, unless the section's opening ends first.
   if (best.qEnd < qn.length && best.sEnd < sn.length) return null;
   let qa = best.qEnd;

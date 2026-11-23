@@ -480,6 +480,16 @@ describe("where a quote that was not found differs (design approved 2026-11-23)"
     assert.equal(wordDifference(quote.replace("any written", "any lawful written"), section).quoteWords, "lawful");
   });
 
+  it("names a slip in the quote's last words, as a person pasting a part of the section makes", () => {
+    const part = "the right of any person to access or request information, whether or not contained in any";
+    const typo = wordDifference(`${part} writen form`, section);
+    assert.equal(typo.quoteWords, "writen");
+    assert.equal(typo.sectionWords, "written");
+    const last = wordDifference(`${part} written fom`, section);
+    assert.equal(last.quoteWords, "fom");
+    assert.equal(last.sectionWords, "form,");
+  });
+
   it("says nothing when it cannot line the two up", () => {
     assert.equal(wordDifference(quote, section), null); // nothing differs
     assert.equal(wordDifference("A sentence from some other law entirely, about fishing rights.", section), null);
