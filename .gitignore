@@ -33,3 +33,7 @@ backups/
 /scripts/verify_spec.py
 /tests/test_planning_execution.py
 /tests/test_spec_contracts.py
+
+# Browser tests
+tests/browser/test-results/
+tests/browser/playwright-report/

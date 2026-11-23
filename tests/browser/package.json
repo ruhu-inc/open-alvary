@@ -1,0 +1,14 @@
+{
+  "name": "open-alvary-browser-tests",
+  "private": true,
+  "type": "module",
+  "description": "Browser tests for the Law check page (/agents/). They start scripts/law_check_local.py and need no key and no outside call.",
+  "scripts": {
+    "test": "playwright test",
+    "test:chromium": "playwright test --project=chromium"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.14.0",
+    "@playwright/test": "1.65.1"
+  }
+}

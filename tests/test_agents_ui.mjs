@@ -365,7 +365,9 @@ describe("page behaviour the 2026-11-23 review found broken", () => {
     assert.match(css, /\.lc-chat\.has-thread \.lc-dock:not\(\.is-open\) \.lc-composer \{/);
     assert.doesNotMatch(css, /\.lc-dock:not\(:focus-within\)/);
     assert.match(siteSrc, /for \(const type of \["focusin", "input", "keydown", "pointerdown"\]\) dock\.addEventListener\(type, openDock\);/);
-    assert.match(siteSrc, /if \(!dock\.contains\(e\.relatedTarget\)\) dock\.classList\.remove\("is-open"\);/);
+    // A focus that goes nowhere, or to a region around the composer (Safari, on a clicked button),
+    // must not fold it.
+    assert.match(siteSrc, /if \(next && !dock\.contains\(next\) && !next\.contains\(dock\)\) dock\.classList\.remove\("is-open"\);/);
     assert.match(css, /body\.lc-threaded \.site-header \{[^}]*min-block-size: 64px;/);
     assert.match(css, /\.lc-composer\[data-mode="quote"\] \{\s*display: grid;/);
   });

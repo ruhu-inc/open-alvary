@@ -30,6 +30,7 @@ jobs:
           cache-dependency-path: |
             web/package-lock.json
             workbench/editor/package-lock.json
+            tests/browser/package-lock.json
       - run: pip install -r requirements.lock -r deployment/ingestion-jobs.requirements.lock && pip install --no-deps -e .
       - run: ruff check . && ruff format --check . && pytest -q --fast
       - name: PostgreSQL integration contracts
@@ -48,6 +49,14 @@ jobs:
         env:
           DATABASE_URL: postgresql+psycopg://open_alvary:test-only@localhost:5432/open_alvary_test
       - run: npm --prefix web ci && npm --prefix web run build
+      - name: Law check page, receipt verifier and demo gate (files and pure functions)
+        run: node --test tests/test_agents_ui.mjs clients/receipt/receipt.test.mjs demo/law-check-peer/tests/demo.test.mjs
+      - name: Law check in Chromium, Firefox and WebKit, on a local server with a scripted model and no outside call
+        run: |
+          npm --prefix tests/browser ci
+          cd tests/browser
+          npx playwright install --with-deps chromium firefox webkit
+          npx playwright test
       - name: Review editor tests, and both committed workbench bundles built from their source
         run: |
           npm --prefix workbench/editor ci

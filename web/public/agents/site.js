@@ -681,8 +681,16 @@ class LawCheckController {
       if (isTextField(e.target)) dock.classList.add("is-open");
     };
     for (const type of ["focusin", "input", "keydown", "pointerdown"]) dock.addEventListener(type, openDock);
+    // It folds when the focus goes to something outside it, or on a press outside it. Safari gives
+    // a clicked button no focus: pressing Send there moves the focus from the box to nothing, or to
+    // the page's main region, which contains the composer. Neither is a reason to fold, since
+    // folding then would move Send from under the pointer before the click landed.
     dock.addEventListener("focusout", (e) => {
-      if (!dock.contains(e.relatedTarget)) dock.classList.remove("is-open");
+      const next = e.relatedTarget;
+      if (next && !dock.contains(next) && !next.contains(dock)) dock.classList.remove("is-open");
+    });
+    document.addEventListener("pointerdown", (e) => {
+      if (!dock.contains(e.target)) dock.classList.remove("is-open");
     });
 
     $("mode-quote")?.addEventListener("click", () => this._setMode("quote", { focus: true }));
@@ -1181,7 +1189,13 @@ class LawCheckController {
       if (toggleKeyBtn) toggleKeyBtn.textContent = "Show";
     };
 
-    const openDialog = async () => {
+    // What opened the dialog, so the focus can go back to it. Safari gives a clicked button no
+    // focus, so the browser alone would have nowhere to return it.
+    let opener = null;
+    let returnFocus = true;
+    const openDialog = async (event) => {
+      opener = event?.currentTarget instanceof HTMLElement ? event.currentTarget : openBtn;
+      returnFocus = true;
       const profile = await refreshProviderUi();
       keyInput.value = "";
       if (profile?.key) {
@@ -1242,6 +1256,8 @@ class LawCheckController {
       dialog.returnValue = "";
       keyInput.value = "";
       resetKeyVisibility();
+      // After the browser's own handling of the close, so its choice does not undo this one.
+      if (returnFocus && opener?.isConnected) setTimeout(() => opener.focus(), 0);
     });
 
     for (const btn of presetBtns) {
@@ -1311,6 +1327,8 @@ class LawCheckController {
       );
       byok.saveTabByokSetup({ router, model, key });
       const chatStarted = this.runtimeLoaded || this.runtimeLoading;
+      // After a save the focus goes to the message box (below), not back to the button.
+      returnFocus = false;
       dialog.close();
       // On Ask AI this also starts the chat, now that there is a key.
       await refreshProviderUi();

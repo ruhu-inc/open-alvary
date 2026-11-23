@@ -14,7 +14,7 @@
   <a class="skip-link" href="#main-content">Skip to main content</a>
 
   <header class="site-header">
-    <a class="brand" href="/" aria-label="Open Alvary home">
+    <a class="brand" href="/">
       <svg class="brand-mark" width="40" height="40" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
         <g fill="none" stroke="currentColor" stroke-width="2.2">
           <polygon points="32,6.59 19.59,33.04 32,41.01 44.41,33.04" />
@@ -22,7 +22,8 @@
           <polygon points="46.44,37.37 55.69,57.1 35.19,44.31" />
         </g>
       </svg>
-      <span>open<span class="brand-light">alvary</span></span>
+      <!-- The link's name is its visible words, with "home" added for screen readers (WCAG 2.5.3) -->
+      <span>open<span class="brand-light">alvary</span></span><span class="sr-only"> home</span>
     </a>
     <button
       type="button"
