@@ -9,6 +9,7 @@ import {
   claimDigest,
   verifyReceipt,
   base64UrlToBytes,
+  MAX_FUTURE_SKEW_MS,
   RECEIPT_SCHEMA_VERSION,
 } from "./receipt.js";
 
@@ -117,6 +118,49 @@ describe("verifyReceipt edge cases", () => {
     );
     assert.equal(res.ok, false);
     assert.equal(res.reason, "key_not_yet_valid");
+  });
+
+  // The same reading of the key list as the Python verifier (api/receipts.py): tests/test_law_check_release.py.
+  const withKey = (change) => ({
+    keys: vectors.jwks.keys.map((k) => (k.kid === validCase.receipt.key.kid ? change({ ...k }) : k)),
+  });
+  const check = (jwks, now = vectors.now) =>
+    verifyReceipt(validCase.receipt, jwks, { claim: validCase.claim, now });
+
+  it("refuses a key that does not say when it became valid", async () => {
+    const missing = await check(withKey((k) => { delete k.valid_from; return k; }));
+    assert.equal(missing.ok, false);
+    assert.equal(missing.reason, "key_not_yet_valid");
+    const empty = await check(withKey((k) => ({ ...k, valid_from: "" })));
+    assert.equal(empty.reason, "key_not_yet_valid");
+    assert.equal((await check(vectors.jwks)).ok, true);
+  });
+
+  it("treats any revoked_at but null as withdrawn, and an empty valid_to as no valid window", async () => {
+    const revoked = await check(withKey((k) => ({ ...k, revoked_at: "" })));
+    assert.equal(revoked.ok, false);
+    assert.equal(revoked.reason, "key_revoked");
+    const live = await check(withKey((k) => { delete k.revoked_at; return k; }));
+    assert.equal(live.ok, true);
+    const open = await check(withKey((k) => ({ ...k, valid_to: "" })));
+    assert.equal(open.ok, false);
+    assert.equal(open.reason, "key_expired");
+  });
+
+  it("refuses a receipt dated more than a few minutes after it is read", async () => {
+    const issued = Date.parse(validCase.receipt.issued_at);
+    const early = await check(vectors.jwks, issued - MAX_FUTURE_SKEW_MS - 1000);
+    assert.equal(early.ok, false);
+    assert.equal(early.reason, "issued_in_future");
+    assert.ok(early.summary.length > 0);
+    const within = await check(vectors.jwks, issued - MAX_FUTURE_SKEW_MS + 1000);
+    assert.equal(within.ok, true);
+  });
+
+  it("the demo site's receipt.js is an exact copy of clients/receipt/receipt.js", () => {
+    const src = fs.readFileSync(path.join(__dirname, "receipt.js"));
+    const copy = fs.readFileSync(path.join(__dirname, "../../demo/law-check-peer/receipt.js"));
+    assert.ok(src.equals(copy), "demo/law-check-peer/receipt.js must match clients/receipt/receipt.js");
   });
 
   it("rejects padded base64url signatures", () => {

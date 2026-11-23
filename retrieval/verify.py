@@ -13,7 +13,9 @@ from retrieval.check import Checker
 from retrieval.pack import dataset_revision
 from schema.public import CheckItem, NodeViewRecord, Receipt
 
-ALLOWED_ARGUMENTS = frozenset({"citation", "anchor_id", "quote", "as_of", "jurisdiction", "language", "reading"})
+ALLOWED_ARGUMENTS = frozenset(
+    {"citation", "anchor_id", "quote", "as_of", "jurisdiction", "language", "reading"}
+)
 JURISDICTION_RE = re.compile(r"^[a-z]{2}(?:-[a-z0-9]{1,12})?$")
 LANGUAGE_RE = re.compile(r"^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$")
 MAX_PART_BYTES = 256 * 1024
@@ -34,6 +36,9 @@ LIGATURES = {
 CURLY_SINGLE = frozenset({"\u2018", "\u2019", "\u201a", "\u201b"})
 CURLY_DOUBLE = frozenset({"\u201c", "\u201d", "\u201e", "\u201f"})
 DASHES = frozenset({"\u2010", "\u2011", "\u2012", "\u2013", "\u2014", "\u2015", "\u2212"})
+# A true hyphen between two word characters joins them into one word ("non-public", "tax-exempt").
+# Longer dashes are punctuation between words, so they stay word breaks.
+HYPHEN_JOINERS = frozenset({"-", "\u2010", "\u2011"})
 
 _ELLIPSIS_LEAD = re.compile(r"^(?:\s|…|\.\.\.)+")
 _ELLIPSIS_TRAIL = re.compile(r"(?:\s|…|\.\.\.)+$")
@@ -141,21 +146,45 @@ def normalize_quote(text: str) -> str:
     return norm
 
 
-def _find_bounded(haystack: str, needle: str, start: int = 0) -> int:
+def _find_bounded(haystack: str, needle: str, start: int = 0, published=None) -> int:
     """Find first occurrence of ``needle`` in ``haystack`` at or after ``start`` with punctuation-safe
-    word boundaries."""
+    word boundaries.
+
+    A quote that starts or ends on a word character must start or end a whole word. A hyphen straight
+    between two word characters joins them, so "public institution" is not found in "non-public
+    institution", nor "subject to tax" in "subject to tax-exempt". ``published(i)`` gives the published
+    character behind ``haystack[i]``: the normal form turns every dash into "-", and only a true hyphen
+    joins words. Hyphenated line ends (a hyphen followed by white space) are not joined."""
     if not needle:
         return -1
     starts_word = _is_word_char(needle[0])
     ends_word = _is_word_char(needle[-1])
+
+    def joiner(i: int) -> bool:
+        return (published(i) if published is not None else haystack[i]) in HYPHEN_JOINERS
+
     pos = start
     while True:
         idx = haystack.find(needle, pos)
         if idx == -1:
             return -1
         end = idx + len(needle)
-        left_ok = not starts_word or idx == 0 or not _is_word_char(haystack[idx - 1])
-        right_ok = not ends_word or end == len(haystack) or not _is_word_char(haystack[end])
+        left_ok = (
+            not starts_word
+            or idx == 0
+            or not (
+                _is_word_char(haystack[idx - 1])
+                or (idx >= 2 and joiner(idx - 1) and _is_word_char(haystack[idx - 2]))
+            )
+        )
+        right_ok = (
+            not ends_word
+            or end == len(haystack)
+            or not (
+                _is_word_char(haystack[end])
+                or (end + 1 < len(haystack) and joiner(end) and _is_word_char(haystack[end + 1]))
+            )
+        )
         if left_ok and right_ok:
             return idx
         pos = idx + 1
@@ -209,6 +238,10 @@ def match_quote(part_text: str, quote: str) -> dict:
 
     norm_part, norm_map = _normalize_with_map(part_text)
 
+    def published(i: int) -> str:
+        """The published character behind position ``i`` of the normal form."""
+        return part_text[norm_map[i][0] : norm_map[i][1]]
+
     if len(norm_pieces) > 1:
         for piece in norm_pieces:
             if len(piece) < MIN_OMISSION_PIECE_LEN:
@@ -224,7 +257,7 @@ def match_quote(part_text: str, quote: str) -> dict:
         cursor = 0
         matched_spans: list[tuple[int, int]] = []
         for piece in norm_pieces:
-            idx = _find_bounded(norm_part, piece, cursor)
+            idx = _find_bounded(norm_part, piece, cursor, published)
             if idx == -1:
                 return _absent_result(part_text)
             end_idx = idx + len(piece)
@@ -238,7 +271,7 @@ def match_quote(part_text: str, quote: str) -> dict:
                 f"Quoted segments span more than {MAX_OMISSION_SPREAD:,} characters in the published text.",
             )
         omitted: list[list[int]] = []
-        for (_, prev_end), (next_start, _) in zip(matched_spans, matched_spans[1:]):
+        for (_, prev_end), (next_start, _) in zip(matched_spans, matched_spans[1:], strict=False):
             if next_start > prev_end:
                 omitted.append([prev_end - orig_start, next_start - orig_start])
         return {
@@ -275,7 +308,7 @@ def match_quote(part_text: str, quote: str) -> dict:
         }
 
     # 2. Try normalised
-    norm_idx = _find_bounded(norm_part, norm_q, 0)
+    norm_idx = _find_bounded(norm_part, norm_q, 0, published)
     if norm_idx != -1:
         orig_start = norm_map[norm_idx][0]
         orig_end = norm_map[norm_idx + len(norm_q) - 1][1]
@@ -303,6 +336,10 @@ def _validate_arguments(arguments: dict, today: date) -> tuple[dict, dict]:
     anchor_id = arguments.get("anchor_id")
     if citation is None and anchor_id is None:
         raise ValueError("One of citation or anchor_id is required")
+    if "citation" in arguments and "anchor_id" in arguments:
+        # With both, the part is found by anchor_id and the citation would be digested unchecked: a
+        # receipt for one section could then be shown beside a claim naming another.
+        raise ValueError("Send citation or anchor_id, not both")
 
     echoed: dict[str, object] = {}
 
@@ -688,10 +725,17 @@ def verify_claim(
         assert citation is not None
         res = catalogue.citations(citation, as_of=None, language=language)
 
-        # Enforce allowed_source_ids BEFORE signing for any resolved public record.
+        # Enforce allowed_source_ids BEFORE signing. A citation that names records on and off the list
+        # is answered for those on it, as resolve_citation answers it; `unavailable` only when every
+        # record it names is off the list.
         if res.matches and allowed_source_ids is not None:
-            for match in res.matches:
-                _enforce_allowed_source(match.id, allowed_source_ids)
+            off_list = [match.id for match in res.matches if match.id not in allowed_source_ids]
+            if len(off_list) == len(res.matches):
+                _enforce_allowed_source(off_list[0], allowed_source_ids)
+            if off_list:
+                from api.mcp import _filter_citation_view
+
+                res = _filter_citation_view(res, frozenset(allowed_source_ids))
 
         # Row 1: no public record named
         if not res.matches:

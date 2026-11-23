@@ -5,7 +5,6 @@ import logging
 from contextlib import contextmanager
 from hashlib import sha256
 
-import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from fastapi import FastAPI
@@ -23,7 +22,14 @@ from api.mcp import TOOLS as KEYED_TOOLS
 from api.mcp import create_router as create_mcp_router
 from api.receipts import ReceiptSigner, verify_receipt
 from api.repositories import LegacyRepository, PublicUnavailable
-from api.service import AGENTS_BRIDGE_CSP, AGENTS_CSP, DEFAULT_CSP, SANDBOX_WORKER_CSP, STATIC_PAGES, create_service
+from api.service import (
+    AGENTS_BRIDGE_CSP,
+    AGENTS_CSP,
+    DEFAULT_CSP,
+    SANDBOX_WORKER_CSP,
+    STATIC_PAGES,
+    create_service,
+)
 from api.traffic import page_kind
 from schema.models import SourceVersion, StructureNode
 
@@ -43,7 +49,9 @@ def _make_signer() -> tuple[ReceiptSigner, bytes]:
     return signer, pem
 
 
-def _admission_config(*, capacity=40, identity_concurrency=4, global_concurrency=10, queue_size=2) -> AdmissionConfig:
+def _admission_config(
+    *, capacity=40, identity_concurrency=4, global_concurrency=10, queue_size=2
+) -> AdmissionConfig:
     return AdmissionConfig(
         policy_revision="test-rev",
         capacity=capacity,
@@ -64,7 +72,7 @@ def _admission_config(*, capacity=40, identity_concurrency=4, global_concurrency
     )
 
 
-def _law_check_access(source_ids, *, tier_id="law-check", withdrawals="not_told"):
+def _law_check_access(source_ids, *, tier_id="law-check", withdrawals="not_told", anchor_text_bytes=None):
     allowance = {
         "requests_per_minute": 300,
         "burst": 100,
@@ -75,6 +83,8 @@ def _law_check_access(source_ids, *, tier_id="law-check", withdrawals="not_told"
     }
     if source_ids is None:
         allowance.pop("source_ids")
+    if anchor_text_bytes is not None:
+        allowance["anchor_text_bytes"] = anchor_text_bytes
     return {
         "ok": True,
         "organisation": "org_lawcheck0000000000000000",
@@ -194,9 +204,7 @@ def test_preflight_cors_and_handshakes_succeed_even_when_paused(store):
 
 def test_request_rejections_carry_cors_and_cookies_are_ignored(store):
     secret = keys.generate().secret
-    client, _, _ = _build_mcp_stack(
-        store, lambda _: _law_check_access([]), key_provider=lambda: secret
-    )
+    client, _, _ = _build_mcp_stack(store, lambda _: _law_check_access([]), key_provider=lambda: secret)
 
     # Authorization header refused with 400 credential_not_accepted + CORS.
     auth = client.post(
@@ -215,7 +223,9 @@ def test_request_rejections_carry_cors_and_cookies_are_ignored(store):
 
     # Body > 16 KiB refused with 413 + CORS.
     huge = json.dumps(_rpc("tools/call", {"name": "search_catalogue", "arguments": {"query": "a" * 17000}}))
-    big = client.post("/agents/mcp", content=huge.encode("utf-8"), headers={"Content-Type": "application/json"})
+    big = client.post(
+        "/agents/mcp", content=huge.encode("utf-8"), headers={"Content-Type": "application/json"}
+    )
     assert big.status_code == 413
     assert big.headers["access-control-allow-origin"] == "*"
     assert big.json()["error"]["data"]["code"] == "request_too_large"
@@ -249,7 +259,9 @@ def test_tool_filtering_and_bounds(cleared, store):
     # retrieve_evidence bounds > 5 units or > 12288 bytes -> -32602 before gate.
     too_many = client.post(
         "/agents/mcp",
-        json=_rpc("tools/call", {"name": "retrieve_evidence", "arguments": {"query": "test", "max_units": 6}}),
+        json=_rpc(
+            "tools/call", {"name": "retrieve_evidence", "arguments": {"query": "test", "max_units": 6}}
+        ),
     )
     assert too_many.status_code == 200 and too_many.json()["error"]["code"] == -32602
     too_big = client.post(
@@ -510,7 +522,9 @@ def test_source_ids_scoping_and_keyed_mcp_thirteenth_tool(cleared, store):
         key_provider=lambda: secret,
     )
     assert len(KEYED_TOOLS) == 13
-    keyed_list = keyed_client.post("/mcp", json=_rpc("tools/list"), headers={"Authorization": f"Bearer {secret}"})
+    keyed_list = keyed_client.post(
+        "/mcp", json=_rpc("tools/list"), headers={"Authorization": f"Bearer {secret}"}
+    )
     assert keyed_list.status_code == 200
     assert len(keyed_list.json()["result"]["tools"]) == 13
     assert any(t["name"] == "check_claim" for t in keyed_list.json()["result"]["tools"])
@@ -518,7 +532,11 @@ def test_source_ids_scoping_and_keyed_mcp_thirteenth_tool(cleared, store):
     cross_origin = keyed_client.post(
         "/mcp",
         json=_rpc("ping"),
-        headers={"Authorization": f"Bearer {secret}", "Origin": "https://evil.example", "Host": "api.open.alvary.ai"},
+        headers={
+            "Authorization": f"Bearer {secret}",
+            "Origin": "https://evil.example",
+            "Host": "api.open.alvary.ai",
+        },
     )
     assert cross_origin.status_code == 403
 
@@ -649,3 +667,259 @@ def test_service_headers_jwks_static_files_and_traffic(store, tmp_path, monkeypa
     assert page_kind("/agents/") == "agents"
     assert page_kind("/agents/check/law_check") == "agents"
     assert "/agents/" in STATIC_PAGES
+
+
+# --- Fixes after the 2026-11-23 review ---------------------------------------------------------------
+
+
+def _with_part(cleared, words: str, node_id: str):
+    """``cleared`` with one more public text of the first record, whose single part holds ``words``."""
+    digest = sha256(words.encode()).hexdigest()
+    corpus = cleared.model_copy(deep=True)
+    corpus.versions.append(
+        SourceVersion(
+            **{
+                **corpus.versions[0].model_dump(),
+                "id": f"{node_id}-version",
+                "raw_hash": digest,
+                "content_hash": digest,
+                "canonical_text": words,
+            }
+        )
+    )
+    corpus.structure.append(
+        StructureNode(
+            **{
+                **corpus.structure[0].model_dump(),
+                "id": node_id,
+                "version_id": f"{node_id}-version",
+                "end_byte": len(words.encode()),
+                "source_hash": digest,
+            }
+        )
+    )
+    corpus.rights[0].approved_content_hashes = [*corpus.rights[0].approved_content_hashes, digest]
+    return corpus
+
+
+def _call(client, name, arguments, id_=1):
+    return client.post(
+        "/agents/mcp", json=_rpc("tools/call", {"name": name, "arguments": arguments}, id_=id_)
+    )
+
+
+def test_a_part_over_the_plans_limit_is_charged_as_the_refusal_it_gets(cleared, store):
+    """M1: the 8 KiB cap was applied to the keyed MCP's finished answer, so the organisation's data a day
+    was charged for words the visitor never received (up to 60 KiB a call, against about 200 bytes sent)."""
+    source_id = cleared.sources[0].id
+    store.save(_with_part(cleared, "Section 1. " + ("word " * 2000), "test-node-big"))  # about 10 KiB
+    secret = keys.generate().secret
+
+    def charged(access) -> int:
+        usage = []
+        client, _, _ = _build_mcp_stack(store, lambda _: access, usage=usage, key_provider=lambda: secret)
+        result = _call(client, "get_anchor", {"anchor_id": "test-node-big"}).json()["result"]
+        assert result["isError"] is True and result["structuredContent"] == {"code": "result_too_large"}
+        assert result["content"][0]["text"] == (
+            "result_too_large: this part holds more than 8 KiB of words; name a smaller part."
+        )
+        return usage[-1]["bytes"]
+
+    # The plan's setting: refused before the words are written, so the charge is the refusal's size.
+    assert charged(_law_check_access([source_id], anchor_text_bytes=8192)) < 1024
+    # Without it the server part's own check still refuses, but the whole part was charged: the gap closed.
+    assert charged(_law_check_access([source_id])) > 8192
+
+    # A part within the limit is still answered whole.
+    client, _, _ = _build_mcp_stack(
+        store, lambda _: _law_check_access([source_id], anchor_text_bytes=8192), key_provider=lambda: secret
+    )
+    small = _call(client, "get_anchor", {"anchor_id": "test-node"}).json()["result"]
+    assert small["isError"] is False and json.loads(small["content"][0]["text"])["anchor_id"] == "test-node"
+
+
+def test_a_lone_surrogate_is_refused_with_cors_and_logged(cleared, store, caplog):
+    """M2: json.loads accepts the escape, and writing it back (or on to the gate) raised: a 500 without
+    CORS headers and without a log line."""
+    store.save(cleared)
+    secret = keys.generate().secret
+    checks = []
+
+    def check(asked):
+        checks.append(asked)
+        return _law_check_access([cleared.sources[0].id])
+
+    client, _, _ = _build_mcp_stack(store, check, key_provider=lambda: secret)
+    bodies = (
+        b'{"jsonrpc":"2.0","id":"\\ud800","method":"ping"}',
+        b'{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"\\udfff"}}',
+        b'{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search_catalogue",'
+        b'"arguments":{"query":"act \\ud83d"}}}',
+        b'{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"\\ud800","arguments":{}}}',
+    )
+    for body in bodies:
+        with caplog.at_level(logging.INFO, logger="open_alvary.law_check"):
+            caplog.clear()
+            answer = client.post("/agents/mcp", content=body, headers={"Content-Type": "application/json"})
+        assert answer.status_code == 400, body
+        assert answer.headers["access-control-allow-origin"] == "*"
+        assert answer.json() == {
+            "jsonrpc": "2.0",
+            "id": None,
+            "error": {"code": -32600, "message": "Invalid request"},
+        }
+        [entry] = [json.loads(r.message) for r in caplog.records if "law_check_mcp" in r.message]
+        assert entry["outcome"] == "invalid_request" and entry["tool"] is None
+    assert checks == []  # nothing reached the gate
+
+    # A whole character written as a surrogate pair is ordinary text.
+    paired = client.post(
+        "/agents/mcp",
+        content=b'{"jsonrpc":"2.0","id":"\\ud83d\\ude00","method":"ping"}',
+        headers={"Content-Type": "application/json"},
+    )
+    assert paired.status_code == 200 and paired.json()["id"] == "\U0001f600"
+
+
+def test_an_unknown_tools_name_is_neither_logged_nor_sent_back(store, caplog):
+    """L5: the name is the caller's text, up to the 16 KiB body cap."""
+    secret = keys.generate().secret
+    client, _, _ = _build_mcp_stack(store, lambda _: _law_check_access([]), key_provider=lambda: secret)
+    name = "private words " * 40
+    with caplog.at_level(logging.INFO, logger="open_alvary.law_check"):
+        answer = _call(client, name, {})
+    assert answer.status_code == 200
+    assert answer.json()["error"] == {"code": -32602, "message": "Unknown tool"}
+    assert "private words" not in answer.text and "private words" not in caplog.text
+    [entry] = [json.loads(r.message) for r in caplog.records if "law_check_mcp" in r.message]
+    assert entry["outcome"] == "unknown_tool" and entry["tool"] is None
+
+
+def test_refusals_are_in_law_checks_own_words(cleared, store):
+    """L6: the keyed MCP's texts name REST paths and the console, which a visitor does not have."""
+    source_id = cleared.sources[0].id
+    store.save(_with_part(cleared, "Section 1. " + ("word " * 14000), "test-node-huge"))  # about 70 KiB
+    secret = keys.generate().secret
+    # No plan limit here, so the keyed MCP's own 60 KiB refusal answers, naming /api/v1/versions/...
+    client, _, _ = _build_mcp_stack(
+        store, lambda _: _law_check_access([source_id]), key_provider=lambda: secret
+    )
+    huge = _call(client, "get_anchor", {"anchor_id": "test-node-huge"}).json()["result"]
+    assert huge["structuredContent"] == {"code": "result_too_large"}
+    assert "/api/" not in json.dumps(huge) and "name a smaller part" in huge["content"][0]["text"]
+
+    missing = _call(client, "get_anchor", {"anchor_id": "no-such-part"}).json()["result"]
+    assert missing["structuredContent"] == {"code": "unavailable"}
+    assert missing["content"][0]["text"] == (
+        "unavailable: Law check does not cover this record. See https://open.alvary.ai/agents/records.json"
+    )
+
+    def inner(code, text, **structured):
+        body = {
+            "jsonrpc": "2.0",
+            "id": 7,
+            "result": {
+                "content": [{"type": "text", "text": text}],
+                "isError": True,
+                "structuredContent": {"code": code, **structured},
+            },
+        }
+        payload, outcome = LawCheckMCP()._translate_inner(
+            7, "search_catalogue", 200, {}, json.dumps(body).encode()
+        )
+        return payload["result"], outcome
+
+    # The plan's rate outside its countries is the service's limit, never this visitor's.
+    outside, outcome = inner(
+        "rate_limited",
+        "Requests outside your plan's countries are limited: change your plan's countries in the console. "
+        "Retry after 41 seconds.",
+        retry_after_seconds=41,
+        organisation="org_lawcheck0000000000000000",
+    )
+    assert outcome == "service_rate_limited"
+    assert outside["structuredContent"] == {"code": "service_rate_limited", "retry_after_seconds": 41}
+    assert outside["content"][0]["text"] == (
+        "service_rate_limited: Law check is busy right now. Try again in 41 seconds."
+    )
+
+    # Nothing else of an inner refusal is passed on, and an unknown code is never passed on at all.
+    too_large, _ = inner(
+        "result_too_large", "result_too_large: ask for fewer links (a smaller limit)", detail="x"
+    )
+    assert too_large["structuredContent"] == {"code": "result_too_large"}
+    assert "links" not in too_large["content"][0]["text"]
+    withdrawn, outcome = inner("withdrawn", "withdrawn: this record was withdrawn")
+    assert outcome == "temporarily_unavailable" and "withdrawn" not in json.dumps(withdrawn)
+    # The verifier's own refusals say what to change in the quote, and are kept.
+    short, _ = inner(
+        "quote_too_short", "quote_too_short: Quote must be at least 40 characters after normalisation."
+    )
+    assert short["content"][0]["text"].endswith("at least 40 characters after normalisation.")
+
+
+def test_a_listed_plans_evidence_counts_and_names_only_listed_records():
+    """L1, L2: with scope=applicable the scope's statement kept its counts and notices of every record, and
+    a unit's qualifying links named the records that amend or repeal it, on the list or not."""
+    from datetime import date
+
+    from api.mcp import NOT_COUNTED, UNNAMED_LINK, _listed_pack, _listed_statement
+    from schema.public import ApplicableScope
+
+    statement = ApplicableScope(
+        jurisdiction_id="ng",
+        as_of=date(2026, 11, 23),
+        date_basis="today",
+        membership="reviewed",
+        admitted=41,
+        left_out={"not_bound": 7},
+        notices=(
+            "7 records of these bodies, or treaties naming ng, were left out.",
+            "ng-off-list-act-2001, named by source_id, is answered whatever its relation to ng.",
+        ),
+    )
+    listed = _listed_statement(statement, 1)
+    assert listed.admitted == 1 and listed.left_out == {} and listed.notices == (NOT_COUNTED,)
+    assert listed.jurisdiction_id == "ng" and listed.as_of == statement.as_of
+    assert "ng-off-list-act-2001" not in listed.model_dump_json()
+
+    def link(source_id):
+        return {
+            "kind": "repealed_by",
+            "source_id": source_id,
+            "title": f"Title of {source_id}",
+            "citation": "c",
+        }
+
+    pack = {
+        "coverage": {"notices": ["kept"]},
+        "evidence": [
+            {"source_id": "ng-on", "context": {"qualifications": [link("ng-on-2"), link("ng-off")]}},
+            {"source_id": "ng-on-2", "context": {"qualifications": []}},
+            {"source_id": "ng-on-2"},
+        ],
+    }
+    scoped = _listed_pack(pack, frozenset({"ng-on", "ng-on-2"}))
+    assert scoped["evidence"][0]["context"]["qualifications"] == [link("ng-on-2")]
+    assert "ng-off" not in json.dumps(scoped)
+    assert scoped["coverage"]["notices"] == ["kept", UNNAMED_LINK]  # the reader is still told to check
+    # Nothing dropped, nothing added.
+    untouched = _listed_pack(
+        {"coverage": {"notices": []}, "evidence": [pack["evidence"][1]]}, frozenset({"ng-on-2"})
+    )
+    assert untouched["coverage"]["notices"] == []
+
+
+def test_the_card_and_the_verifier_may_be_imported_by_another_site(store, tmp_path, monkeypatch):
+    """L10: a module imported from another origin is fetched with CORS; only the .json files said any origin."""
+    monkeypatch.delenv("ALVARY_RECEIPT_KEYS_JSON", raising=False)
+    (tmp_path / "index.html").write_text("<html>root</html>")
+    (tmp_path / "agents").mkdir()
+    for name in ("index.html", "receipt-card.js", "receipt.js", "site.js"):
+        (tmp_path / "agents" / name).write_text("// " + name)
+    client = TestClient(create_service(store=store, frontend=tmp_path))
+    for shared in ("/agents/receipt-card.js", "/agents/receipt.js"):
+        answer = client.get(shared, headers={"Origin": "https://vendor.example"})
+        assert answer.status_code == 200 and answer.headers["access-control-allow-origin"] == "*"
+    for private in ("/agents/site.js", "/agents/", "/"):
+        assert "access-control-allow-origin" not in client.get(private).headers

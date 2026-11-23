@@ -249,15 +249,15 @@ LAW_CHECK_TOOLS = [
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 300,
-                    "description": "Citation such as 'Freedom of Information Act 2011, s. 1(1)'. One of "
-                    "citation or anchor_id is required.",
+                    "description": "Citation such as 'Freedom of Information Act 2011, s. 1(1)'. Send "
+                    "citation or anchor_id, never both.",
                 },
                 "anchor_id": {
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 160,
-                    "description": "Part anchor_id when already held. One of citation or anchor_id is "
-                    "required.",
+                    "description": "Part anchor_id when already held. Send citation or anchor_id, never "
+                    "both.",
                 },
                 "quote": {
                     "type": "string",
@@ -298,6 +298,30 @@ LAW_CHECK_TOOLS = [
 ]
 
 
+# Law check's own words for the refusals it passes on. The keyed MCP's texts speak to an app that holds a
+# key (REST paths to read instead, the console, a plan's countries); a visitor has none of those.
+BUSY = "Law check is busy right now. Try again in {seconds} seconds."
+NOT_COVERED = "Law check does not cover this record. See https://open.alvary.ai/agents/records.json"
+CANNOT_ANSWER = "Law check cannot answer right now. Try again shortly."
+TOO_LARGE = {
+    "get_anchor": "this part holds more than 8 KiB of words; name a smaller part.",
+    "check_claim": "this part is too large to check at once; name a smaller part.",
+}
+TOO_LARGE_DEFAULT = "the answer would be larger than Law check returns at once; ask for less."
+# The verifier's own refusals are Law check's words already, and say what to change in the quote.
+VERIFIER_CODES = frozenset({"quote_too_short", "quote_too_spread"})
+
+
+def _encodable(value) -> bool:
+    """Whether ``value`` can be written as UTF-8 JSON. json.loads accepts a lone surrogate escape
+    (``"\\ud800"``), which no response and no inner request can carry."""
+    try:
+        json.dumps(value, ensure_ascii=False).encode("utf-8")
+    except (UnicodeEncodeError, ValueError, TypeError):
+        return False
+    return True
+
+
 def _rpc_error(id_, code: int, message: str, data: dict | None = None) -> dict:
     err: dict = {"code": code, "message": message}
     if data is not None:
@@ -309,9 +333,7 @@ def _rpc_result(id_, result: dict) -> dict:
     return {"jsonrpc": "2.0", "id": id_, "result": result}
 
 
-def _tool_error(
-    code: str, message: str, retry_after: int | None = None, extra: dict | None = None
-) -> dict:
+def _tool_error(code: str, message: str, retry_after: int | None = None, extra: dict | None = None) -> dict:
     text = message if message.startswith(f"{code}:") else f"{code}: {message}"
     structured: dict = {"code": code}
     if retry_after is not None:
@@ -402,7 +424,8 @@ class LawCheckMCP:
                     result = await to_thread.run_sync(store.admit, request)
                 except AdmissionUnavailable:
                     return None, _tool_error(
-                        "temporarily_unavailable", "Law check cannot check limits right now. Try again shortly."
+                        "temporarily_unavailable",
+                        "Law check cannot check limits right now. Try again shortly.",
                     )
                 if result["admitted"]:
                     return result["lease_id"], None
@@ -566,7 +589,7 @@ class LawCheckMCP:
                     id_,
                     _tool_error(
                         "service_rate_limited",
-                        f"service_rate_limited: Law check is busy right now. Try again in {retry} seconds.",
+                        f"service_rate_limited: {BUSY.format(seconds=retry)}",
                         retry_after=retry,
                     ),
                 ),
@@ -595,7 +618,9 @@ class LawCheckMCP:
         if "error" in parsed:
             err = parsed["error"]
             if isinstance(err, dict) and err.get("code") == -32602:
-                return _rpc_error(id_, -32602, str(err.get("message") or "Invalid arguments")), "invalid_params"
+                return _rpc_error(
+                    id_, -32602, str(err.get("message") or "Invalid arguments")
+                ), "invalid_params"
             return (
                 _rpc_result(
                     id_,
@@ -621,7 +646,9 @@ class LawCheckMCP:
             )
 
         if result.get("isError"):
-            structured = result.get("structuredContent") if isinstance(result.get("structuredContent"), dict) else {}
+            structured = (
+                result.get("structuredContent") if isinstance(result.get("structuredContent"), dict) else {}
+            )
             code = structured.get("code")
             if code not in ALLOWED_ERROR_CODES:
                 return (
@@ -634,18 +661,37 @@ class LawCheckMCP:
                     ),
                     "temporarily_unavailable",
                 )
-            content = result.get("content")
-            raw_text = ""
-            if isinstance(content, list) and content and isinstance(content[0], dict):
-                raw_text = str(content[0].get("text") or "")
             retry_after = structured.get("retry_after_seconds")
             if not isinstance(retry_after, int) or isinstance(retry_after, bool):
                 retry_after = None
-            extra = {k: v for k, v in structured.items() if k not in ("code", "retry_after_seconds")}
-            return (
-                _rpc_result(id_, _tool_error(code, raw_text or code, retry_after=retry_after, extra=extra or None)),
-                code,
-            )
+            if code == "rate_limited":
+                # The plan's own limit (for example its rate outside its countries), never this visitor's:
+                # the per-visitor limit is answered before the gate is called.
+                retry = max(1, retry_after or 1)
+                return (
+                    _rpc_result(
+                        id_,
+                        _tool_error(
+                            "service_rate_limited",
+                            f"service_rate_limited: {BUSY.format(seconds=retry)}",
+                            retry_after=retry,
+                        ),
+                    ),
+                    "service_rate_limited",
+                )
+            if code in VERIFIER_CODES:
+                content = result.get("content")
+                text = ""
+                if isinstance(content, list) and content and isinstance(content[0], dict):
+                    text = str(content[0].get("text") or "")
+            elif code == "result_too_large":
+                text = TOO_LARGE.get(tool_name, TOO_LARGE_DEFAULT)
+            elif code == "unavailable":
+                text = NOT_COVERED
+            else:
+                text = CANNOT_ANSWER
+            # Nothing else of the inner answer is passed on: its text and any further fields stay inside.
+            return _rpc_result(id_, _tool_error(code, text or code, retry_after=retry_after)), code
 
         # Success: apply Law check's 8 KiB words cap on get_anchor.
         if tool_name == "get_anchor":
@@ -660,10 +706,7 @@ class LawCheckMCP:
                         return (
                             _rpc_result(
                                 id_,
-                                _tool_error(
-                                    "result_too_large",
-                                    "result_too_large: this part holds more than 8 KiB of words; name a smaller part.",
-                                ),
+                                _tool_error("result_too_large", TOO_LARGE["get_anchor"]),
                             ),
                             "result_too_large",
                         )
@@ -746,6 +789,15 @@ class LawCheckMCP:
                 "invalid_request",
             )
 
+        # A lone surrogate anywhere in the message (json.loads accepts the escape) can be written neither
+        # in an answer nor in the inner request: refuse it here, before any answer echoes the id.
+        if not _encodable(message):
+            return await finish(
+                _json_response(_rpc_error(None, -32600, "Invalid request"), status_code=400),
+                None,
+                "invalid_request",
+            )
+
         rpc_method = message["method"]
         id_ = message.get("id")
 
@@ -802,9 +854,10 @@ class LawCheckMCP:
         tool_name = params["name"]
         raw_args = params.get("arguments", {})
         if tool_name not in ALLOWED_TOOLS:
+            # The name is the caller's own text (up to the body cap): it is neither logged nor sent back.
             return await finish(
-                _json_response(_rpc_error(id_, -32602, f"Unknown tool: {tool_name}")),
-                tool_name,
+                _json_response(_rpc_error(id_, -32602, "Unknown tool")),
+                None,
                 "unknown_tool",
             )
         if not isinstance(raw_args, dict):

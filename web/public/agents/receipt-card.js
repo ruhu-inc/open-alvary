@@ -70,6 +70,45 @@ export function greyHeadlineForStatus(status) {
   }
 }
 
+/**
+ * The result in a few words, shown in the band so a card says its result even when closed.
+ * It never says more than the two lines below it.
+ */
+export function bandHeadlineForReceipt(receipt) {
+  const status = receipt?.status;
+  if (GREY_STATUSES.has(status)) return greyHeadlineForStatus(status);
+  switch (status) {
+    case "matches":
+      return "Quoted words found";
+    case "words_found":
+      return "Quoted words found · status not confirmed";
+    case "words_found_with_omissions":
+      return "Quoted words found, with words left out";
+    case "wording_differs":
+      return "Quoted words not found";
+    case "not_in_force":
+      return "Recorded as not in force";
+    case "does_not_bind":
+      return `Recorded as not binding in ${formatJurisdiction(receipt?.claim?.jurisdiction)}`;
+    case "located":
+      return "Section found";
+    default:
+      return "Could not check";
+  }
+}
+
+/** http(s) and same-site addresses only; anything else is not made into a link. */
+export function safeLinkHref(value) {
+  if (typeof value !== "string" || !value) return null;
+  try {
+    const base = typeof location !== "undefined" && location.href ? location.href : "https://open.alvary.ai/";
+    const url = new URL(value, base);
+    return url.protocol === "https:" || url.protocol === "http:" ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
 export function wordsLineForReceipt(receipt) {
   const quoteFinding = receipt?.findings?.quote;
   const pinpoint = receipt?.part?.pinpoint || "this section";
@@ -379,6 +418,7 @@ const CARD_CSS = `
     line-height: 1.7;
     color: #1a1a1a;
     overflow-wrap: break-word;
+    max-inline-size: 72ch;
   }
   .published-block mark {
     background: #f6e3ae;
@@ -581,6 +621,34 @@ const CARD_CSS = `
     }
   }
 
+  @media (forced-colors: active) {
+    .card,
+    .band {
+      border-color: CanvasText;
+    }
+    .band {
+      border-block-end: 1px solid CanvasText;
+    }
+    .published-block {
+      border-inline-start-color: CanvasText;
+    }
+  }
+
+  @media print {
+    .card {
+      break-inside: avoid;
+    }
+    .card[data-collapsed="true"] .body {
+      display: flex;
+    }
+    .collapse-toggle,
+    .show-all-btn,
+    .action-btn,
+    .alt-btn {
+      display: none !important;
+    }
+  }
+
   @media (pointer: coarse) {
     .collapse-toggle,
     .action-btn,
@@ -694,14 +762,16 @@ export class OaReceiptElement extends BaseElement {
         this._els[el.getAttribute("data-ref")] = el;
       }
       this._els["collapse-btn"].addEventListener("click", () => {
-        this.collapsed = !this._collapsed;
+        // The visitor's own click always works; the focus guard below is for automatic closing only.
+        this._collapsed = !this._collapsed;
+        this._updateCollapseUi();
       });
       this._els["details"].addEventListener("toggle", () => {
         this._syncStates();
       });
       this._els["copy-receipt-btn"].addEventListener("click", () => {
         const payload = JSON.stringify({ receipt: this._receipt, claim: this._claim }, null, 2);
-        this._copyWithFeedback(this._els["copy-receipt-btn"], payload, "Copy receipt");
+        this._copyWithFeedback(this._els["copy-receipt-btn"], payload, "Copy JSON");
       });
     }
 
@@ -747,7 +817,7 @@ export class OaReceiptElement extends BaseElement {
 
   set collapsed(val) {
     const next = Boolean(val);
-    // Never collapse a card that holds focus
+    // Automatic closing (a newer card arriving) never closes a card that holds focus
     if (next && typeof this.matches === "function" && this.matches(":focus-within")) {
       return;
     }
@@ -800,7 +870,8 @@ export class OaReceiptElement extends BaseElement {
     const card = this.shadowRoot?.querySelector(".card");
     if (card) card.classList.add("highlighted");
     if (shouldScroll && typeof this.scrollIntoView === "function") {
-      this.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      const reduce = globalThis.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+      this.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "nearest" });
     }
   }
 
@@ -827,7 +898,7 @@ export class OaReceiptElement extends BaseElement {
     if (this._collapsible) {
       btn.hidden = false;
       btn.setAttribute("aria-expanded", this._collapsed ? "false" : "true");
-      btn.textContent = this._collapsed ? "Show details" : "Collapse";
+      btn.textContent = this._collapsed ? "Show result" : "Hide result";
     } else {
       btn.hidden = true;
     }
@@ -849,9 +920,7 @@ export class OaReceiptElement extends BaseElement {
     band.dataset.look = look;
     const iconSlot = this._els["band-icon"];
     iconSlot.replaceChildren(createSvgIcon(`band-${look}`, 18));
-    this._els["band-text"].textContent = isGrey
-      ? `${greyHeadlineForStatus(r.status)} · Checked ${assessedDate}`
-      : `Checked ${assessedDate}`;
+    this._els["band-text"].textContent = `${bandHeadlineForReceipt(r)} · Checked ${assessedDate}`;
 
     // Title
     this._els["ai-suggested"].hidden = this._source !== "agent";
@@ -968,11 +1037,20 @@ export class OaReceiptElement extends BaseElement {
       newerEl.hidden = false;
       newerEl.appendChild(document.createTextNode("A newer published text of this law exists: "));
       const a = document.createElement("a");
-      a.href = r.findings.newer_text.record_url || "#";
-      a.target = "_blank";
-      a.rel = "noopener noreferrer";
-      a.textContent = "Open newer text ↗";
-      newerEl.appendChild(a);
+      const newerHref = safeLinkHref(r.findings.newer_text.record_url);
+      if (newerHref) {
+        a.href = newerHref;
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
+        a.textContent = "Open newer text ↗";
+        const sr = document.createElement("span");
+        sr.className = "sr-only";
+        sr.textContent = " (opens in a new tab)";
+        a.appendChild(sr);
+        newerEl.appendChild(a);
+      } else {
+        newerEl.appendChild(document.createTextNode("see Open Alvary's record."));
+      }
     } else {
       newerEl.hidden = true;
     }
@@ -1051,20 +1129,22 @@ export class OaReceiptElement extends BaseElement {
     // Actions bar
     const actionsEl = this._els.actions;
     actionsEl.replaceChildren();
-    if (r.part?.record_url) {
-      actionsEl.appendChild(this._makeNewTabLink(r.part.record_url, "Open the section ↗"));
+    const recordHref = safeLinkHref(r.part?.record_url);
+    if (recordHref) {
+      actionsEl.appendChild(this._makeNewTabLink(recordHref, "Open the section ↗"));
     }
-    if (r.part?.official_url) {
-      actionsEl.appendChild(this._makeNewTabLink(r.part.official_url, "Official source ↗"));
+    const officialHref = safeLinkHref(r.part?.official_url);
+    if (officialHref) {
+      actionsEl.appendChild(this._makeNewTabLink(officialHref, "Official source ↗"));
     }
 
     const copyTextBtn = document.createElement("button");
     copyTextBtn.type = "button";
     copyTextBtn.className = "action-btn";
-    copyTextBtn.textContent = "Copy citation";
+    copyTextBtn.textContent = "Copy summary";
     copyTextBtn.addEventListener("click", () => {
       const text = this._formatAsPlainText();
-      this._copyWithFeedback(copyTextBtn, text, "Copy citation");
+      this._copyWithFeedback(copyTextBtn, text, "Copy summary");
     });
     actionsEl.appendChild(copyTextBtn);
 
@@ -1175,12 +1255,16 @@ export class OaReceiptElement extends BaseElement {
         btn.type = "button";
         btn.className = "show-all-btn";
         btn.textContent = truncated ? "Show all" : "Show less";
-        btn.addEventListener("click", () => renderContent(!truncated));
+        btn.addEventListener("click", () => {
+          renderContent(!truncated);
+          container.querySelector(".show-all-btn")?.focus();
+        });
         container.appendChild(document.createElement("br"));
         container.appendChild(btn);
       }
     };
-    renderContent(fullLen > 600);
+    // A passage with words left out opens whole, so the left-out words are always marked.
+    renderContent(fullLen > 600 && omitted.length === 0);
   }
 
   _formatAsPlainText() {
@@ -1190,7 +1274,7 @@ export class OaReceiptElement extends BaseElement {
     const lines = [
       title,
       `Checked: ${formatLongDate(r.claim?.assessed_at || r.issued_at)}`,
-      `Status: ${r.status}`,
+      `Result: ${[bandHeadlineForReceipt(r), ...recordLinesForReceipt(r).map((l) => l.text)].join(". ")}`,
     ];
     if (c?.quote) lines.push(`Quote: "${c.quote}"`);
     if (r.statement) lines.push(r.statement);
@@ -1204,6 +1288,9 @@ export class OaReceiptElement extends BaseElement {
       if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
         await navigator.clipboard.writeText(text);
         button.textContent = "Copied";
+        this.dispatchEvent(
+          new CustomEvent("oa-receipt-announce", { bubbles: true, composed: true, detail: { text: "Copied." } }),
+        );
         setTimeout(() => {
           button.textContent = originalLabel;
         }, 2000);

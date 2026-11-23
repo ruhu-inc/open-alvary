@@ -236,46 +236,132 @@ main:focus {
   justify-content: center;
 }
 
-/* Main page container */
+/* Main page container: one centred column, as in a chat */
 .law-check-main {
-  max-width: 1440px;
-  margin: 0 auto;
-  padding: 36px 5.6% 64px;
+  margin: 0;
+  padding: 0;
 }
 
-.lc-page-header {
-  margin-bottom: 24px;
+.lc-chat {
+  /* Fill the window under the site header, so the composer rests at the bottom from the start */
+  min-block-size: calc(100dvh - 109px);
+  display: flex;
+  flex-direction: column;
 }
 
-.lc-page-header h1 {
+/* The one centred column, used by the thread and by the composer */
+.lc-col {
+  inline-size: min(800px, 100% - 11.2vw);
+  margin-inline: auto;
+}
+.lc-col-thread {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding-block-start: 28px;
+}
+
+.lc-scroll {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+  /* Hidden labels inside the thread are absolutely placed; without this they would sit outside the
+     scrolling box and make the whole page scroll with it. */
+  position: relative;
+}
+.lc-scroll:focus-visible {
+  outline: 2px solid #737373;
+  outline-offset: -2px;
+}
+
+/* Once a thread exists the page behaves like a chat: the site header and the composer keep their
+   places and only the thread scrolls. A very short window (or a very high zoom) has no room for
+   that, so there the page scrolls as an ordinary page. */
+@media (min-height: 521px) {
+  body.lc-threaded {
+    block-size: 100dvh;
+    display: flex;
+    flex-direction: column;
+  }
+  body.lc-threaded .site-header {
+    flex: none;
+    inline-size: 100%;
+  }
+  body.lc-threaded .site-footer {
+    display: none;
+  }
+  body.lc-threaded .law-check-main {
+    flex: 1;
+    min-block-size: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  body.lc-threaded .lc-chat {
+    flex: 1;
+    min-block-size: 0;
+  }
+  body.lc-threaded .lc-scroll {
+    min-block-size: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+  body.lc-threaded .lc-col-thread {
+    flex: none;
+    padding-block-start: 20px;
+  }
+}
+
+.lc-chat-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 20px;
+}
+
+.lc-chat-title {
+  min-inline-size: 0;
+  flex: 1 1 320px;
+}
+
+.lc-chat-head h1 {
   font-family: var(--serif);
-  font-size: clamp(2.25rem, 4.5vw, 3.35rem);
+  font-size: clamp(1.9rem, 3.4vw, 2.6rem);
   font-weight: 400;
-  line-height: 1.08;
+  line-height: 1.1;
   letter-spacing: -0.02em;
-  margin: 0 0 12px;
+  margin: 0 0 6px;
   color: var(--primary);
 }
 
 .lc-lead {
-  margin: 0 0 8px;
-  font-size: 16px;
-  color: var(--primary);
-  max-width: 68ch;
+  margin: 0;
+  font-size: 14.5px;
+  color: var(--muted);
+  max-width: 62ch;
 }
 
-.lc-meta-row {
+.lc-head-actions {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px 24px;
+  align-items: center;
+  gap: 8px;
 }
 
-.lc-meta-note {
-  margin: 0;
-  font-size: 14px;
-  color: var(--muted);
+.lc-head-btn {
+  padding: 6px 12px;
+  border: 1px solid var(--input-border);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+  min-block-size: 32px;
+}
+.lc-head-btn[hidden] {
+  display: none;
 }
 
 /* Native <details> disclosures */
@@ -289,7 +375,7 @@ main:focus {
   color: var(--primary);
   min-block-size: 28px;
   padding-block: 4px;
-  list-style-position: outside;
+  list-style-position: inside;
 }
 
 .lc-what-checked {
@@ -367,173 +453,6 @@ main:focus {
   font-size: 15px;
 }
 
-/* Single-row scrolling tabs (§10.10) */
-.lc-tabs {
-  display: flex;
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  gap: 8px;
-  border-bottom: 1px solid var(--line);
-  margin-bottom: 24px;
-  scrollbar-width: thin;
-}
-
-.lc-tab {
-  position: relative;
-  flex: none;
-  background: transparent;
-  border: none;
-  padding: 10px 14px;
-  min-block-size: 40px;
-  min-inline-size: 24px;
-  font-size: 15px;
-  font-weight: 500;
-  color: var(--muted);
-  white-space: nowrap;
-}
-
-.lc-tab:hover {
-  color: var(--primary);
-}
-
-.lc-tab[aria-selected="true"] {
-  color: var(--primary);
-  font-weight: 600;
-}
-
-/* Active indicator via border-block-end so forced-colours preserves it */
-.lc-tab[aria-selected="true"]::after {
-  content: "";
-  position: absolute;
-  inset-inline: 0;
-  inset-block-end: 0;
-  border-block-end: 3px solid var(--accent);
-}
-
-/* Progressive workspace: centered single-column when empty, 2-column split once verified text opens */
-.lc-workspace {
-  display: grid;
-  grid-template-columns: minmax(0, 760px);
-  justify-content: center;
-  gap: 28px;
-  align-items: start;
-}
-.lc-workspace[data-panel-open="false"] .lc-receipts-col {
-  display: none;
-}
-.lc-workspace[data-panel-open="true"] {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
-  justify-content: stretch;
-}
-.lc-receipts-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.lc-panel-close {
-  border: 1px solid var(--line);
-  background: var(--card);
-  color: var(--muted);
-  border-radius: 6px;
-  font-size: 20px;
-  line-height: 1;
-  padding: 2px 8px;
-  cursor: pointer;
-}
-.lc-panel-close:hover {
-  color: var(--ink);
-  border-color: var(--input-border);
-}
-.lc-bar-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.lc-verified-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--card);
-  color: var(--ink);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-}
-.lc-verified-toggle[hidden] {
-  display: none;
-}
-.lc-verified-toggle[aria-expanded="true"] {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-.lc-slash-menu {
-  margin: 0 16px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--card);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
-  padding: 6px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.lc-slash-menu[hidden] {
-  display: none;
-}
-.lc-slash-item {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  width: 100%;
-  text-align: left;
-  padding: 8px 10px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--ink);
-  font: inherit;
-  cursor: pointer;
-}
-.lc-slash-item:hover,
-.lc-slash-item:focus-visible {
-  background: var(--bg);
-}
-.lc-slash-cmd {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--accent);
-}
-.lc-slash-desc {
-  font-size: 13px;
-  color: var(--muted);
-}
-
-.lc-input-col,
-.lc-receipts-col {
-  min-inline-size: 0;
-}
-
-/* Remove duplicate outer border inside the unified chatbox card */
-.lc-panel-inner {
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  padding: 20px;
-}
-
-.lc-panel-intro {
-  margin: 0 0 16px;
-  font-size: 15px;
-  color: var(--primary);
-}
-
 /* Forms */
 .lc-field {
   margin-bottom: 18px;
@@ -567,25 +486,6 @@ main:focus {
   min-block-size: 42px;
 }
 
-.lc-quote-textarea {
-  field-sizing: content;
-  width: 100%;
-  height: auto;
-  min-block-size: 4lh;
-  max-block-size: 12lh;
-  resize: vertical;
-}
-
-.lc-recheck-textarea {
-  field-sizing: content;
-  width: 100%;
-  height: auto;
-  min-block-size: 5lh;
-  max-block-size: 14lh;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 13.5px;
-  resize: vertical;
-}
 
 .lc-input:user-invalid,
 .lc-select:user-invalid,
@@ -697,53 +597,7 @@ main:focus {
   text-underline-offset: 2px;
 }
 
-/* Receipts column */
-.lc-receipts-header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.lc-receipts-header h2 {
-  margin: 0;
-  font-family: "DM Sans", sans-serif;
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--primary);
-}
-
-.lc-receipts-list {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.lc-empty-receipts {
-  background: var(--surface);
-  border: 1px dashed #c8c8c8;
-  border-radius: 6px;
-  padding: 20px;
-  font-size: 15px;
-  color: var(--muted);
-  margin: 0;
-}
-
-.lc-session-note {
-  margin: 16px 0 0;
-  font-size: 13px;
-  color: var(--muted);
-}
-
-.lc-group-heading {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--muted);
-  margin: 8px 0 4px;
-}
-
-/* Non-receipt notice cards (checking placeholder, failed, rate_limited, unavailable) */
+/* Notices in the thread */
 .lc-notice-card {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -776,21 +630,6 @@ main:focus {
   font-size: 15px;
 }
 
-.lc-recheck-diff {
-  margin-bottom: 14px;
-  padding: 12px 14px;
-  border-radius: 6px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-inline-start: 4px solid var(--accent);
-  font-size: 15px;
-}
-
-.lc-recheck-diff ul {
-  margin: 0;
-  padding-inline-start: 18px;
-}
-
 /* Checking placeholder animation */
 .lc-skeleton-bar {
   height: 12px;
@@ -809,47 +648,457 @@ main:focus {
   100% { background-position: -200% 0; }
 }
 
-/* Ask a question / Challenge runtime overrides (§10.5) */
-.lc-settings-disclosure {
-  margin-bottom: 14px;
-  background: #fafafa;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 10px 14px;
+
+/* ---- The thread ---------------------------------------------------------------------------- */
+.lc-thread {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding-block: 18px 20px;
+  min-inline-size: 0;
 }
 
-.lc-settings-disclosure > summary {
-  cursor: pointer;
+.lc-welcome {
+  margin-block: auto;
+  padding-block: 16px;
+  text-align: center;
+}
+.lc-welcome[hidden] {
+  display: none;
+}
+.lc-welcome-title {
+  font-size: 20px;
   font-weight: 600;
-  font-size: 14px;
-  min-block-size: 28px;
+  color: var(--ink);
+  margin: 0 0 8px;
+  text-wrap: balance;
+}
+.lc-welcome-sub {
+  font-size: 15px;
+  color: var(--muted);
+  margin: 0 auto 16px;
+  max-width: 58ch;
+}
+.lc-starter-pills {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+.lc-starter-pill {
+  padding: 7px 14px;
+  border: 1px solid var(--input-border);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--ink);
+  font-size: 13.5px;
+  min-block-size: 34px;
+}
+.lc-starter-pill[hidden] {
+  display: none;
+}
+.lc-starter-pill:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
-.lc-key-note {
-  margin: 8px 0 12px;
-  font-size: 13px;
+.lc-thread-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.lc-thread-list:empty {
+  display: none;
+}
+
+.lc-msg {
+  min-inline-size: 0;
+  scroll-margin-block: 12px;
+}
+
+/* What the visitor sent: to the right, like any chat */
+.lc-msg-user {
+  align-self: flex-end;
+  max-inline-size: min(86%, 580px);
+  background: #efefef;
+  color: var(--ink);
+  border-radius: 14px 14px 4px 14px;
+  padding: 10px 14px;
+  font-size: 15px;
+  line-height: 1.55;
+  overflow-wrap: break-word;
+}
+.lc-user-text {
+  white-space: pre-wrap;
+}
+.lc-user-cite {
+  display: block;
+  font-weight: 600;
+}
+.lc-user-quote {
+  display: block;
+  margin-block-start: 4px;
+  font-family: Georgia, "Times New Roman", serif;
+  color: #3a3a3a;
+}
+
+/* A result card: checked by code, never styled like the AI's words */
+.lc-msg-result {
+  align-self: stretch;
+}
+.lc-msg-caption {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
   color: var(--muted);
 }
 
-.lc-answer-summary {
-  margin: 12px 0;
-  padding: 10px 12px;
+/* The AI's own words: plain text with a standing label, never a card */
+.lc-msg-ai {
+  align-self: stretch;
+}
+.lc-ai-label {
+  margin: 0 0 8px;
+  padding-block-end: 6px;
+  border-block-end: 1px solid var(--line);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.lc-ai-text {
+  font-size: 16px;
+  line-height: 1.65;
+  color: var(--ink);
+  overflow-wrap: break-word;
+  max-inline-size: 72ch;
+}
+.lc-ai-text p {
+  margin: 0 0 10px;
+}
+.lc-ai-text ul,
+.lc-ai-text ol {
+  margin: 0 0 10px;
+  padding-inline-start: 22px;
+}
+.lc-ai-text ul,
+.lc-notice-card ul {
+  list-style: disc;
+}
+.lc-ai-text code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 14px;
+  background: #f2f2f2;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+.lc-ai-summary {
+  margin: 10px 0 0;
+  padding: 8px 12px;
   border-radius: 5px;
   font-size: 14px;
   background: var(--grey-bg);
   color: var(--grey-fg);
 }
-
-.lc-answer-summary[data-tone="red"] {
+.lc-ai-summary[data-tone="red"] {
   background: var(--red-bg);
   color: var(--red-fg);
 }
 
-.lc-agents-disclosure {
-  margin-top: 12px;
+/* What is happening now */
+.lc-msg-status {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--muted);
+}
+.lc-status-dot {
+  flex: none;
+  inline-size: 8px;
+  block-size: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: lc-pulse 1.2s ease-in-out infinite;
+}
+@keyframes lc-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
 }
 
-/* Runtime styling tokens and required overrides */
+.lc-msg-note {
+  align-self: stretch;
+}
+.lc-notice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.lc-notice-card ul {
+  margin: 0;
+  padding-inline-start: 18px;
+  font-size: 15px;
+}
+
+.lc-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.lc-divider::before,
+.lc-divider::after {
+  content: "";
+  flex: 1;
+  border-block-start: 1px solid var(--line);
+}
+
+.lc-agents-disclosure {
+  margin-block-start: 18px;
+}
+.lc-agents-disclosure[hidden] {
+  display: none;
+}
+
+/* ---- The composer, docked at the bottom of the window --------------------------------------- */
+/* The composer is the last thing in the column. With a thread above it, it is the bottom of the
+   window and the thread scrolls over it; before that it sits in the page under the welcome text. */
+.lc-dock {
+  flex: none;
+  padding-block: 10px calc(10px + env(safe-area-inset-bottom, 0px));
+  background: var(--page-bg);
+}
+.lc-chat.has-thread .lc-dock {
+  border-block-start: 1px solid var(--line);
+}
+
+.lc-composer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px 10px;
+  background: var(--card);
+  border: 1.5px solid var(--input-border);
+  border-radius: 16px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.06);
+}
+/* The composer keeps the same light border whether or not its message box has the focus; the text
+   cursor in the box shows where typing goes. The transparent outline is there for forced colours,
+   which show it in the system's colour. */
+.lc-composer:has(.lc-composer-textarea:focus-visible) {
+  outline: 2px solid transparent;
+  outline-offset: 0;
+}
+.lc-dock.is-dragover .lc-composer {
+  border-color: var(--accent);
+  border-style: dashed;
+  background: #fbf6ee;
+}
+
+.lc-composer .lc-field {
+  margin: 0;
+}
+.lc-composer .lc-field label {
+  font-size: 13px;
+  margin-block-end: 4px;
+}
+.lc-citation-field[hidden] {
+  display: none;
+}
+.lc-composer .lc-input {
+  min-block-size: 40px;
+  padding: 8px 10px;
+}
+
+/* The message box has no border of its own: the composer around it shows the focus */
+.lc-composer-textarea,
+.lc-composer-textarea:focus-visible {
+  border: 0;
+  outline: none;
+  border-radius: 0;
+  background: transparent;
+}
+.lc-composer-textarea {
+  field-sizing: content;
+  inline-size: 100%;
+  block-size: auto;
+  min-block-size: 2lh;
+  max-block-size: 10lh;
+  padding: 2px 0;
+  resize: none;
+}
+/* With a thread above it the empty box is one line tall, so the composer covers less of the window */
+.lc-chat.has-thread .lc-composer-textarea {
+  min-block-size: 1lh;
+}
+.lc-composer-textarea[aria-invalid="true"] {
+  background: #fffafa;
+  box-shadow: inset 0 -2px 0 var(--red-fg);
+}
+
+.lc-composer-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  padding-block-start: 8px;
+  border-block-start: 1px solid var(--line);
+}
+
+.lc-mode {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  background: #efefef;
+  border-radius: 8px;
+}
+.lc-mode-btn {
+  border: 0;
+  border-block-end: 2px solid transparent;
+  background: transparent;
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: #5e5e5e;
+  min-block-size: 32px;
+  white-space: nowrap;
+}
+.lc-mode-btn:hover {
+  color: var(--ink);
+}
+/* The chosen mode keeps an underline, which forced colours preserves */
+.lc-mode-btn[aria-pressed="true"] {
+  background: var(--card);
+  color: var(--ink);
+  font-weight: 600;
+  border-block-end: 2px solid var(--accent);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+.lc-mode-btn:focus-visible {
+  outline-offset: 1px;
+}
+
+.lc-short {
+  display: none;
+}
+
+.lc-attach-btn {
+  background: none;
+  border: 0;
+  padding: 5px 4px;
+  min-block-size: 32px;
+  font-size: 13.5px;
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* The note takes what room is left and wraps inside it, so the Send button never drops a row */
+.lc-composer-note {
+  flex: 1 1 0;
+  min-inline-size: 0;
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--muted);
+  text-align: end;
+}
+
+.lc-dock-foot {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* The / menu opens upwards from the composer, over the thread, so nothing moves */
+.lc-slash-anchor {
+  position: relative;
+}
+.lc-slash-menu {
+  position: absolute;
+  inset-inline: 0;
+  inset-block-end: 6px;
+  z-index: 5;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--card);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.lc-slash-menu[hidden] {
+  display: none;
+}
+
+.lc-slash-item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+.lc-slash-item:hover,
+.lc-slash-item[aria-selected="true"] {
+  background: #f0f0f0;
+}
+.lc-slash-item[aria-selected="true"] {
+  outline: 2px solid var(--ink);
+  outline-offset: -2px;
+}
+.lc-slash-cmd {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+}
+.lc-slash-desc {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.lc-provider-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.lc-provider-pill:hover {
+  border-color: var(--input-border);
+}
+.lc-provider-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #b7791f;
+  flex: none;
+}
+.lc-provider-dot.is-connected {
+  background: #2f6b4f;
+}
+
+/* Challenge runtime: tokens and required overrides (§10.5) */
 #agent-app {
   --ns-font: "DM Sans", system-ui, -apple-system, sans-serif;
   --ns-bg: #ffffff;
@@ -885,9 +1134,18 @@ main:focus {
   border-bottom: 1px solid #e5e5e5;
 }
 
-#agent-app.ns-composed-app [data-ns-slot="chat"] {
-  min-block-size: 360px;
-  height: 520px;
+/* This page draws the thread itself; the runtime's own chat and settings panels are never shown */
+#agent-app [data-ns-slot="chat"],
+#agent-app [data-ns-slot="settings"] {
+  display: none !important;
+}
+
+#agent-app [data-ns-slot="agents"] {
+  block-size: 420px;
+  margin-block-start: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: auto;
 }
 
 #agent-app .ns-chat {
@@ -963,15 +1221,6 @@ main:focus {
   white-space: nowrap;
 }
 
-/* Foot of page disclaimer */
-.lc-page-foot {
-  margin-top: 40px;
-  padding-top: 16px;
-  border-top: 1px solid var(--line);
-  font-size: 14px;
-  color: var(--muted);
-}
-
 /* Site footer (matches web/src/style.css) */
 .site-footer {
   max-width: 1440px;
@@ -1027,264 +1276,6 @@ main:focus {
   gap: 4px;
   align-items: center;
   min-block-size: 24px;
-}
-
-/* Responsive breakpoints */
-@media (max-width: 1100px) {
-  .site-nav {
-    gap: 16px;
-    font-size: 15px;
-  }
-  .lc-workspace,
-  .lc-workspace[data-panel-open="true"] {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 800px) {
-  .site-header {
-    min-block-size: 86px;
-    justify-content: space-between;
-    position: relative;
-  }
-  .brand {
-    font-size: 25px;
-  }
-  .mobile-toggle {
-    display: inline-flex;
-    background: none;
-    border: none;
-    color: #3a3a3a;
-  }
-  .site-nav {
-    display: none;
-  }
-  .site-nav.expanded {
-    display: flex;
-    position: absolute;
-    top: 85px;
-    left: 0;
-    right: 0;
-    z-index: 10;
-    background: #fafafa;
-    padding: 20px 6%;
-    border-bottom: 1px solid var(--line);
-    flex-direction: column;
-    gap: 5px;
-  }
-  .site-footer {
-    flex-wrap: wrap;
-  }
-  .site-footer p {
-    order: 3;
-    width: 100%;
-  }
-}
-
-/* Quiet proof verification disclosure & file dropzone */
-.lc-verify-disclosure {
-  margin-top: 20px;
-  padding-top: 16px;
-  border-top: 1px solid var(--line);
-}
-.lc-verify-disclosure > summary {
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--muted);
-  list-style: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.lc-verify-disclosure > summary::-webkit-details-marker {
-  display: none;
-}
-.lc-verify-disclosure > summary::before {
-  content: "▸";
-  font-size: 12px;
-  transition: transform 0.15s ease;
-}
-.lc-verify-disclosure[open] > summary::before {
-  transform: rotate(90deg);
-}
-.lc-verify-disclosure > summary:hover {
-  color: var(--ink);
-}
-.lc-verify-body {
-  margin-top: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.lc-dropzone {
-  border: 1.5px dashed var(--input-border);
-  border-radius: 6px;
-  padding: 14px;
-  background: var(--bg);
-  text-align: center;
-  transition: border-color 0.15s ease, background-color 0.15s ease;
-}
-.lc-dropzone.is-dragover {
-  border-color: var(--accent);
-  background: #f3e9d9;
-}
-.lc-file-label {
-  display: block;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--ink);
-  margin-bottom: 8px;
-  cursor: pointer;
-}
-.lc-file-input {
-  max-inline-size: 100%;
-  font-size: 13px;
-  color: var(--muted);
-}
-
-/* Modern chatbox workspace & provider setup modal */
-.lc-chatbox {
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  overflow: visible;
-}
-.lc-chatbox-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--line);
-  background: var(--bg);
-  border-radius: 12px 12px 0 0;
-}
-.lc-chatbox-bar .lc-tabs {
-  margin: 0;
-  border-bottom: 0;
-  padding: 3px;
-  background: #efefef;
-  border-radius: 8px;
-  gap: 4px;
-}
-.lc-chatbox-bar .lc-tab {
-  padding: 6px 12px;
-  border-radius: 6px;
-  font-size: 14px;
-}
-.lc-chatbox-bar .lc-tab[aria-selected="true"] {
-  background: var(--card);
-  color: var(--ink);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
-}
-.lc-chatbox-bar .lc-tab[aria-selected="true"]::after {
-  inset: auto 10px 2px;
-  border-block-end: 2px solid var(--accent);
-}
-.lc-provider-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 6px 12px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--card);
-  color: var(--ink);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-}
-.lc-provider-pill:hover {
-  border-color: var(--input-border);
-}
-.lc-provider-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #b7791f;
-  flex: none;
-}
-.lc-provider-dot.is-connected {
-  background: #2f6b4f;
-}
-.lc-welcome-prompt {
-  margin-bottom: 16px;
-}
-.lc-welcome-title {
-  font-size: 17px;
-  font-weight: 600;
-  color: var(--ink);
-  margin: 0 0 4px;
-}
-.lc-welcome-sub {
-  font-size: 14px;
-  color: var(--muted);
-  margin: 0 0 12px;
-}
-.lc-starter-pills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.lc-starter-pill {
-  padding: 6px 12px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--bg);
-  color: var(--ink);
-  font: inherit;
-  font-size: 13px;
-  cursor: pointer;
-}
-.lc-starter-pill:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-.lc-composer-box {
-  border: 1px solid var(--input-border);
-  border-radius: 10px;
-  padding: 14px;
-  background: var(--card);
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.lc-composer-box:focus-within {
-  border-color: var(--ink);
-}
-.lc-composer-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-  padding-top: 8px;
-  border-top: 1px solid var(--line);
-}
-.lc-setup-card {
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 20px;
-  background: var(--bg);
-}
-.lc-setup-card h3 {
-  margin: 0 0 8px;
-  font-size: 17px;
-  font-weight: 600;
-  color: var(--ink);
-}
-.lc-setup-card p {
-  margin: 0 0 16px;
-  font-size: 14px;
-  color: var(--muted);
-}
-.lc-setup-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
 }
 
 /* Native <dialog> modal (modern-web-guidance: dialog) */
@@ -1408,11 +1399,28 @@ dialog.lc-dialog::backdrop {
   flex-wrap: wrap;
   padding-top: 10px;
   border-top: 1px solid var(--line);
+  position: sticky;
+  inset-block-end: -24px;
+  margin-block-end: -24px;
+  padding-block-end: 24px;
+  background: #ffffff;
 }
 .lc-dialog-actions-right {
   display: flex;
   gap: 8px;
   margin-left: auto;
+}
+.lc-dialog-actions-right button {
+  white-space: nowrap;
+}
+.lc-dialog-remove-row:has([hidden]) {
+  display: none;
+}
+@media (max-width: 480px) {
+  /* Short provider tiles, so the fields are not pushed under the buttons on a phone */
+  .lc-preset-sub {
+    display: none;
+  }
 }
 .lc-btn-danger {
   padding: 8px 12px;
@@ -1426,34 +1434,234 @@ dialog.lc-dialog::backdrop {
   cursor: pointer;
 }
 
-/* Ensure boolean hidden hides flexed cards without breaking hidden="until-found" panels */
+
+/* Inline links inside page prose are always underlined (§10.2) */
+.law-check-main a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Responsive breakpoints */
+@media (max-width: 1100px) {
+  .site-nav {
+    gap: 16px;
+    font-size: 15px;
+  }
+}
+
+@media (max-width: 800px) {
+  .site-header {
+    min-block-size: 86px;
+    justify-content: space-between;
+    position: relative;
+  }
+  .brand {
+    font-size: 25px;
+  }
+  .mobile-toggle {
+    display: inline-flex;
+    background: none;
+    border: none;
+    color: #3a3a3a;
+  }
+  .site-nav {
+    display: none;
+  }
+  .site-nav.expanded {
+    display: flex;
+    position: absolute;
+    top: 85px;
+    left: 0;
+    right: 0;
+    z-index: 10;
+    background: #fafafa;
+    padding: 20px 6%;
+    border-bottom: 1px solid var(--line);
+    flex-direction: column;
+    gap: 5px;
+  }
+  .site-footer {
+    flex-wrap: wrap;
+  }
+  .site-footer p {
+    order: 3;
+    width: 100%;
+  }
+  .lc-chat {
+    min-block-size: calc(100dvh - 87px);
+  }
+  .lc-col-thread {
+    padding-block-start: 18px;
+  }
+}
+
+@media (max-width: 520px) {
+  /* A phone's window is short: the note under the buttons and the long footer line give way to the thread */
+  .lc-composer-note {
+    display: none;
+  }
+  .lc-composer-bar #composer-send {
+    margin-inline-start: auto;
+  }
+  .lc-dock-foot {
+    font-size: 12px;
+  }
+  .lc-msg-user {
+    max-inline-size: 92%;
+  }
+  /* With a thread on screen the footer line gives its room to the thread; it shows on the empty page */
+  .lc-chat.has-thread .lc-dock-foot {
+    display: none;
+  }
+  .lc-long {
+    display: none;
+  }
+  .lc-short {
+    display: inline;
+  }
+  .lc-composer {
+    padding: 10px 12px 8px;
+  }
+  /* The mode switch and Send share a row; the saved-proof link sits under them */
+  .lc-composer-bar .lc-mode {
+    order: 1;
+  }
+  .lc-composer-bar #composer-send {
+    order: 2;
+  }
+  .lc-composer-bar .lc-attach-btn {
+    order: 3;
+    flex-basis: 100%;
+    text-align: start;
+  }
+
+  /* On a phone the composer would cover most of the thread, so while it is not in use it folds
+     to one line and Send. Touching or tabbing into it opens it again, with every field. */
+  .lc-chat.has-thread .lc-dock:not(:focus-within) .lc-composer {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+  }
+  .lc-chat.has-thread .lc-dock:not(:focus-within) .lc-message-field {
+    flex: 1 1 0;
+    min-inline-size: 0;
+  }
+  .lc-chat.has-thread .lc-dock:not(:focus-within) .lc-citation-field,
+  .lc-chat.has-thread .lc-dock:not(:focus-within) .lc-mode,
+  .lc-chat.has-thread .lc-dock:not(:focus-within) .lc-attach-btn,
+  .lc-chat.has-thread .lc-dock:not(:focus-within) .lc-dock-foot,
+  .lc-chat.has-thread .lc-dock:not(:focus-within) .lc-char-counter,
+  .lc-chat.has-thread .lc-dock:not(:focus-within) .lc-error {
+    display: none;
+  }
+  /* The label stays for screen readers while folded */
+  .lc-chat.has-thread .lc-dock:not(:focus-within) #composer-label {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+  .lc-chat.has-thread .lc-dock:not(:focus-within) .lc-composer-bar {
+    flex: none;
+    padding: 0;
+    border: 0;
+  }
+  .lc-chat.has-thread .lc-dock:not(:focus-within) .lc-composer-textarea {
+    max-block-size: 1lh;
+    overflow: hidden;
+  }
+}
+
+/* Ensure boolean hidden hides flexed cards */
 .lc-notice-card[hidden],
-.lc-setup-card[hidden],
-.lc-recheck-diff[hidden],
-.lc-banner[hidden],
-.lc-answer-summary[hidden] {
+.lc-banner[hidden] {
   display: none;
 }
 
 /* Hide empty runtime slots so no stray bordered box renders */
-#agent-app [data-ns-slot="header"]:empty,
-#agent-app [data-ns-slot="settings"]:empty {
+#agent-app [data-ns-slot="header"]:empty {
   display: none;
 }
 
 /* Coarse pointer targets (WCAG 2.5.5) */
 @media (pointer: coarse) {
-  .lc-tab,
   .lc-btn-primary,
   .lc-btn-secondary,
   .lc-link-btn,
   .lc-disclosure > summary,
-  .lc-verify-disclosure > summary,
-  .lc-settings-disclosure > summary,
   .site-nav a,
-  .footer-links a {
+  .footer-links a,
+  .lc-head-btn,
+  .lc-provider-pill,
+  .lc-starter-pill,
+  .lc-mode-btn,
+  .lc-attach-btn,
+  .lc-dialog-close,
+  .lc-btn-danger,
+  .lc-slash-item {
     min-block-size: 44px;
     min-inline-size: 44px;
+  }
+}
+
+/* Forced colours: states drawn with a background alone would vanish */
+@media (forced-colors: active) {
+  .lc-preset-btn[aria-pressed="true"] {
+    outline: 3px solid Highlight;
+    outline-offset: -3px;
+  }
+  .lc-provider-dot {
+    forced-color-adjust: none;
+    background: GrayText;
+  }
+  .lc-provider-dot.is-connected {
+    background: Highlight;
+  }
+  .lc-slash-item[aria-selected="true"] {
+    outline-color: Highlight;
+  }
+  .lc-composer,
+  .lc-msg-user,
+  .lc-banner,
+  .lc-notice-card {
+    border: 1px solid CanvasText;
+  }
+  .lc-status-dot {
+    forced-color-adjust: none;
+    background: Highlight;
+  }
+}
+
+/* Printing: the thread, not the composer or the site's chrome */
+@media print {
+  .skip-link,
+  .site-header,
+  .site-footer,
+  .lc-dock,
+  .lc-head-actions,
+  .lc-welcome,
+  .lc-disclosure,
+  .lc-msg-status {
+    display: none !important;
+  }
+  body.lc-threaded,
+  body.lc-threaded .law-check-main,
+  body.lc-threaded .lc-chat {
+    display: block;
+    block-size: auto;
+  }
+  body.lc-threaded .lc-scroll {
+    overflow: visible;
+  }
+  .lc-chat {
+    min-block-size: 0;
+  }
+  body {
+    background: #ffffff;
   }
 }
 

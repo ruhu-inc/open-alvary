@@ -198,7 +198,10 @@ def test_match_quote_exact_normalised_absent_and_boundaries():
     q_norm = 'request information-whether "official" or filed-is hereby established.'
     res_norm = match_quote(part, q_norm)
     assert res_norm["quote"] == "normalised"
-    assert res_norm["matched_text"] == "request information\u2014whether \u201cofficial\u201d or \ufb01led\u2014is hereby established."
+    assert (
+        res_norm["matched_text"]
+        == "request information\u2014whether \u201cofficial\u201d or \ufb01led\u2014is hereby established."
+    )
 
     # Punctuation-safe word boundary: starting with (1) and ending with . works
     q_punct = "(1) Notwithstanding anything contained in any other Act, Law or Regulation,"
@@ -252,16 +255,24 @@ def test_match_quote_length_whole_part_and_ellipses():
     assert exc2.value.code == "quote_too_short"
 
     # Spread > 4000 chars -> quote_too_spread
-    huge_part = "Opening piece of sufficient length here. " + ("x " * 2500) + "Closing piece of sufficient length here."
+    huge_part = (
+        "Opening piece of sufficient length here. "
+        + ("x " * 2500)
+        + "Closing piece of sufficient length here."
+    )
     with pytest.raises(VerifyToolError) as exc3:
-        match_quote(huge_part, "Opening piece of sufficient length here. ... Closing piece of sufficient length here.")
+        match_quote(
+            huge_part, "Opening piece of sufficient length here. ... Closing piece of sufficient length here."
+        )
     assert exc3.value.code == "quote_too_spread"
 
 
 # --- 3. Full verify_claim tests against LegacyCatalogue ---------------------------------------------
 
 
-def _make_rights(source_id: str, hashes: list[str], *, status: str = "OPEN", metadata_public: bool = True) -> RightsRecord:
+def _make_rights(
+    source_id: str, hashes: list[str], *, status: str = "OPEN", metadata_public: bool = True
+) -> RightsRecord:
     return RightsRecord(
         id=f"rights-{source_id}",
         source_id=source_id,
@@ -717,7 +728,10 @@ def test_input_validation_and_missing_signer(cat: LegacyCatalogue, signer: Recei
     with pytest.raises(ValueError, match="after today"):
         verify_claim(
             cat,
-            {"citation": "Freedom of Information Act 2011, s. 1", "as_of": (TODAY + timedelta(days=1)).isoformat()},
+            {
+                "citation": "Freedom of Information Act 2011, s. 1",
+                "as_of": (TODAY + timedelta(days=1)).isoformat(),
+            },
             signer=signer,
             today=TODAY,
         )
@@ -730,7 +744,13 @@ def test_allowed_source_ids_enforced_before_signing(cat: LegacyCatalogue, signer
     allowed = {"ng-foi-act-2011"}
     # Off-list public record (even with part: null like no_part_named or text_not_available) -> unavailable
     with pytest.raises(VerifyToolError) as exc1:
-        verify_claim(cat, {"citation": "Metadata Only Act 2020"}, signer=signer, allowed_source_ids=allowed, today=TODAY)
+        verify_claim(
+            cat,
+            {"citation": "Metadata Only Act 2020"},
+            signer=signer,
+            allowed_source_ids=allowed,
+            today=TODAY,
+        )
     assert exc1.value.code == "unavailable"
     assert "records.json" in exc1.value.message
 
@@ -838,7 +858,9 @@ def test_all_13_status_rows(cat: LegacyCatalogue, signer: ReceiptSigner, monkeyp
 
     # Row 6: part_not_found with nearest enclosing part
     r6 = _assert_valid_response(
-        verify_claim(cat, {"citation": "Freedom of Information Act 2011, s. 1(9)"}, signer=signer, today=TODAY),
+        verify_claim(
+            cat, {"citation": "Freedom of Information Act 2011, s. 1(9)"}, signer=signer, today=TODAY
+        ),
         signer,
     )
     assert r6.status == "part_not_found" and r6.part is None
@@ -994,3 +1016,114 @@ def test_all_13_status_rows(cat: LegacyCatalogue, signer: ReceiptSigner, monkeyp
     assert r12.status == "matches"
     assert r12.findings.currentness.basis == "provision"
     assert "reviewed legal events" in r12.statement
+
+
+# --- Fixes after the 2026-11-23 review ---------------------------------------------------------------
+
+
+def test_a_hyphen_joined_prefix_or_suffix_is_part_of_the_word():
+    """M3: quoting "public institution…" from "non-public institution…" dropped the negation and still
+    gave a signed match, because the hyphen counted as a word break."""
+    part = (
+        "A non-public institution shall not be required to disclose its records to any applicant "
+        "under this Act."
+    )
+    dropped = "public institution shall not be required to disclose its records"
+    assert match_quote(part, dropped)["quote"] == "absent"
+    assert (
+        match_quote(part, "non-public institution shall not be required to disclose its records")["quote"]
+        == "exact"
+    )
+    assert match_quote(part, "A non-public institution shall not be required to disclose")["quote"] == "exact"
+
+    # U+2010 and U+2011 are hyphens too; the normal-form path sees them as "-".
+    for hyphen in ("‐", "‑"):
+        published = part.replace("non-public", f"non{hyphen}public")
+        assert match_quote(published, dropped)["quote"] == "absent"
+        assert (
+            match_quote(published, "non-public institution shall not be required to disclose its records")[
+                "quote"
+            ]
+            == "normalised"
+        )
+
+    # The same at the quote's end: "tax" is not a whole word in "tax-exempt".
+    ending = "Every body corporate shall be subject to tax-exempt status review by the Service each year."
+    assert match_quote(ending, "Every body corporate shall be subject to tax")["quote"] == "absent"
+    assert match_quote(ending, "Every body corporate shall be subject to tax-exempt")["quote"] == "exact"
+
+    # With words left out, each piece keeps the rule.
+    assert (
+        match_quote(part, "public institution shall not ... its records to any applicant")["quote"]
+        == "absent"
+    )
+
+    # A long dash between words is punctuation, and a hyphen at a line end is not joined.
+    dashed = "The Commission—public institution as it is—shall publish its records every year."
+    assert match_quote(dashed, "public institution as it is—shall publish its records")["quote"] == "exact"
+    assert (
+        match_quote(dashed, "public institution as it is - shall publish its records every year")["quote"]
+        == "absent"
+    )
+    line_end = "A non-\npublic institution shall not be required to disclose its records to anyone."
+    assert (
+        match_quote(line_end, "public institution shall not be required to disclose its records")["quote"]
+        == "exact"
+    )
+
+
+def test_citation_and_anchor_id_together_are_refused(cat: LegacyCatalogue, signer: ReceiptSigner):
+    """M4: with both, the part came from anchor_id while the unchecked citation went into the digest, so
+    a receipt for FOI s. 1(1) verified beside a claim naming another law."""
+    quote = "the right of any person to access or request information is hereby established"
+    with pytest.raises(ValueError, match="not both"):
+        verify_claim(
+            cat,
+            {"anchor_id": "anc-foi-s1-1", "citation": "Companies Act 2020, s. 999", "quote": quote},
+            signer=signer,
+            today=TODAY,
+        )
+    # Each alone still works, and its digest covers what was sent.
+    for claim in (
+        {"anchor_id": "anc-foi-s1-1", "quote": quote},
+        {"citation": "Freedom of Information Act 2011, s. 1(1)", "quote": quote},
+    ):
+        resp = verify_claim(cat, claim, signer=signer, today=TODAY)
+        receipt = _assert_valid_response(resp, signer)
+        assert receipt.part is not None and receipt.part.anchor_id == "anc-foi-s1-1"
+        assert receipt.claim.digest == claim_digest(claim)
+
+
+def test_a_citation_naming_records_on_and_off_the_list_is_answered_for_those_on_it(
+    cat: LegacyCatalogue, signer: ReceiptSigner
+):
+    """M9: "Shared Act" names ng-shared-1 and ng-shared-2. With only the first on Law check's list the
+    check was refused as `unavailable`; resolve_citation answered the same citation as resolved."""
+    resp = verify_claim(
+        cat, {"citation": "Shared Act, s. 1"}, signer=signer, allowed_source_ids={"ng-shared-1"}, today=TODAY
+    )
+    receipt = _assert_valid_response(resp, signer)
+    assert receipt.status != "ambiguous"
+    assert receipt.part is not None and receipt.part.source_id == "ng-shared-1"
+    assert "ng-shared-2" not in json.dumps(resp)
+
+    # None of the records it names is on the list: still `unavailable`, and nothing is signed.
+    with pytest.raises(VerifyToolError) as refused:
+        verify_claim(
+            cat,
+            {"citation": "Shared Act, s. 1"},
+            signer=signer,
+            allowed_source_ids={"ng-foi-act-2011"},
+            today=TODAY,
+        )
+    assert refused.value.code == "unavailable"
+
+    # Both on the list: ambiguous, as without a list.
+    both = verify_claim(
+        cat,
+        {"citation": "Shared Act, s. 1"},
+        signer=signer,
+        allowed_source_ids={"ng-shared-1", "ng-shared-2"},
+        today=TODAY,
+    )
+    assert _assert_valid_response(both, signer).status == "ambiguous"

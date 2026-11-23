@@ -2,11 +2,21 @@
  * Code-built legal-basis gate for the Example Vendor demo peer site (§12).
  *
  * A clause that cites the law is accepted ONLY when deterministic code verifies:
- * 1. The quoted words appear in the clause's own text (compared in normal form).
+ * 1. The quoted words appear in the clause's own text, as whole words (compared in
+ *    normal form), and the clause's text names the section it cites and no other.
  * 2. A live check_claim call with that exact citation and quote returns a receipt
- *    whose signature and claim.digest verify via Open Alvary's receipt.js.
- * 3. The receipt's status is "matches" or "words_found", fetched in this session
- *    with no as_of date, and the record is recorded as binding in "ng".
+ *    whose signature and claim.digest verify via Open Alvary's receipt.js, and whose
+ *    `part` is the section the clause cites.
+ * 3. The receipt's status is "matches" or "words_found", it was issued just now with
+ *    no date sent, for "ng", and the record is recorded as binding there.
+ *
+ * What it does not stop: true words used to mean something else in the clause's own
+ * sentence. The accepted label says only "Published wording shown".
+ *
+ * The receipt fields read here are the ones the server signs (schema oa-receipt-1,
+ * retrieval/verify.py): status, claim.date_sent, claim.jurisdiction, part.pinpoint,
+ * findings.quote, findings.applicability.binds. The tests run the gate against the
+ * golden receipts in clients/receipt/vectors.json so the two cannot drift apart.
  */
 
 import { verifyReceipt, loadReceiptKeys } from "./receipt.js";
@@ -14,6 +24,9 @@ import { verifyReceipt, loadReceiptKeys } from "./receipt.js";
 export const OPEN_ALVARY_MCP_URL = "https://open.alvary.ai/agents/mcp";
 export const ACCEPTED_LABEL = "Published wording shown";
 export const REJECTED_LABEL = "Cannot be accepted: legal basis not shown";
+export const GATE_JURISDICTION = "ng";
+/** A receipt must have been issued within this long of the gate's clock, either way. */
+export const MAX_RECEIPT_AGE_MS = 60 * 60 * 1000;
 
 const LIGATURE_MAP = new Map([
   ["\uFB00", "ff"],
@@ -47,6 +60,66 @@ export function normalizeText(text) {
   // Collapse whitespace including NBSP.
   s = s.replace(/[\s\u00A0]+/g, " ").trim();
   return s;
+}
+
+const WORD_CHAR = /[\p{L}\p{N}_]/u;
+
+function isWordChar(ch) {
+  return typeof ch === "string" && ch.length > 0 && WORD_CHAR.test(ch);
+}
+
+/**
+ * Find `needle` in `haystack` as whole words: the match may not start or end inside a
+ * longer word, nor inside a hyphenated one ("non-public" does not hold "public").
+ * Both strings are expected in normal form.
+ *
+ * @param {string} haystack
+ * @param {string} needle
+ * @returns {number} index of the first whole-word match, or -1
+ */
+export function findWholeWords(haystack, needle) {
+  if (typeof haystack !== "string" || typeof needle !== "string" || !needle) return -1;
+  const hay = Array.from(haystack);
+  const ned = Array.from(needle);
+  const startsWord = isWordChar(ned[0]);
+  const endsWord = isWordChar(ned[ned.length - 1]);
+  outer: for (let i = 0; i + ned.length <= hay.length; i++) {
+    for (let j = 0; j < ned.length; j++) {
+      if (hay[i + j] !== ned[j]) continue outer;
+    }
+    const end = i + ned.length;
+    const before = hay[i - 1];
+    const after = hay[end];
+    const leftOk =
+      !startsWord ||
+      i === 0 ||
+      (!isWordChar(before) && !(before === "-" && isWordChar(hay[i - 2])));
+    const rightOk =
+      !endsWord ||
+      end === hay.length ||
+      (!isWordChar(after) && !(after === "-" && isWordChar(hay[end + 1])));
+    if (leftOk && rightOk) return i;
+  }
+  return -1;
+}
+
+const SECTION_REF =
+  /(?:§+|(?<![\p{L}\p{N}_])(?:ss?|secs?|sect|sections?|arts?|articles?)\.?)\s*(\d+[A-Za-z]?(?:\s*\(\s*[0-9A-Za-z]+\s*\))*)/giu;
+
+/**
+ * List the section numbers a text names ("s. 1(1)", "section 30", "Art. 5"), each as a
+ * compact lower-case key such as "1(1)". Order is kept; repeats are kept.
+ *
+ * @param {string} text
+ * @returns {string[]}
+ */
+export function sectionReferences(text) {
+  if (typeof text !== "string") return [];
+  const refs = [];
+  for (const m of normalizeText(text).matchAll(SECTION_REF)) {
+    refs.push(m[1].replace(/\s+/g, "").toLowerCase());
+  }
+  return refs;
 }
 
 /**
@@ -182,6 +255,7 @@ export async function callOpenAlvaryCheckClaim(args, options = {}) {
  *   keysUrl?: string,
  *   fetchImpl?: typeof fetch,
  *   now?: Date | string | number,
+ *   maxReceiptAgeMs?: number,
  *   consentApproved?: boolean,
  * }} params
  * @returns {Promise<{
@@ -222,18 +296,35 @@ export async function evaluateLegalBasisGate(params) {
     return reject("Clause must include its text, the section it cites, and the quoted words.");
   }
 
-  // Rule 1: The quoted words must appear in the clause's own text (in normal form).
+  // Rule 1: The quoted words must appear in the clause's own text, as whole words (in normal
+  // form), and the clause's text must name the section it cites and no other section.
   const normClause = normalizeText(clause.text);
   const normQuote = normalizeText(clause.quote);
-  if (!normQuote || !normClause.includes(normQuote)) {
+  if (!normQuote || findWholeWords(normClause, normQuote) === -1) {
     return reject("The quoted words do not appear in the clause's own text.");
+  }
+
+  const citedRefs = [...new Set(sectionReferences(clause.citation))];
+  if (citedRefs.length !== 1) {
+    return reject("The clause must cite exactly one section, for example \"s. 1(1)\".");
+  }
+  const citedSection = citedRefs[0];
+  const printedRefs = [...new Set(sectionReferences(clause.text))];
+  if (!printedRefs.includes(citedSection)) {
+    return reject(`The clause's text does not name the section it cites (s. ${citedSection}).`);
+  }
+  const otherSection = printedRefs.find((ref) => ref !== citedSection);
+  if (otherSection) {
+    return reject(
+      `The clause's text names s. ${otherSection}, but the section it cites is s. ${citedSection}.`,
+    );
   }
 
   // Rule 2: Send that exact citation and quote to check_claim (no as_of date, jurisdiction "ng").
   const sentClaim = {
     citation: clause.citation.trim(),
     quote: clause.quote.trim(),
-    jurisdiction: "ng",
+    jurisdiction: GATE_JURISDICTION,
     language: "en",
   };
 
@@ -274,21 +365,65 @@ export async function evaluateLegalBasisGate(params) {
     });
   }
 
-  // Rule 3: Status must be "matches" or "words_found", no as_of date, and binding in "ng".
+  const rejectReceipt = (reason) => reject(reason, { receipt, claim: sentClaim, verified });
+
+  // Rule 2, second half: the receipt is about the section the clause cites and no other.
+  const partRefs = sectionReferences(receipt.part?.pinpoint);
+  if (!receipt.part || partRefs.length !== 1 || partRefs[0] !== citedSection) {
+    return rejectReceipt(
+      `The receipt is not about the section the clause cites (s. ${citedSection}).`,
+    );
+  }
+
+  // Rule 3: status "matches" or "words_found"; issued just now, with no date sent; and the
+  // record is recorded as binding in "ng". Every field is read as the server signs it.
   if (receipt.status !== "matches" && receipt.status !== "words_found") {
-    return reject(
+    return rejectReceipt(
       `Receipt status is "${receipt.status}"; published wording for the cited section was not confirmed.`,
-      { receipt, claim: sentClaim, verified },
+    );
+  }
+
+  const quoteFinding = receipt.findings?.quote;
+  if (quoteFinding !== "exact" && quoteFinding !== "normalised") {
+    return rejectReceipt("The receipt does not record the quoted words as found in the section.");
+  }
+
+  if (receipt.claim?.date_sent !== false) {
+    return rejectReceipt("The receipt was not assessed as of today.");
+  }
+
+  const nowMs =
+    params.now instanceof Date
+      ? params.now.getTime()
+      : typeof params.now === "number"
+        ? params.now
+        : typeof params.now === "string"
+          ? Date.parse(params.now)
+          : Date.now();
+  const issuedMs = Date.parse(receipt.issued_at);
+  const maxAgeMs =
+    typeof params.maxReceiptAgeMs === "number" && params.maxReceiptAgeMs > 0
+      ? params.maxReceiptAgeMs
+      : MAX_RECEIPT_AGE_MS;
+  if (
+    !Number.isFinite(nowMs) ||
+    !Number.isFinite(issuedMs) ||
+    Math.abs(nowMs - issuedMs) > maxAgeMs
+  ) {
+    return rejectReceipt(
+      "The receipt was not issued just now. Check this device's clock, then try again.",
     );
   }
 
   const applicability = receipt.findings?.applicability;
-  if (!applicability || applicability.status !== "bound" || applicability.jurisdiction !== "ng") {
-    return reject("Open Alvary's record does not show this law as binding in Nigeria (ng).", {
-      receipt,
-      claim: sentClaim,
-      verified,
-    });
+  if (
+    receipt.claim?.jurisdiction !== GATE_JURISDICTION ||
+    !applicability ||
+    applicability.binds !== "bound"
+  ) {
+    return rejectReceipt(
+      "Open Alvary's record does not show this law as binding in Nigeria (ng).",
+    );
   }
 
   return {

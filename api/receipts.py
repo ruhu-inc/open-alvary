@@ -5,7 +5,7 @@ import hashlib
 import hmac
 import json
 import os
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes, serialization
@@ -15,6 +15,9 @@ from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
 CHECKED_CLAIM_FIELDS = ("citation", "anchor_id", "quote", "as_of", "jurisdiction", "language")
 DEFAULT_KID = "oa-receipt-2026-12"
 DEFAULT_VALID_FROM = "2026-12-01T00:00:00Z"
+# How far ahead of the reader's clock a receipt's issued_at may be before it is refused (as
+# clients/receipt/receipt.js MAX_FUTURE_SKEW_MS).
+MAX_FUTURE_SKEW = timedelta(minutes=5)
 
 
 def _b64url_encode(data: bytes) -> str:
@@ -185,6 +188,10 @@ def verify_receipt(
         valid_to = _parse_iso_dt(jwk.get("valid_to"))
         if valid_to is None or issued_at > valid_to:
             return {"ok": False, "status": status, "reason": "issued_after_key_valid", "age_days": age_days}
+
+    # A receipt cannot have been issued after the moment it is read (clocks may differ by minutes).
+    if issued_at - now_dt > MAX_FUTURE_SKEW:
+        return {"ok": False, "status": status, "reason": "issued_in_future", "age_days": age_days}
 
     sig_b64 = receipt.get("signature")
     if not isinstance(sig_b64, str) or not sig_b64:

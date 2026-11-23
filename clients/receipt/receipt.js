@@ -47,6 +47,8 @@ const STATUS_SUMMARIES = Object.freeze({
 });
 
 const encoder = new TextEncoder();
+// How far ahead of the reader's clock a receipt's issued_at may be before it is refused.
+export const MAX_FUTURE_SKEW_MS = 5 * 60 * 1000;
 
 /**
  * RFC 8785 (JCS) canonical JSON serialization.
@@ -237,7 +239,9 @@ export async function verifyReceipt(receipt, jwks, options = {}) {
     return fail("unknown_key", `Signing key ${keyInfo.kid} is not in Open Alvary's key list.`, null, ageDays);
   }
 
-  if (jwk.revoked_at !== null && jwk.revoked_at !== undefined && jwk.revoked_at !== "") {
+  // Any value but null (or no entry) means the key was withdrawn, an empty string included: the
+  // Python verifier (api/receipts.py) reads the key list the same way.
+  if (jwk.revoked_at !== null && jwk.revoked_at !== undefined) {
     return fail(
       "key_revoked",
       "This receipt was signed with a key that has been withdrawn. Re-check to get a new one.",
@@ -246,19 +250,18 @@ export async function verifyReceipt(receipt, jwks, options = {}) {
     );
   }
 
-  if (jwk.valid_from != null) {
-    const fromMs = parseTimestampMs(jwk.valid_from);
-    if (!Number.isFinite(fromMs) || issuedMs < fromMs) {
-      return fail(
-        "key_not_yet_valid",
-        "Receipt issued_at precedes the signing key's validity window.",
-        null,
-        ageDays,
-      );
-    }
+  // A key must say when it became valid: one that does not is refused, never assumed valid.
+  const fromMs = parseTimestampMs(jwk.valid_from);
+  if (!Number.isFinite(fromMs) || issuedMs < fromMs) {
+    return fail(
+      "key_not_yet_valid",
+      "Receipt issued_at precedes the signing key's validity window.",
+      null,
+      ageDays,
+    );
   }
 
-  if (jwk.valid_to != null && jwk.valid_to !== "") {
+  if (jwk.valid_to != null) {
     const toMs = parseTimestampMs(jwk.valid_to);
     if (!Number.isFinite(toMs) || issuedMs > toMs) {
       return fail(
@@ -268,6 +271,17 @@ export async function verifyReceipt(receipt, jwks, options = {}) {
         ageDays,
       );
     }
+  }
+
+  // A receipt cannot have been issued after the moment it is read (a few minutes are allowed for
+  // clocks that differ).
+  if (Number.isFinite(nowMs) && issuedMs - nowMs > MAX_FUTURE_SKEW_MS) {
+    return fail(
+      "issued_in_future",
+      "Receipt is dated in the future. Check this device's clock.",
+      null,
+      ageDays,
+    );
   }
 
   let sigBytes;

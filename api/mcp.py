@@ -670,9 +670,7 @@ def _tool_result(payload, is_error=False):
     return {"content": [{"type": "text", "text": text}], "isError": is_error}
 
 
-def _tool_error(
-    code: str, message: str, retry_after: int | None = None, extra: dict | None = None
-) -> dict:
+def _tool_error(code: str, message: str, retry_after: int | None = None, extra: dict | None = None) -> dict:
     """A tool that ran and failed: the message for the model as text, as before, and the same machine-
     readable code as the REST refusal's in structuredContent (MCP 2025-06-18), which clients that don't
     know it ignore."""
@@ -682,6 +680,39 @@ def _tool_error(
     if extra:
         structured.update(extra)
     return _tool_result(message, is_error=True) | {"structuredContent": structured}
+
+
+NOT_COUNTED = (
+    "This plan answers for the records on its list only; other records are neither counted nor named."
+)
+UNNAMED_LINK = (
+    "A record in this evidence has a reviewed amending, repealing or superseding link to a record outside "
+    "this plan's list, which is not named here: check its status before relying on it."
+)
+
+
+def _listed_statement(statement, admitted: int):
+    """An applicable-law scope's statement on a plan with a record list: how many listed records the scope
+    added, and nothing counted or said of any other record (the scope's own statement counts and names
+    records whatever the plan's list)."""
+    return statement.model_copy(update={"admitted": admitted, "left_out": {}, "notices": (NOT_COUNTED,)})
+
+
+def _listed_pack(payload: dict, allowed_source_ids: frozenset[str]) -> dict:
+    """An evidence pack on a plan with a record list names no record off the list: a unit's qualifying
+    links (amended_by, repealed_by, superseded_by) to other records are dropped, with one notice saying
+    that there are such links, so the reader is still told to check."""
+    unnamed = False
+    for unit in payload.get("evidence") or ():
+        context = unit.get("context") if isinstance(unit, dict) else None
+        links = context.get("qualifications") if isinstance(context, dict) else None
+        if links:
+            kept = [link for link in links if link.get("source_id") in allowed_source_ids]
+            unnamed = unnamed or len(kept) != len(links)
+            context["qualifications"] = kept
+    if unnamed and isinstance(payload.get("coverage"), dict):
+        payload["coverage"]["notices"] = [*(payload["coverage"].get("notices") or ()), UNNAMED_LINK]
+    return payload
 
 
 def _filter_citation_view(view, allowed_source_ids: frozenset[str]):
@@ -751,13 +782,18 @@ def create_router(
         plan: Reach,
         keyed: bool = False,
         allowed_source_ids: frozenset[str] | None = None,
+        anchor_text_bytes: int | None = None,
     ):
         """``keyed``: the credential gate admitted a key or token, so the change tools, the check and the
         record reads tell what a keyed caller is told of withdrawals (changes.feed.Withdrawals): a record
         read that finds nothing public answers ``withdrawn`` where the record or the part's text was
-        public and its withdrawal may be told, as REST's reads do."""
+        public and its withdrawal may be told, as REST's reads do.
+
+        ``anchor_text_bytes``: the plan's limit on one part's words (its ``anchor_text_bytes`` setting).
+        get_anchor refuses a larger part before any of it is written, so the refusal is what the
+        organisation's data a day is charged for, not the words it never receives."""
         try:
-            return read_tool(name, arguments, plan, keyed, allowed_source_ids)
+            return read_tool(name, arguments, plan, keyed, allowed_source_ids, anchor_text_bytes)
         except LookupError:
             if keyed and isinstance(arguments, dict):
                 with catalogue_factory() as service:
@@ -776,6 +812,7 @@ def create_router(
         plan: Reach,
         keyed: bool = False,
         allowed_source_ids: frozenset[str] | None = None,
+        anchor_text_bytes: int | None = None,
     ):
         if not isinstance(arguments, dict):
             return None
@@ -873,6 +910,11 @@ def create_router(
                 if allowed_source_ids is not None and view.source_id not in allowed_source_ids:
                     raise LookupError("Source not available")
                 plan.admit(service.source(view.source_id).jurisdiction_id)
+                if anchor_text_bytes is not None and len(view.text.encode()) > anchor_text_bytes:
+                    raise TooLarge(
+                        f"result_too_large: this part holds more than {anchor_text_bytes:,} bytes of words; "
+                        "name a smaller part."
+                    )
                 payload = view.model_dump(mode="json")
                 if len(json.dumps(payload, ensure_ascii=False).encode()) > MAX_TOOL_BYTES:
                     raise TooLarge(
@@ -988,9 +1030,7 @@ def create_router(
                 widened = applicable(jurisdictions[0], as_of, source_id) if "scope" in arguments else None
                 if allowed_source_ids is not None:
                     effective_allowed = (
-                        {source_id} & allowed_source_ids
-                        if source_id is not None
-                        else set(allowed_source_ids)
+                        {source_id} & allowed_source_ids if source_id is not None else set(allowed_source_ids)
                     )
                     if effective_allowed:
                         public_allowed = service._public(effective_allowed)
@@ -1020,7 +1060,12 @@ def create_router(
                     )
                     if widened is not None:
                         widened = dataclasses.replace(
-                            widened, within=None, admitted=tuple(sorted(effective_allowed))
+                            widened,
+                            within=None,
+                            admitted=tuple(sorted(effective_allowed)),
+                            statement=_listed_statement(
+                                widened.statement, len(effective_allowed & set(widened.admitted))
+                            ),
                         )
                 else:
                     filters = text_index.Filters(
@@ -1035,7 +1080,10 @@ def create_router(
                         scope=widened,
                     )
                 )
-                return _bounded(pack.model_dump(mode="json"))
+                payload = pack.model_dump(mode="json")
+                if allowed_source_ids is not None:
+                    payload = _listed_pack(payload, allowed_source_ids)
+                return _bounded(payload)
             if name == "check_claim" and set(arguments) <= {
                 "citation",
                 "anchor_id",
@@ -1146,6 +1194,14 @@ def create_router(
                 if "source_ids" in allowance and raw_source_ids is not None
                 else None
             )
+            raw_anchor_bytes = allowance.get("anchor_text_bytes")
+            anchor_text_bytes = (
+                raw_anchor_bytes
+                if isinstance(raw_anchor_bytes, int)
+                and not isinstance(raw_anchor_bytes, bool)
+                and raw_anchor_bytes > 0
+                else None
+            )
             try:
                 # Database work runs in a worker thread, never on the event loop.
                 payload = await run_in_threadpool(
@@ -1155,6 +1211,7 @@ def create_router(
                     reach(request),
                     keyed,
                     allowed_source_ids,
+                    anchor_text_bytes,
                 )
             except _VerifyError as refused:
                 return _result(id_, _tool_error(refused.code, refused.message, extra=refused.extra))

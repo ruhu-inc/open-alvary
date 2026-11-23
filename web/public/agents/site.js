@@ -1,12 +1,17 @@
 /**
  * Law check page controller (/agents/site.js).
  *
+ * The page is one thread, like any chat: what the visitor sent, each result card and each
+ * AI answer, in order, with the composer at the bottom of the window.
+ *
  * - Installs the fetch wrapper (LC-16) capturing check_claim JSON-RPC responses
  *   from /agents/mcp before the challenge runtime ever loads.
  * - Verifies every receipt via ./receipt.js before rendering <oa-receipt>.
- * - Persists verified receipts in sessionStorage and re-verifies on load.
- * - Lazy-loads ./runtime/index.js only when "Ask a question" is opened.
- * - Zero innerHTML with untrusted data.
+ * - Keeps the thread in sessionStorage and verifies every saved receipt again on load.
+ * - Loads ./runtime/index.js only once there is an AI key, and runs each question through the
+ *   runtime's own engine (engine.streamTurn); the runtime's files are not changed.
+ * - A result card comes only from a receipt this page verified; the AI's words are drawn as
+ *   plain text and never as a card. Zero innerHTML with untrusted data.
  */
 
 import {
@@ -20,11 +25,15 @@ import {
   recordLinesForReceipt,
 } from "./receipt-card.js";
 
-const STORAGE_KEY = "oa_law_check_receipts_v1";
+const STORAGE_KEY = "oa_law_check_thread_v2";
+const OLD_STORAGE_KEY = "oa_law_check_receipts_v1";
+const MAX_SAVED_ITEMS = 60;
+const MAX_QUESTION_LEN = 4000;
+const MAX_PROOF_BYTES = 512 * 1024;
+const CITATION_NEEDED = "Enter the law and section, for example Freedom of Information Act 2011, s. 1(1).";
 const MCP_PATH = "/agents/mcp";
 const LOCAL_KEYS_PATH = "/.well-known/open-alvary-receipt-keys.json";
 const MAX_QUOTE_LEN = 2000;
-const COUNTER_SHOW_AT = 1800;
 
 /**
  * Extract `{ receipt, claim }` from an MCP tools/call result object.
@@ -109,6 +118,10 @@ function parseToolError(result) {
     if (m) seconds = Number(m[1]);
   }
   return { code: code || "temporarily_unavailable", seconds, text };
+}
+
+function scrollBehavior() {
+  return globalThis.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
 }
 
 function matchesMcpUrl(input, mcpPath) {
@@ -212,6 +225,13 @@ function verificationErrorMessage(reason) {
       return "This receipt was signed with a key that has been withdrawn. Re-check to get a new one.";
     case "unsupported_version":
       return "This receipt is in a format this page does not know.";
+    case "issued_in_future":
+      return "This receipt is dated later than this device's clock. Check the clock, then try again.";
+    case "unknown_key":
+      return "This receipt was signed with a key Open Alvary does not list. Do not rely on it.";
+    case "key_not_yet_valid":
+    case "key_expired":
+      return "This receipt is dated outside the time its signing key was in use. Do not rely on it.";
     case "crypto_unavailable":
       return "This browser cannot verify receipts.";
     default:
@@ -219,20 +239,171 @@ function verificationErrorMessage(reason) {
   }
 }
 
+/**
+ * Read a message typed as one line of chat for a citation and a quoted passage, for example
+ *   Freedom of Information Act 2011, s. 1(1): "Notwithstanding anything contained in ..."
+ * It answers only when the message is plainly that: one quoted passage of 40 characters or more,
+ * a short remainder that names a section, and no question. Anything else is left for the AI.
+ *
+ * @param {string} text
+ * @returns {{ citation: string, quote: string } | null}
+ */
+export function parseCitationAndQuote(text) {
+  const raw = String(text || "").trim();
+  if (!raw || raw.length > 2600) return null;
+  const match = /["“]([^"“”]{40,})["”]/.exec(raw);
+  if (!match) return null;
+  const quote = match[1].trim();
+  const before = raw.slice(0, match.index).trim();
+  const after = raw.slice(match.index + match[0].length).trim();
+  // Words after the quote, or a question, mean the visitor is saying something about it.
+  if (/[\p{L}\p{N}]/u.test(after) || raw.includes("?")) return null;
+  const citation = before
+    .replace(/[\s:;,–—-]+$/u, "")
+    .replace(/\b(?:says|states|provides|reads)$/i, "")
+    .replace(/[\s:;,–—-]+$/u, "")
+    .trim();
+  if (!citation || citation.length > 200) return null;
+  if (!/(?:^|[^\p{L}])(?:ss?|secs?|sect|sections?|arts?|articles?|regs?|regulations?|rules?|paras?|paragraphs?)\.?\s*\d/iu.test(citation)) {
+    return null;
+  }
+  return { citation, quote };
+}
+
+/** A saved proof pasted as text: the `{receipt, claim}` export or a bare receipt. */
+export function looksLikeProof(text) {
+  const raw = String(text || "").trim();
+  return raw.startsWith("{") && raw.endsWith("}") && /"schema_version"\s*:/.test(raw);
+}
+
+/**
+ * The AI's final text as the visitor should read it: without the runtime's card blocks, which
+ * this page never draws (a model could use one to imitate a result card).
+ */
+export function cleanAnswerText(raw) {
+  let text = typeof raw === "string" ? raw : "";
+  text = text.replace(/```cruse-ui[\s\S]*?```/gi, "");
+  const open = text.search(/```cruse-ui/i);
+  if (open >= 0) text = text.slice(0, open);
+  text = text.replace(/<\/?tool_(?:response|call)>/gi, "").trim();
+  if (text.startsWith("{") && text.endsWith("}")) {
+    try {
+      const doc = JSON.parse(text);
+      for (const key of ["Answer", "answer", "Response", "response", "text"]) {
+        if (doc && typeof doc[key] === "string" && doc[key].trim()) return doc[key].trim();
+      }
+    } catch {
+      // not an envelope: show it as written
+    }
+  }
+  return text;
+}
+
+/** A fixed line for each step of a turn. Tool and section names are model text, so none is shown. */
+export function statusLineForEvent(event) {
+  const name = String(event?.tool?.name || "").toLowerCase();
+  switch (event?.type) {
+    case "turn.started":
+      return "Thinking…";
+    case "agent.started":
+      return "Working on your question…";
+    case "tool.started":
+    case "tool.progress":
+      if (name.includes("check_claim")) return "Checking a quote against the published text…";
+      if (name.includes("resolve_citation")) return "Finding the section…";
+      if (name.includes("get_anchor")) return "Reading the section…";
+      if (name.includes("search_catalogue") || name.includes("retrieve_evidence")) return "Searching the published laws…";
+      if (name.startsWith("website_")) return "Updating this page…";
+      if (event.tool?.kind === "remote network" || event.tool?.kind === "linked network") return "Contacting another site…";
+      return "Working on your question…";
+    case "tool.completed":
+    case "tool.failed":
+    case "agent.completed":
+      return "Putting the answer together…";
+    default:
+      return "";
+  }
+}
+
+function appendInline(parent, text) {
+  // **bold** and `code` only; everything else is plain text.
+  const pattern = /(\*\*[^*\n]+\*\*|`[^`\n]+`)/g;
+  let last = 0;
+  for (const m of text.matchAll(pattern)) {
+    if (m.index > last) parent.appendChild(document.createTextNode(text.slice(last, m.index)));
+    const token = m[0];
+    const el = document.createElement(token.startsWith("`") ? "code" : "strong");
+    el.textContent = token.startsWith("`") ? token.slice(1, -1) : token.slice(2, -2);
+    parent.appendChild(el);
+    last = m.index + token.length;
+  }
+  if (last < text.length) parent.appendChild(document.createTextNode(text.slice(last)));
+}
+
+/**
+ * Draw the AI's text as paragraphs and lists. Text only: no HTML, links or images from the
+ * model are ever made into elements.
+ */
+export function renderAnswerText(container, text) {
+  container.replaceChildren();
+  const blocks = String(text || "").replace(/\r\n?/g, "\n").split(/\n{2,}/);
+  for (const block of blocks) {
+    const lines = block.split("\n").filter((line) => line.trim());
+    if (!lines.length) continue;
+    const bullet = lines.every((line) => /^\s*[-*•]\s+/.test(line));
+    const numbered = lines.every((line) => /^\s*\d+[.)]\s+/.test(line));
+    if (bullet || numbered) {
+      const list = document.createElement(numbered ? "ol" : "ul");
+      for (const line of lines) {
+        const li = document.createElement("li");
+        appendInline(li, line.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, ""));
+        list.appendChild(li);
+      }
+      container.appendChild(list);
+      continue;
+    }
+    const p = document.createElement("p");
+    lines.forEach((line, i) => {
+      if (i > 0) p.appendChild(document.createElement("br"));
+      appendInline(p, line.replace(/^#{1,6}\s+/, ""));
+    });
+    container.appendChild(p);
+  }
+}
+
+const $ = (id) => document.getElementById(id);
+
+function shorten(text, max) {
+  const chars = [...String(text || "")];
+  return chars.length > max ? `${chars.slice(0, max).join("")}…` : chars.join("");
+}
+
 class LawCheckController {
   constructor() {
     this.records = [];
     this.jwks = null;
-    this.entries = []; // { receipt, claim, verification, source, groupLabel }
+    this.items = []; // what the thread holds, as saved in the tab: user, ai, result, divider
     this.cardByReceiptId = new Map();
     this.cardsBySourceId = new Map();
+    this.runtime = null; // { engine, trace } once the challenge runtime has started
     this.runtimeLoaded = false;
-    this.runtimeLoading = false;
+    this.runtimeLoading = null;
     this.isPaused = false;
-    this.isChecking = false;
+    this.isBusy = false;
+    this.overLimit = false;
     this.rateLimitTimer = null;
     this.directCallCount = 0;
     this.activeAgentTurn = null;
+    this.pendingAgentWork = [];
+    this.mode = "quote";
+    this.modeChosen = false;
+    this.hasProviderKey = false;
+    this.providerName = "";
+    this.turnSeq = 0;
+    this.statusItem = null;
+    this.openAgentsView = false;
+    this._rpcId = 0;
+    this._lastSearchAt = 0;
   }
 
   openSection({ source_id, pinpoint } = {}) {
@@ -254,21 +425,21 @@ class LawCheckController {
     if (!receipt_id) return { ok: false, reason: "Missing receipt_id." };
     const card = this.cardByReceiptId.get(receipt_id);
     if (!card) return { ok: false, reason: "Receipt not found on this page." };
-    const isWide = typeof window !== "undefined" && window.innerWidth > 1100;
-    // Never moves keyboard focus; scrolls only on wide screens (§10.10, §10.11)
-    card.expandAndReveal(isWide);
+    // Opens the card and brings it into view; never moves keyboard focus.
+    card.expandAndReveal(true);
     return { ok: true, receipt_id };
   }
 
   init() {
     if (typeof document === "undefined") return;
-    if (!document.getElementById("check-form")) return;
+    if (!$("composer-form")) return;
 
-    // 1. Install LC-16 fetch interceptor immediately, before any runtime loads.
+    // 1. Install the LC-16 fetch wrapper at once, before any runtime loads.
     installCheckClaimInterceptor({
       onCheckClaim: ({ envelope, arguments: args }) => {
-        if (this.directCallCount > 0) return; // direct form/recheck handles its own result
-        this._handleInterceptedAgentReceipt(envelope, args);
+        if (this.directCallCount > 0) return; // the page's own check handles its own result
+        const work = this._handleInterceptedAgentReceipt(envelope, args);
+        this.pendingAgentWork.push(work);
       },
       onToolError: (errInfo) => {
         if (this.directCallCount > 0) return;
@@ -277,20 +448,26 @@ class LawCheckController {
     });
 
     this._bindMobileNav();
-    this._bindTabs();
-    this._bindForm();
-    this._bindRecheckForm();
+    this._bindSlashMenu();
+    this._bindComposer();
+    this._bindProof();
+    this._bindProviderModal();
     this._bindConnectivity();
     this._bindAlternativeEvents();
+    document.addEventListener("oa-receipt-announce", (event) => {
+      if (event.detail?.text) this._announce(event.detail.text);
+    });
+    $("new-chat")?.addEventListener("click", () => this._newChat());
 
     if (!globalThis.crypto?.subtle) {
       this._showGlobalBanner("This browser cannot verify receipts.", "red");
-      this._setInteractiveDisabled(true);
+      this.isPaused = true;
+      this._refreshComposerState();
       return;
     }
 
     this._loadRecords();
-    this._restoreSessionReceipts();
+    this._restoreThread();
     this._syncInitialRoute();
   }
 
@@ -305,93 +482,98 @@ class LawCheckController {
     });
   }
 
-  _bindTabs() {
-    const tablist = document.querySelector('[role="tablist"]');
-    const tabs = [...document.querySelectorAll('[role="tab"][data-tab]')];
-    const panels = [...document.querySelectorAll('[role="tabpanel"][data-panel]')];
-    if (!tablist || !tabs.length) return;
-
-    const activate = (name, { updateHash = true } = {}) => {
-      for (const tab of tabs) {
-        const selected = tab.dataset.tab === name;
-        tab.setAttribute("aria-selected", selected ? "true" : "false");
-        tab.tabIndex = selected ? 0 : -1;
+  _setMode(mode, { updateHash = true, focus = false, chosen = true } = {}) {
+    this.mode = mode === "ask" ? "ask" : "quote";
+    if (chosen) this.modeChosen = true;
+    const quote = this.mode === "quote";
+    const input = $("composer-input");
+    const citation = $("citation-input");
+    const label = $("composer-label");
+    $("mode-quote")?.setAttribute("aria-pressed", quote ? "true" : "false");
+    $("mode-ask")?.setAttribute("aria-pressed", quote ? "false" : "true");
+    $("citation-field").hidden = !quote;
+    label.textContent = quote ? "Quoted words" : "Your question";
+    label.classList.toggle("sr-only", !quote);
+    input.placeholder = quote
+      ? "Paste the exact words from the section"
+      : "Ask what a published law says, or type / for commands";
+    this._setFieldError(input, null);
+    this._setFieldError(citation, null);
+    this._updateCounter();
+    this._refreshComposerState();
+    if (updateHash && typeof history !== "undefined") {
+      try {
+        history.replaceState(null, "", `${location.pathname}${location.search}#${quote ? "check" : "ask"}`);
+      } catch {
+        // ignore
       }
-      for (const panel of panels) {
-        const active = panel.dataset.panel === name;
-        if (active) {
-          panel.removeAttribute("hidden");
-        } else {
-          panel.setAttribute("hidden", "until-found");
-        }
-      }
-      if (updateHash && typeof history !== "undefined") {
-        try {
-          history.replaceState(null, "", `${location.pathname}${location.search}#${name}`);
-        } catch {
-          // ignore
-        }
-      }
-      if (name === "ask") {
-        this._ensureRuntimeLoaded();
-      }
-    };
-    this._activateTab = activate;
-
-    for (const tab of tabs) {
-      tab.addEventListener("click", () => activate(tab.dataset.tab));
-      // Selection by activation: Enter/Space activates; arrows move focus (roving tabindex fallback)
-      tab.addEventListener("keydown", (e) => {
-        if (e.isComposing || e.keyCode === 229) return;
-        const idx = tabs.indexOf(tab);
-        if (e.key === "ArrowRight") {
-          e.preventDefault();
-          const next = tabs[(idx + 1) % tabs.length];
-          next.focus();
-        } else if (e.key === "ArrowLeft") {
-          e.preventDefault();
-          const prev = tabs[(idx - 1 + tabs.length) % tabs.length];
-          prev.focus();
-        } else if (e.key === "Home") {
-          e.preventDefault();
-          tabs[0].focus();
-        } else if (e.key === "End") {
-          e.preventDefault();
-          tabs[tabs.length - 1].focus();
-        } else if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          activate(tab.dataset.tab);
-        }
-      });
     }
+    // Start the chat runtime ahead of the first question, but only once there is a key.
+    if (!quote && this.hasProviderKey) this._ensureRuntimeLoaded();
+    if (focus) (quote && !citation.value.trim() ? citation : input).focus();
+  }
 
-    // Sync tab selection when browser Find-in-page matches inside a hidden="until-found" panel
-    for (const panel of panels) {
-      panel.addEventListener("beforematch", () => {
-        activate(panel.dataset.panel);
-      });
+  _refreshComposerState() {
+    const send = $("composer-send");
+    const note = $("composer-note");
+    if (!send) return;
+    const quote = this.mode === "quote";
+    // A phone's row has room for one word beside the mode switch.
+    const narrow = Boolean(globalThis.matchMedia?.("(max-width: 520px)").matches);
+    send.textContent = this.isBusy
+      ? quote ? "Checking…" : "Working…"
+      : quote ? (narrow ? "Check" : "Check quote") : "Send";
+    const blocked = this.isBusy || this.isPaused || Boolean(this.rateLimitTimer) || this.overLimit;
+    if (blocked) send.setAttribute("aria-disabled", "true");
+    else send.removeAttribute("aria-disabled");
+    if (note) {
+      note.textContent = quote
+        ? "No AI is used for this check."
+        : this.hasProviderKey
+          ? `Answers come from ${this.providerName || "your AI provider"}. Open Alvary checks each quote.`
+          : "Asking a question needs your own AI key.";
     }
+  }
+
+  _setBusy(busy) {
+    this.isBusy = busy;
+    this._refreshComposerState();
+  }
+
+  _updateCounter() {
+    const input = $("composer-input");
+    const counter = $("quote-counter");
+    if (!input || !counter) return 0;
+    const len = [...input.value].length;
+    const max = this.mode === "quote" ? MAX_QUOTE_LEN : MAX_QUESTION_LEN;
+    const showAt = max - 200;
+    if (len >= showAt) {
+      counter.hidden = false;
+      counter.textContent = `${len} of ${max} characters`;
+      counter.classList.toggle("over-limit", len > max);
+    } else {
+      counter.hidden = true;
+    }
+    this.overLimit = len > max;
+    return len;
   }
 
   _syncInitialRoute() {
     const params = new URLSearchParams(location.search);
     const hash = location.hash.replace(/^#/, "");
-    const isOpenRouterCallback = params.has("code");
-    const isDev = params.get("dev") === "1";
+    this.openAgentsView = params.get("dev") === "1";
 
-    if (isDev) {
-      const agentsDetails = document.getElementById("agents-disclosure");
-      if (agentsDetails) agentsDetails.open = true;
-    }
-
-    if (isOpenRouterCallback || hash === "ask") {
-      this._activateTab?.("ask", { updateHash: false });
-    } else if (hash === "recheck" || hash === "verify") {
-      this._activateTab?.("check", { updateHash: false });
-      const verifyDetails = document.getElementById("verify-proof-disclosure");
-      if (verifyDetails) verifyDetails.open = true;
+    if (params.has("code")) {
+      // Returning from OpenRouter: the runtime finishes that sign-in itself, so it starts even with no key yet.
+      this._setMode("ask", { updateHash: false });
+      this._ensureRuntimeLoaded().then(() => this._refreshProviderUi?.());
+    } else if (hash === "ask") {
+      this._setMode("ask", { updateHash: false });
+    } else if (hash === "check" || hash === "recheck" || hash === "verify") {
+      this._setMode("quote", { updateHash: false });
     } else {
-      this._activateTab?.("check", { updateHash: false });
+      // No address given: checking a quote, until a saved key says the visitor asks questions.
+      this._setMode("quote", { updateHash: false, chosen: false });
     }
   }
 
@@ -420,6 +602,7 @@ class LawCheckController {
           : alternative.title;
       }
       if (claim?.quote) nextClaim.quote = claim.quote;
+      this._beginTurn();
       this._runDirectCheck(nextClaim, { source: "form" });
     });
   }
@@ -444,7 +627,7 @@ class LawCheckController {
       datalist.replaceChildren();
       for (const rec of this.records) {
         const opt = document.createElement("option");
-        opt.value = rec.example?.section ? `${rec.title}, ${rec.example.section}` : `${rec.title}, s. 1`;
+        opt.value = rec.example?.section ? `${rec.title}, ${rec.example.section}` : `${rec.title}, `;
         datalist.appendChild(opt);
       }
     }
@@ -480,69 +663,39 @@ class LawCheckController {
     }
   }
 
-  _bindForm() {
-    const form = document.getElementById("check-form");
-    const citationInput = document.getElementById("citation-input");
-    const datalist = document.getElementById("law-suggestions");
-    const quoteInput = document.getElementById("quote-input");
-    const counter = document.getElementById("quote-counter");
-    const submitBtn = document.getElementById("check-submit");
-    const trueBtn = document.getElementById("try-true-quote");
-    const alteredBtn = document.getElementById("try-altered-quote");
+  _bindComposer() {
+    const form = $("composer-form");
+    const citationInput = $("citation-input");
+    const datalist = $("law-suggestions");
+    const input = $("composer-input");
+    const slashMenu = $("slash-menu");
 
-    const validateCitation = ({ announce = false } = {}) => {
-      const val = citationInput.value.trim();
-      if (!val) {
-        this._setFieldError(citationInput, "Enter a citation, for example Freedom of Information Act 2011, s. 1(1).", { announce });
-        return false;
-      }
-      this._setFieldError(citationInput, null);
-      return true;
-    };
+    $("mode-quote")?.addEventListener("click", () => this._setMode("quote", { focus: true }));
+    $("mode-ask")?.addEventListener("click", () => this._setMode("ask", { focus: true }));
 
-    const validateQuote = ({ announce = false } = {}) => {
-      const val = quoteInput.value;
-      const len = [...val].length;
-      if (len >= COUNTER_SHOW_AT) {
-        counter.hidden = false;
-        counter.textContent = `${len} of ${MAX_QUOTE_LEN} characters`;
-        counter.classList.toggle("over-limit", len > MAX_QUOTE_LEN);
-      } else {
-        counter.hidden = true;
-      }
-
-      if (!val.trim()) {
-        this._setFieldError(quoteInput, "Paste the quoted words to check.", { announce });
-        return false;
-      }
-      if (len > MAX_QUOTE_LEN) {
-        this._setFieldError(
-          quoteInput,
-          `Quote is ${len} characters. Shorten it to ${MAX_QUOTE_LEN} characters or fewer.`,
-          { announce },
-        );
-        submitBtn.setAttribute("aria-disabled", "true");
-        return false;
-      }
-      this._setFieldError(quoteInput, null);
-      if (!this.isChecking && !this.isPaused && !this.rateLimitTimer) {
-        submitBtn.removeAttribute("aria-disabled");
-      }
-      return true;
-    };
-
-    // Live typeahead via search_catalogue on /agents/mcp for large corpora
+    // Live suggestions from search_catalogue, for laws beyond the short list in records.json.
+    // Each search spends one of the visitor's calls, so: none while the typed law is already
+    // suggested, one at most every 1.5 seconds, and a newer search cancels an older one.
     let searchTimer = null;
+    let searchAbort = null;
     citationInput.addEventListener("input", () => {
+      citationInput.dataset.edited = "true";
       if (citationInput.getAttribute("aria-invalid") === "true" && citationInput.value.trim()) {
         this._setFieldError(citationInput, null);
       }
-      const q = citationInput.value.split(",")[0].trim();
-      if (q.length < 3 || !datalist) return;
       clearTimeout(searchTimer);
+      const q = citationInput.value.split(",")[0].trim();
+      if (q.length < 4 || q.startsWith("/") || !datalist || this.isPaused) return;
+      const typed = q.toLowerCase();
+      if ([...datalist.options].some((o) => o.value.toLowerCase().startsWith(typed))) return;
+      const wait = Math.max(400, 1500 - (Date.now() - this._lastSearchAt));
       searchTimer = setTimeout(async () => {
+        searchAbort?.abort();
+        const controller = new AbortController();
+        searchAbort = controller;
+        this._lastSearchAt = Date.now();
         try {
-          const resp = await fetch(MCP_URL, {
+          const resp = await fetch(MCP_PATH, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -555,181 +708,304 @@ class LawCheckController {
               method: "tools/call",
               params: { name: "search_catalogue", arguments: { query: q, limit: 8 } },
             }),
+            signal: controller.signal,
           });
           if (!resp.ok) return;
-          const rpc = await resp.json();
-          const parsed = JSON.parse(rpc?.result?.content?.[0]?.text || "{}");
+          const result = parseJsonRpcText(await resp.text())?.result;
+          if (!result || result.isError) return;
+          const parsed = JSON.parse(result.content?.[0]?.text || "{}");
           const items = Array.isArray(parsed?.items) ? parsed.items : [];
-          if (!items.length) return;
-          const seen = new Set();
-          datalist.replaceChildren();
+          if (controller.signal.aborted || !items.length) return;
+          const seen = new Set([...datalist.options].map((o) => o.value.split(",")[0].trim().toLowerCase()));
           for (const item of items) {
-            const title = item.title || item.citation;
-            if (!title || seen.has(title)) continue;
-            seen.add(title);
+            const title = typeof item?.title === "string" ? item.title.trim() : "";
+            if (!title || seen.has(title.toLowerCase())) continue;
+            seen.add(title.toLowerCase());
             const opt = document.createElement("option");
-            opt.value = `${title}, s. 1`;
+            // The law only: the visitor names the section, the page never guesses one.
+            opt.value = `${title}, `;
             datalist.appendChild(opt);
           }
         } catch {
-          // Keep existing records.json suggestions silently
+          // Keep the suggestions already shown
         }
-      }, 280);
+      }, wait);
     });
 
-    citationInput.addEventListener("blur", () => validateCitation({ announce: true }));
-    quoteInput.addEventListener("blur", () => validateQuote({ announce: true }));
-    quoteInput.addEventListener("input", () => {
-      const len = [...quoteInput.value].length;
-      if (len >= COUNTER_SHOW_AT) {
-        counter.hidden = false;
-        counter.textContent = `${len} of ${MAX_QUOTE_LEN} characters`;
-        counter.classList.toggle("over-limit", len > MAX_QUOTE_LEN);
-      } else {
-        counter.hidden = true;
-      }
-      if (len > MAX_QUOTE_LEN) {
-        this._setFieldError(
-          quoteInput,
-          `Quote is ${len} characters. Shorten it to ${MAX_QUOTE_LEN} characters or fewer.`,
-        );
-        submitBtn.setAttribute("aria-disabled", "true");
-      } else if (quoteInput.getAttribute("aria-invalid") === "true" && quoteInput.value.trim()) {
-        this._setFieldError(quoteInput, null);
-        if (!this.isChecking && !this.isPaused && !this.rateLimitTimer) {
-          submitBtn.removeAttribute("aria-disabled");
-        }
+    citationInput.addEventListener("blur", () => {
+      if (citationInput.dataset.edited && !citationInput.value.trim()) {
+        this._setFieldError(citationInput, CITATION_NEEDED, { announce: true });
       }
     });
-
-    // IME-safe Enter handling on single-line inputs
+    // IME-safe Enter on the one-line field
     citationInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && (e.isComposing || e.keyCode === 229)) {
-        e.preventDefault();
-      }
+      if (e.key === "Enter" && (e.isComposing || e.keyCode === 229)) e.preventDefault();
     });
 
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      if (this.isPaused || this.isChecking || this.rateLimitTimer) return;
-      if (submitBtn.getAttribute("aria-disabled") === "true") return;
-
-      const citOk = validateCitation();
-      const quoteOk = validateQuote();
-      if (!citOk || !quoteOk) {
-        const firstInvalid = !citOk ? citationInput : quoteInput;
-        firstInvalid.focus();
-        return;
+    input.addEventListener("input", () => {
+      input.dataset.edited = "true";
+      this._updateCounter();
+      if (this.overLimit) {
+        const max = this.mode === "quote" ? MAX_QUOTE_LEN : MAX_QUESTION_LEN;
+        this._setFieldError(input, `That is ${[...input.value].length} characters. Shorten it to ${max} or fewer.`);
+      } else if (input.getAttribute("aria-invalid") === "true" && input.value.trim()) {
+        this._setFieldError(input, null);
       }
+      this._refreshComposerState();
+    });
 
-      const rawCitation = citationInput.value.trim();
-      const matchedRec = this.records.find((r) => rawCitation.toLowerCase().includes(r.title.toLowerCase()));
-      const claim = {
-        citation: rawCitation,
-        quote: quoteInput.value.trim(),
-        jurisdiction: matchedRec?.jurisdiction || "ng",
-        language: matchedRec?.language || "en",
-      };
-      await this._runDirectCheck(claim, { source: "form" });
+    // Enter sends and Shift+Enter starts a new line, as in any chat. On a touch keyboard Enter
+    // stays a new line, and the Send button sends.
+    input.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" || e.shiftKey || e.defaultPrevented) return;
+      if (e.isComposing || e.keyCode === 229) return;
+      if (slashMenu && !slashMenu.hidden) return;
+      if (globalThis.matchMedia?.("(pointer: coarse)").matches) return;
+      e.preventDefault();
+      form.requestSubmit();
+    });
+
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      this._onSubmit();
     });
 
     const runExample = (altered) => {
-      const rec = this.records.find((r) => r.example) || this.records[0];
-      if (!rec || !rec.example) return;
+      const rec = this.records.find((r) => r.example) || null;
+      if (!rec) {
+        this._appendNotice("The examples could not be loaded. Type a law, a section and the quoted words.", "grey");
+        return;
+      }
+      this._setMode("quote");
       citationInput.value = `${rec.title}, ${rec.example.section}`;
-      quoteInput.value = altered ? rec.example.altered_quote : rec.example.true_quote;
-      this._setFieldError(citationInput, null);
-      this._setFieldError(quoteInput, null);
+      input.value = altered ? rec.example.altered_quote : rec.example.true_quote;
+      // The pill disappears with the welcome text, so the focus goes to the composer first.
+      input.focus();
       form.requestSubmit();
     };
-
-    trueBtn?.addEventListener("click", () => runExample(false));
-    alteredBtn?.addEventListener("click", () => runExample(true));
-
-    this._bindProviderModal();
-    this._bindSidePanelAndSlashMenu();
-  }
-
-  _setVerifiedPanelOpen(open) {
-    const ws = document.getElementById("lc-workspace");
-    const toggleBtn = document.getElementById("toggle-verified-panel");
-    const countEl = document.getElementById("verified-count");
-    const list = document.getElementById("receipts-list");
-    const count = list ? list.querySelectorAll("oa-receipt, .lc-notice-card").length : 0;
-    if (countEl) countEl.textContent = String(count);
-    if (toggleBtn) {
-      toggleBtn.hidden = count === 0;
-      toggleBtn.setAttribute("aria-expanded", open ? "true" : "false");
-    }
-    if (ws) ws.setAttribute("data-panel-open", open ? "true" : "false");
-  }
-
-  _bindSidePanelAndSlashMenu() {
-    const toggleBtn = document.getElementById("toggle-verified-panel");
-    const closeBtn = document.getElementById("close-verified-panel");
-    const ws = document.getElementById("lc-workspace");
-    const slashMenu = document.getElementById("slash-menu");
-    const citationInput = document.getElementById("citation-input");
-    const quoteInput = document.getElementById("quote-input");
-
-    toggleBtn?.addEventListener("click", () => {
-      const isOpen = ws?.getAttribute("data-panel-open") === "true";
-      this._setVerifiedPanelOpen(!isOpen);
+    $("try-true-quote")?.addEventListener("click", () => runExample(false));
+    $("try-altered-quote")?.addEventListener("click", () => runExample(true));
+    $("try-question")?.addEventListener("click", () => {
+      const rec = this.records.find((r) => r.example) || this.records[0];
+      this._setMode("ask");
+      input.value = rec
+        ? `What does ${rec.title}${rec.example?.section ? `, ${rec.example.section}` : ""} say? Quote the words.`
+        : "What does the Freedom of Information Act 2011 say about who may ask for information? Quote the words.";
+      input.focus();
+      form.requestSubmit();
     });
-    closeBtn?.addEventListener("click", () => this._setVerifiedPanelOpen(false));
+  }
 
-    const runSlashCommand = (cmd, sourceEl) => {
-      if (sourceEl && sourceEl.value.trim().startsWith("/")) sourceEl.value = "";
-      if (slashMenu) slashMenu.hidden = true;
-      if (cmd === "quote") {
-        this._activateTab?.("check");
-        citationInput?.focus();
-      } else if (cmd === "ask") {
-        this._activateTab?.("ask");
-      } else if (cmd === "verify") {
-        this._activateTab?.("check");
-        const verifyDetails = document.getElementById("verify-proof-disclosure");
-        if (verifyDetails) {
-          verifyDetails.open = true;
-          verifyDetails.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  _claimDefaults(citation) {
+    const rec = this.records.find((r) => citation.toLowerCase().includes(String(r.title || "").toLowerCase()));
+    return { jurisdiction: rec?.jurisdiction || "ng", language: rec?.language || "en" };
+  }
+
+  async _onSubmit() {
+    if (this.isBusy) return;
+    const input = $("composer-input");
+    const citationInput = $("citation-input");
+    const text = input.value.trim();
+
+    // A saved proof pasted into the box is verified, whatever the mode.
+    if (looksLikeProof(text)) {
+      input.value = "";
+      this._updateCounter();
+      await this._verifyProofText(text, "pasted text");
+      return;
+    }
+
+    const serviceBlocked = this.isPaused || Boolean(this.rateLimitTimer);
+
+    if (this.mode === "quote") {
+      const citation = citationInput.value.trim();
+      const citationOk = Boolean(citation);
+      this._setFieldError(citationInput, citationOk ? null : CITATION_NEEDED);
+      let quoteMessage = null;
+      if (!text) quoteMessage = "Paste the quoted words to check.";
+      else if ([...text].length > MAX_QUOTE_LEN) {
+        quoteMessage = `That is ${[...text].length} characters. Shorten it to ${MAX_QUOTE_LEN} or fewer.`;
+      }
+      this._setFieldError(input, quoteMessage);
+      if (!citationOk || quoteMessage) {
+        (citationOk ? input : citationInput).focus();
+        this._announce(citationOk ? quoteMessage : CITATION_NEEDED);
+        return;
+      }
+      if (serviceBlocked) return;
+      const claim = { citation, quote: text, ...this._claimDefaults(citation) };
+      this._beginTurn();
+      this._appendUser({ cite: citation, quote: text });
+      this._clearComposerText();
+      await this._runDirectCheck(claim, { source: "form" });
+      return;
+    }
+
+    if (!text) {
+      this._setFieldError(input, "Type a question, or switch to Check a quote.", { announce: true });
+      input.focus();
+      return;
+    }
+    if ([...text].length > MAX_QUESTION_LEN) {
+      this._setFieldError(input, `Shorten your question to ${MAX_QUESTION_LEN} characters or fewer.`, { announce: true });
+      input.focus();
+      return;
+    }
+    this._setFieldError(input, null);
+    if (serviceBlocked) return;
+
+    // A message that is plainly a citation and a quoted passage is checked directly, with no AI.
+    const direct = parseCitationAndQuote(text);
+    if (direct) {
+      this._beginTurn();
+      this._appendUser({ text });
+      this._clearComposerText();
+      await this._runDirectCheck({ ...direct, ...this._claimDefaults(direct.citation) }, { source: "form" });
+      return;
+    }
+
+    if (!this.hasProviderKey) {
+      // The question stays in the box, so nothing typed is lost while a key is added.
+      this._appendKeyNeeded();
+      return;
+    }
+
+    this._beginTurn();
+    this._appendUser({ text });
+    this._clearComposerText();
+    await this._runAiTurn(text);
+  }
+
+  _beginTurn() {
+    this.turnSeq += 1;
+    // Something was sent, so the earlier "add a key" note has served its purpose.
+    $("thread-list").querySelector(".lc-msg-note[data-kind='key-needed']")?.remove();
+  }
+
+  _clearComposerText() {
+    const input = $("composer-input");
+    input.value = "";
+    // On a touch screen, sending puts the keyboard away and lets the composer fold, so the result shows.
+    if (globalThis.matchMedia?.("(pointer: coarse)").matches) document.activeElement?.blur?.();
+    delete input.dataset.edited;
+    delete $("citation-input").dataset.edited;
+    this._updateCounter();
+  }
+
+  /** Put a refused draft back in the composer so it can be corrected, never over something newer. */
+  _restoreDraft(claim) {
+    const input = $("composer-input");
+    const citationInput = $("citation-input");
+    if (input.value.trim()) return;
+    this._setMode("quote");
+    if (claim?.citation && !citationInput.value.trim()) citationInput.value = claim.citation;
+    if (claim?.quote) input.value = claim.quote;
+    this._updateCounter();
+  }
+
+  _bindSlashMenu() {
+    const slashMenu = $("slash-menu");
+    const citationInput = $("citation-input");
+    const quoteInput = $("composer-input");
+
+    const items = slashMenu ? [...slashMenu.querySelectorAll(".lc-slash-item")] : [];
+    let activeSlashInput = null;
+    let activeIndex = -1;
+    const visibleItems = () => items.filter((b) => !b.hidden);
+
+    const setActive = (idx) => {
+      const vis = visibleItems();
+      activeIndex = vis.length ? (idx + vis.length) % vis.length : -1;
+      for (const b of items) b.setAttribute("aria-selected", "false");
+      const current = vis[activeIndex];
+      if (current) {
+        current.setAttribute("aria-selected", "true");
+        activeSlashInput?.setAttribute("aria-activedescendant", current.id);
+      } else {
+        activeSlashInput?.removeAttribute("aria-activedescendant");
+      }
+    };
+
+    const closeSlashMenu = ({ clear = false } = {}) => {
+      if (!slashMenu || slashMenu.hidden) return;
+      slashMenu.hidden = true;
+      activeIndex = -1;
+      if (activeSlashInput) {
+        activeSlashInput.removeAttribute("aria-activedescendant");
+        if (clear && activeSlashInput.value.trimStart().startsWith("/")) {
+          activeSlashInput.value = "";
+          // A typed command is not an attempt at the field, so it leaves no error behind.
+          delete activeSlashInput.dataset.edited;
         }
       }
     };
 
-    let activeSlashInput = null;
+    const runSlashCommand = (cmd, sourceEl) => {
+      if (sourceEl && sourceEl.value.trimStart().startsWith("/")) {
+        sourceEl.value = "";
+        delete sourceEl.dataset.edited;
+        this._updateCounter();
+      }
+      closeSlashMenu();
+      if (cmd === "quote") this._setMode("quote", { focus: true });
+      else if (cmd === "ask") this._setMode("ask", { focus: true });
+      else if (cmd === "verify") $("proof-file")?.click();
+      else if (cmd === "key") $("open-provider-modal")?.click();
+      else if (cmd === "new") this._newChat();
+    };
+
     for (const field of [citationInput, quoteInput]) {
       if (!field || !slashMenu) continue;
+      field.setAttribute("aria-controls", "slash-menu");
       field.addEventListener("input", () => {
         const val = field.value.trimStart();
-        if (val.startsWith("/") && !val.includes(" ")) {
+        if (val.startsWith("/") && !/\s/.test(val)) {
           activeSlashInput = field;
           const query = val.slice(1).toLowerCase();
-          let any = false;
-          for (const btn of slashMenu.querySelectorAll(".lc-slash-item")) {
-            const match = btn.dataset.cmd.startsWith(query);
-            btn.hidden = !match;
-            if (match) any = true;
+          for (const btn of items) btn.hidden = !btn.dataset.cmd.startsWith(query);
+          const shown = visibleItems();
+          if (!shown.length) {
+            closeSlashMenu();
+            return;
           }
-          slashMenu.hidden = !any;
+          const wasHidden = slashMenu.hidden;
+          slashMenu.hidden = false;
+          setActive(0);
+          if (wasHidden) {
+            this._announce(
+              `${shown.length} ${shown.length === 1 ? "command" : "commands"}. Up and Down to choose, Enter to run, Escape to close.`,
+            );
+          }
         } else if (activeSlashInput === field) {
-          slashMenu.hidden = true;
+          closeSlashMenu();
         }
       });
       field.addEventListener("keydown", (e) => {
-        if (!slashMenu || slashMenu.hidden) return;
-        if (e.key === "Escape") {
-          slashMenu.hidden = true;
+        if (!slashMenu || slashMenu.hidden || activeSlashInput !== field) return;
+        if (e.isComposing || e.keyCode === 229) return;
+        if (e.key === "ArrowDown") {
           e.preventDefault();
-        } else if (e.key === "Enter" && !e.isComposing && e.keyCode !== 229) {
-          const first = [...slashMenu.querySelectorAll(".lc-slash-item")].find((b) => !b.hidden);
-          if (first) {
+          setActive(activeIndex + 1);
+        } else if (e.key === "ArrowUp") {
+          e.preventDefault();
+          setActive(activeIndex - 1);
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          closeSlashMenu({ clear: true });
+        } else if (e.key === "Enter") {
+          const current = visibleItems()[activeIndex];
+          if (current) {
             e.preventDefault();
-            runSlashCommand(first.dataset.cmd, field);
+            runSlashCommand(current.dataset.cmd, field);
           }
         }
       });
+      // Leaving the field closes the menu and removes the half-typed command.
+      field.addEventListener("blur", () => closeSlashMenu({ clear: true }));
     }
 
+    // A press on the menu must not take the focus from the field, or the blur above would close it first.
+    slashMenu?.addEventListener("pointerdown", (e) => e.preventDefault());
     slashMenu?.addEventListener("click", (e) => {
       const btn = e.target.closest(".lc-slash-item");
       if (btn) runSlashCommand(btn.dataset.cmd, activeSlashInput);
@@ -784,8 +1060,6 @@ class LawCheckController {
 
     const dialog = document.getElementById("provider-dialog");
     const openBtn = document.getElementById("open-provider-modal");
-    const ctaBtn = document.getElementById("setup-provider-cta");
-    const switchCheckBtn = document.getElementById("switch-to-check-cta");
     const closeBtn = document.getElementById("provider-dialog-close");
     const cancelBtn = document.getElementById("provider-cancel-btn");
     const removeBtn = document.getElementById("provider-remove-btn");
@@ -796,14 +1070,15 @@ class LawCheckController {
     const urlField = document.getElementById("provider-url-field");
     const urlInput = document.getElementById("provider-url-input");
     const keyHint = document.getElementById("provider-key-hint");
+    const savedNote = document.getElementById("provider-key-saved");
     const presetBtns = [...document.querySelectorAll(".lc-preset-btn")];
     const pillLabel = document.getElementById("provider-pill-label");
     const pillDot = document.getElementById("provider-dot");
-    const requiredCard = document.getElementById("provider-required-card");
-    const agentApp = document.getElementById("agent-app");
     if (!dialog || !form) return;
 
     let activePreset = "openrouter";
+    let savedKey = "";
+    let dirty = false;
     let byokMod = null;
     const loadByok = async () => {
       if (!byokMod) byokMod = await import("./runtime/byok.js");
@@ -829,8 +1104,12 @@ class LawCheckController {
       urlField.hidden = activePreset !== "custom";
       urlInput.required = activePreset === "custom";
       if (!keepValues) {
-        if (info.router) urlInput.value = info.router;
-        if (info.model) modelInput.value = info.model;
+        // Custom starts with an empty address, never the previous provider's.
+        urlInput.value = info.router;
+        // A model the visitor typed is kept; only a provider's own default is swapped.
+        const defaults = Object.values(PRESETS).map((preset) => preset.model).filter(Boolean);
+        const current = modelInput.value.trim();
+        if (!current || defaults.includes(current)) modelInput.value = info.model;
       }
       if (keyHint) {
         keyHint.replaceChildren();
@@ -853,35 +1132,70 @@ class LawCheckController {
         const byok = await loadByok();
         const profile = byok.getSelectedByokProfile();
         const hasKey = Boolean(profile?.key && profile?.router);
+        this.hasProviderKey = hasKey;
         if (pillLabel) {
           pillLabel.textContent = hasKey
             ? `${profile.name || "AI"} · ${profile.model || "ready"}`
-            : "Set up AI key";
+            : "Add AI key (optional)";
         }
         if (pillDot) {
           pillDot.classList.toggle("is-connected", hasKey);
         }
-        if (requiredCard) requiredCard.hidden = hasKey;
-        if (agentApp) agentApp.hidden = !hasKey;
+        this.providerName = hasKey ? profile.name || "your AI provider" : "";
+        const tryQuestion = document.getElementById("try-question");
+        if (tryQuestion) tryQuestion.hidden = !hasKey;
+        // A visitor who already saved a key and gave no address starts on Ask AI.
+        if (hasKey && !this.modeChosen && this.mode !== "ask") {
+          this._setMode("ask", { updateHash: false, chosen: false });
+        }
+        this._refreshComposerState();
         if (removeBtn) removeBtn.hidden = !hasKey;
+        if (hasKey && this.mode === "ask") this._ensureRuntimeLoaded();
         return profile;
       } catch {
         return null;
       }
     };
 
+    this._refreshProviderUi = refreshProviderUi;
+
+    const resetKeyVisibility = () => {
+      keyInput.type = "password";
+      if (toggleKeyBtn) toggleKeyBtn.textContent = "Show";
+    };
+
     const openDialog = async () => {
       const profile = await refreshProviderUi();
+      keyInput.value = "";
       if (profile?.key) {
         const pKey = detectPreset(profile.router);
         selectPreset(pKey, { keepValues: true });
-        keyInput.value = profile.key || "";
+        // The saved key is never put back in the field: only its last four characters are shown.
+        savedKey = profile.key;
+        keyInput.required = false;
+        keyInput.placeholder = "Paste a new key to replace it";
+        if (savedNote) {
+          savedNote.textContent = `A key ending ${profile.key.slice(-4)} is saved. Leave the field empty to keep it.`;
+          savedNote.hidden = false;
+          keyInput.setAttribute("aria-describedby", "provider-key-hint provider-key-saved");
+        }
         modelInput.value = profile.model || PRESETS[pKey].model;
         urlInput.value = profile.router || PRESETS[pKey].router;
       } else {
+        savedKey = "";
+        keyInput.required = true;
+        keyInput.placeholder = "Paste your API key";
+        if (savedNote) {
+          savedNote.hidden = true;
+          savedNote.textContent = "";
+          keyInput.setAttribute("aria-describedby", "provider-key-hint");
+        }
+        modelInput.value = "";
         selectPreset("openai");
-        keyInput.value = "";
       }
+      resetKeyVisibility();
+      dirty = false;
+      dialog.setAttribute("closedby", "any");
       this._setFieldError(keyInput, null);
       this._setFieldError(modelInput, null);
       this._setFieldError(urlInput, null);
@@ -896,11 +1210,21 @@ class LawCheckController {
       };
       let pressedOutside = false;
       dialog.addEventListener("pointerdown", (e) => { pressedOutside = outside(e); });
-      dialog.addEventListener("pointerup", (e) => { if (pressedOutside && outside(e)) dialog.close(); });
+      dialog.addEventListener("pointerup", (e) => { if (pressedOutside && outside(e) && !dirty) dialog.close(); });
+    }
+
+    // Once something is typed, a click outside no longer closes the dialog and loses it.
+    for (const field of [keyInput, modelInput, urlInput]) {
+      field.addEventListener("input", () => {
+        dirty = true;
+        dialog.setAttribute("closedby", "closerequest");
+      });
     }
 
     dialog.addEventListener("close", () => {
       dialog.returnValue = "";
+      keyInput.value = "";
+      resetKeyVisibility();
     });
 
     for (const btn of presetBtns) {
@@ -911,28 +1235,29 @@ class LawCheckController {
       const showing = keyInput.type === "text";
       keyInput.type = showing ? "password" : "text";
       toggleKeyBtn.textContent = showing ? "Show" : "Hide";
-      toggleKeyBtn.setAttribute("aria-pressed", showing ? "false" : "true");
     });
 
     openBtn?.addEventListener("click", openDialog);
-    ctaBtn?.addEventListener("click", openDialog);
     closeBtn?.addEventListener("click", () => dialog.close());
     cancelBtn?.addEventListener("click", () => dialog.close());
-    switchCheckBtn?.addEventListener("click", () => this._activateTab?.("check"));
 
     removeBtn?.addEventListener("click", async () => {
       const byok = await loadByok();
       const profile = byok.getSelectedByokProfile();
       if (profile?.id) byok.deleteByokProfile(profile.id);
       byok.saveTabByokSetup(null);
+      savedKey = "";
+      const chatStarted = this.runtimeLoaded || this.runtimeLoading;
       dialog.close();
       await refreshProviderUi();
       this._announce("AI provider key removed from this browser.");
+      // A chat that has started still holds the key in memory; reloading drops it.
+      if (chatStarted) location.reload();
     });
 
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
-      const key = keyInput.value.trim();
+      const key = keyInput.value.trim() || savedKey;
       const model = modelInput.value.trim();
       const router = activePreset === "custom" ? urlInput.value.trim() : PRESETS[activePreset].router;
 
@@ -955,7 +1280,10 @@ class LawCheckController {
       } else {
         this._setFieldError(urlInput, null);
       }
-      if (!ok) return;
+      if (!ok) {
+        form.querySelector('[aria-invalid="true"]')?.focus();
+        return;
+      }
 
       const byok = await loadByok();
       const existing = byok.getSelectedByokProfile();
@@ -965,171 +1293,439 @@ class LawCheckController {
         { select: true },
       );
       byok.saveTabByokSetup({ router, model, key });
+      const chatStarted = this.runtimeLoaded || this.runtimeLoading;
       dialog.close();
+      // On Ask AI this also starts the chat, now that there is a key.
       await refreshProviderUi();
-      this._announce(`Connected to ${name}.`);
-      // If Ask AI is already active, reload so the runtime picks up the new key cleanly
-      if (this.activeTab === "ask") {
-        location.reload();
-      }
+      this._announce(`Saved. Ask AI now uses ${name}.`);
+      // A chat that has already started read its key at start, so it is reloaded to pick up the new one.
+      // The thread is kept in the tab and comes back after the reload.
+      if (chatStarted) location.reload();
+      else this._setMode("ask", { focus: true });
     });
 
     refreshProviderUi();
   }
 
-  _bindRecheckForm() {
-    const form = document.getElementById("recheck-form");
-    const input = document.getElementById("recheck-input");
-    const diffBox = document.getElementById("recheck-diff");
-    const fileInput = document.getElementById("recheck-file");
-    const dropzone = document.getElementById("verify-dropzone");
-    if (!form || !input) return;
+  // ---- The thread -------------------------------------------------------------------------------
 
-    const loadProofFile = async (file) => {
-      if (!file) return;
-      try {
-        const text = await file.text();
-        input.value = text.trim();
-        this._setFieldError(input, null);
-        form.requestSubmit();
-      } catch {
-        this._setFieldError(input, "Could not read that file. Choose a saved .json proof file.", { announce: true });
-      }
+  _appendItem(li, { reveal = true } = {}) {
+    const list = $("thread-list");
+    // While a turn is running its status line stays last; everything else goes above it.
+    if (this.statusItem?.isConnected && li !== this.statusItem) list.insertBefore(li, this.statusItem);
+    else list.appendChild(li);
+    const welcome = $("welcome");
+    if (welcome) welcome.hidden = true;
+    $("lc-chat")?.classList.add("has-thread");
+    // From here the page is a chat: the header and composer keep their places and the thread scrolls.
+    document.body.classList.add("lc-threaded");
+    const newChat = $("new-chat");
+    if (newChat) newChat.hidden = false;
+    if (reveal) this._reveal(li);
+    return li;
+  }
+
+  _reveal(el) {
+    if (typeof el.scrollIntoView !== "function") return;
+    const scroller = $("thread-scroll");
+    const room = (scroller ? scroller.clientHeight : window.innerHeight) - 24;
+    // A card taller than the free space is shown from its top, where its result is.
+    const block = el.getBoundingClientRect().height > room ? "start" : "nearest";
+    el.scrollIntoView({ behavior: scrollBehavior(), block });
+  }
+
+  _save(item) {
+    this.items.push(item);
+    if (this.items.length > MAX_SAVED_ITEMS) this.items = this.items.slice(-MAX_SAVED_ITEMS);
+    try {
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(this.items));
+    } catch {
+      // sessionStorage unavailable or full
+    }
+  }
+
+  _appendUser({ text = "", cite = "", quote = "" }, { save = true, reveal = true } = {}) {
+    const li = document.createElement("li");
+    li.className = "lc-msg lc-msg-user";
+    const who = document.createElement("span");
+    who.className = "sr-only";
+    who.textContent = "You: ";
+    li.appendChild(who);
+    if (cite) {
+      const c = document.createElement("span");
+      c.className = "lc-user-cite";
+      c.textContent = cite;
+      const q = document.createElement("span");
+      q.className = "lc-user-quote";
+      q.textContent = `“${shorten(quote, 320)}”`;
+      li.append(c, q);
+    } else {
+      const t = document.createElement("span");
+      t.className = "lc-user-text";
+      t.textContent = shorten(text, 1200);
+      li.appendChild(t);
+    }
+    this._appendItem(li, { reveal });
+    if (save) this._save({ t: "user", text: shorten(text, 1200), cite, quote: shorten(quote, 320) });
+    return li;
+  }
+
+  _appendAi(text, summary, { save = true, reveal = true } = {}) {
+    const li = document.createElement("li");
+    li.className = "lc-msg lc-msg-ai";
+    const label = document.createElement("p");
+    label.className = "lc-ai-label";
+    label.textContent = "AI's answer. Only quotes with a result card were checked.";
+    const body = document.createElement("div");
+    body.className = "lc-ai-text";
+    renderAnswerText(body, text);
+    li.append(label, body);
+    if (summary?.text) {
+      const foot = document.createElement("p");
+      foot.className = "lc-ai-summary";
+      if (summary.tone) foot.dataset.tone = summary.tone;
+      foot.textContent = summary.text;
+      li.appendChild(foot);
+    }
+    this._appendItem(li, { reveal });
+    if (save) this._save({ t: "ai", text: shorten(text, 12000), summary: summary || null });
+    return li;
+  }
+
+  _appendDivider(text, { save = true, reveal = true } = {}) {
+    const li = document.createElement("li");
+    li.className = "lc-msg lc-divider";
+    li.textContent = text;
+    this._appendItem(li, { reveal });
+    if (save) this._save({ t: "divider", text });
+    return li;
+  }
+
+  /** One line saying what is happening now. It is replaced by the result and never saved. */
+  _appendStatus(text) {
+    this.statusItem?.remove();
+    const li = document.createElement("li");
+    li.className = "lc-msg lc-msg-status";
+    const dot = document.createElement("span");
+    dot.className = "lc-status-dot";
+    dot.setAttribute("aria-hidden", "true");
+    const label = document.createElement("span");
+    label.textContent = text;
+    li.append(dot, label);
+    this.statusItem = li;
+    this._appendItem(li);
+    return {
+      update: (next) => {
+        if (next && label.textContent !== next) label.textContent = next;
+      },
+      remove: () => {
+        li.remove();
+        if (this.statusItem === li) this.statusItem = null;
+      },
     };
+  }
 
-    fileInput?.addEventListener("change", () => {
-      const file = fileInput.files?.[0];
-      if (file) loadProofFile(file);
-    });
-
-    if (dropzone) {
-      dropzone.addEventListener("dragover", (e) => {
-        e.preventDefault();
-        dropzone.classList.add("is-dragover");
-      });
-      dropzone.addEventListener("dragleave", () => dropzone.classList.remove("is-dragover"));
-      dropzone.addEventListener("drop", (e) => {
-        e.preventDefault();
-        dropzone.classList.remove("is-dragover");
-        const file = e.dataTransfer?.files?.[0];
-        if (file) loadProofFile(file);
+  _appendNotice(message, tone = "grey", { retryFn = null, actions = [], list = null, announce = true } = {}) {
+    const li = document.createElement("li");
+    li.className = "lc-msg lc-msg-note";
+    const box = document.createElement("div");
+    box.className = "lc-notice-card";
+    box.dataset.tone = tone;
+    const p = document.createElement("p");
+    p.textContent = message;
+    box.appendChild(p);
+    if (Array.isArray(list) && list.length) {
+      const ul = document.createElement("ul");
+      for (const line of list) {
+        const item = document.createElement("li");
+        item.textContent = line;
+        ul.appendChild(item);
+      }
+      box.appendChild(ul);
+    }
+    const all = [...actions];
+    if (typeof retryFn === "function") {
+      all.push({
+        label: "Try again",
+        onClick: () => {
+          li.remove();
+          retryFn();
+        },
       });
     }
-
-    input.addEventListener("blur", () => {
-      if (!input.value.trim()) {
-        this._setFieldError(input, "Paste saved proof JSON or choose a .json file to verify.", { announce: true });
-      } else {
-        this._setFieldError(input, null);
+    if (all.length) {
+      const row = document.createElement("div");
+      row.className = "lc-notice-actions";
+      for (const action of all) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = action.primary ? "lc-btn-primary" : "lc-btn-secondary";
+        btn.textContent = action.label;
+        btn.addEventListener("click", () => action.onClick(li, row));
+        row.appendChild(btn);
       }
+      box.appendChild(row);
+    }
+    li.appendChild(box);
+    this._appendItem(li);
+    if (announce) this._announce(message);
+    return li;
+  }
+
+  _appendKeyNeeded() {
+    $("thread-list").querySelector(".lc-msg-note[data-kind='key-needed']")?.remove();
+    const li = this._appendNotice(
+      "Asking a question needs an AI provider and your own key. Your question is still in the box. Checking a quote needs neither.",
+      "grey",
+      {
+        actions: [
+          { label: "Add AI key", primary: true, onClick: () => $("open-provider-modal")?.click() },
+          { label: "Check a quote instead", onClick: (item) => { item.remove(); this._setMode("quote", { focus: true }); } },
+        ],
+      },
+    );
+    li.dataset.kind = "key-needed";
+  }
+
+  _appendResult(entry, { persist = true, announce = false, reveal = true, collapsed = false } = {}) {
+    const list = $("thread-list");
+    // A new result closes the cards of earlier turns to their band, which still says the result.
+    if (reveal) {
+      for (const existing of list.querySelectorAll("oa-receipt")) {
+        if (existing.dataset.turn !== String(this.turnSeq)) existing.collapsed = true;
+      }
+    }
+
+    const li = document.createElement("li");
+    li.className = "lc-msg lc-msg-result";
+    const caption = document.createElement("p");
+    caption.className = "lc-msg-caption";
+    caption.textContent =
+      entry.source === "agent"
+        ? "Checked by Open Alvary, on a section the AI named"
+        : entry.source === "recheck"
+          ? "Saved proof, checked by Open Alvary"
+          : "Checked by Open Alvary. No AI was used.";
+    const card = document.createElement("oa-receipt");
+    card.setData({
+      receipt: entry.receipt,
+      claim: entry.claim,
+      verification: entry.verification,
+      source: entry.source,
+      collapsible: true,
+      collapsed,
     });
+    card.dataset.turn = String(this.turnSeq);
+    li.append(caption, card);
+    this._appendItem(li, { reveal });
 
-    form.addEventListener("submit", async (e) => {
+    if (entry.receipt.receipt_id) this.cardByReceiptId.set(entry.receipt.receipt_id, card);
+    const sid = entry.receipt.part?.source_id;
+    if (sid) {
+      const arr = this.cardsBySourceId.get(sid) || [];
+      arr.unshift(card);
+      this.cardsBySourceId.set(sid, arr);
+    }
+
+    if (persist) this._save({ t: "result", receipt: entry.receipt, claim: entry.claim, source: entry.source });
+
+    if (announce) {
+      const title = entry.receipt.part
+        ? `${entry.receipt.part.title}, ${entry.receipt.part.pinpoint}`
+        : entry.claim?.citation || entry.receipt.status;
+      const wl = wordsLineForReceipt(entry.receipt).text;
+      const rl = recordLinesForReceipt(entry.receipt)[0]?.text || "";
+      this._announce(`${title}. ${wl}. ${rl}`);
+    }
+    return card;
+  }
+
+  async _restoreThread() {
+    let saved = null;
+    try {
+      const raw = sessionStorage.getItem(STORAGE_KEY);
+      if (raw) saved = JSON.parse(raw);
+      if (!saved) {
+        // Results kept by the earlier two-panel page: newest first, results only.
+        const old = JSON.parse(sessionStorage.getItem(OLD_STORAGE_KEY) || "null");
+        if (Array.isArray(old)) {
+          saved = old
+            .filter((e) => e?.receipt)
+            .reverse()
+            .map((e) => ({ t: "result", receipt: e.receipt, claim: e.claim || null, source: e.source || "form" }));
+          sessionStorage.removeItem(OLD_STORAGE_KEY);
+        }
+      }
+    } catch {
+      saved = null;
+    }
+    if (!Array.isArray(saved) || !saved.length) return;
+
+    const hasResults = saved.some((item) => item?.t === "result");
+    const jwks = hasResults ? await this._ensureJwks() : null;
+    const lastResult = saved.map((item) => item?.t).lastIndexOf("result");
+    const kept = [];
+
+    for (let i = 0; i < saved.length; i++) {
+      const item = saved[i];
+      if (!item || typeof item !== "object") continue;
+      if (item.t === "user") {
+        this._appendUser(item, { save: false, reveal: false });
+        kept.push(item);
+      } else if (item.t === "ai" && typeof item.text === "string") {
+        this._appendAi(item.text, item.summary, { save: false, reveal: false });
+        kept.push(item);
+      } else if (item.t === "divider" && typeof item.text === "string") {
+        this._appendDivider(item.text, { save: false, reveal: false });
+        kept.push(item);
+      } else if (item.t === "result" && item.receipt && jwks) {
+        // Every saved receipt is verified again before it is drawn (§10.3).
+        const verification = await verifyReceipt(item.receipt, jwks, { claim: item.claim });
+        if (!verification.ok) continue;
+        this._appendResult(
+          { receipt: item.receipt, claim: item.claim || null, verification, source: item.source || "form" },
+          { persist: false, announce: false, reveal: false, collapsed: i !== lastResult },
+        );
+        kept.push(item);
+      }
+    }
+    this.items = kept;
+    if (kept.some((item) => item.t === "ai") && kept[kept.length - 1]?.t !== "divider") {
+      // The page was reloaded: the thread is shown again, but the AI starts without it.
+      this._appendDivider("Earlier in this tab. The AI does not remember it.", { save: false, reveal: false });
+    }
+    // A chat opens at its latest message. Set at once, with no animation.
+    const scroller = $("thread-scroll");
+    if (scroller && kept.length) scroller.scrollTop = scroller.scrollHeight;
+  }
+
+  _newChat() {
+    if (this.isBusy) return;
+    this.runtime?.engine?.resetHistory?.();
+    if (!$("thread-list").children.length) return;
+    this._beginTurn();
+    this._appendDivider("New chat");
+    this._announce("New chat. Earlier results stay above.");
+    $("composer-input")?.focus();
+  }
+
+  // ---- Saved proofs -----------------------------------------------------------------------------
+
+  _bindProof() {
+    const fileInput = $("proof-file");
+    const dock = $("composer-dock");
+    $("attach-proof")?.addEventListener("click", () => fileInput?.click());
+    fileInput?.addEventListener("change", () => {
+      const file = fileInput.files?.[0];
+      fileInput.value = "";
+      if (file) this._loadProofFile(file);
+    });
+    if (!dock) return;
+    const hasFiles = (e) => [...(e.dataTransfer?.types || [])].includes("Files");
+    dock.addEventListener("dragover", (e) => {
+      if (!hasFiles(e)) return;
       e.preventDefault();
-      if (this.isPaused || this.isChecking) return;
-      diffBox.hidden = true;
-      diffBox.replaceChildren();
-
-      const raw = input.value.trim();
-      if (!raw) {
-        this._setFieldError(input, "Paste saved proof JSON or choose a .json file to verify.", { announce: true });
-        input.focus();
-        return;
-      }
-
-      let parsed;
-      try {
-        parsed = JSON.parse(raw);
-      } catch {
-        this._setFieldError(
-          input,
-          "This is not a complete receipt. Copy it again from where you saved it.",
-          { announce: true },
-        );
-        input.focus();
-        return;
-      }
-
-      const oldReceipt = parsed?.receipt && typeof parsed.receipt === "object" ? parsed.receipt : parsed;
-      const oldClaim = parsed?.receipt && typeof parsed.receipt === "object" ? parsed.claim || null : null;
-
-      if (!oldReceipt || typeof oldReceipt !== "object" || !oldReceipt.schema_version) {
-        this._setFieldError(
-          input,
-          "This is not a complete receipt. Copy it again from where you saved it.",
-          { announce: true },
-        );
-        input.focus();
-        return;
-      }
-
-      const jwks = await this._ensureJwks();
-      if (!jwks) {
-        this._prependNotice("Could not load Open Alvary's key list to check the signature. Try again.", "amber", {
-          retryFn: () => form.requestSubmit(),
-        });
-        return;
-      }
-
-      const check = await verifyReceipt(oldReceipt, jwks, { claim: oldClaim });
-      if (!check.ok) {
-        this._setFieldError(input, verificationErrorMessage(check.reason), { announce: true });
-        input.focus();
-        return;
-      }
-      this._setFieldError(input, null);
-
-      if (!oldReceipt.part) {
-        this._setFieldError(
-          input,
-          "This receipt names no section. Check the citation again on the first tab.",
-          { announce: true },
-        );
-        return;
-      }
-
-      let repeatClaim;
-      if (oldClaim) {
-        repeatClaim = { ...oldClaim };
-        delete repeatClaim.reading;
-      } else {
-        const matched = oldReceipt.findings?.matched_text;
-        if (!matched || [...matched].length > MAX_QUOTE_LEN) {
-          this._setFieldError(
-            input,
-            "Paste the full {receipt, claim} export from Download or Copy receipt, or check the quote again on the first tab.",
-            { announce: true },
-          );
-          return;
-        }
-        repeatClaim = {
-          anchor_id: oldReceipt.part.anchor_id,
-          quote: matched,
-        };
-        if (oldReceipt.claim?.date_sent && oldReceipt.claim?.assessed_at) {
-          repeatClaim.as_of = oldReceipt.claim.assessed_at;
-        }
-        if (oldReceipt.claim?.jurisdiction) {
-          repeatClaim.jurisdiction = oldReceipt.claim.jurisdiction;
-        }
-        if (oldReceipt.part.language) {
-          repeatClaim.language = oldReceipt.part.language;
-        }
-      }
-
-      const fresh = await this._runDirectCheck(repeatClaim, { source: "recheck" });
-      if (fresh) {
-        this._renderRecheckDiff(oldReceipt, fresh.receipt);
-      }
+      dock.classList.add("is-dragover");
+    });
+    dock.addEventListener("dragleave", () => dock.classList.remove("is-dragover"));
+    dock.addEventListener("drop", (e) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      dock.classList.remove("is-dragover");
+      const file = e.dataTransfer?.files?.[0];
+      if (file) this._loadProofFile(file);
     });
   }
 
-  _renderRecheckDiff(oldReceipt, newReceipt) {
-    const diffBox = document.getElementById("recheck-diff");
-    if (!diffBox) return;
+  async _loadProofFile(file) {
+    if (file.size > MAX_PROOF_BYTES) {
+      this._appendNotice("That file is too large to be a saved proof. Choose the .json file you saved from a result.", "red");
+      return;
+    }
+    let text = "";
+    try {
+      text = await file.text();
+    } catch {
+      this._appendNotice("Could not read that file. Choose the .json file you saved from a result.", "red");
+      return;
+    }
+    await this._verifyProofText(text, file.name || "file");
+  }
+
+  async _verifyProofText(raw, label) {
+    if (this.isBusy) return;
+    this._beginTurn();
+    this._appendUser({ text: `Saved proof (${label})` });
+    const incomplete = "This is not a complete receipt. Copy it again from where you saved it.";
+
+    let parsed;
+    try {
+      parsed = JSON.parse(String(raw || "").trim());
+    } catch {
+      this._appendNotice(incomplete, "red");
+      return;
+    }
+    const oldReceipt = parsed?.receipt && typeof parsed.receipt === "object" ? parsed.receipt : parsed;
+    const oldClaim = parsed?.receipt && typeof parsed.receipt === "object" ? parsed.claim || null : null;
+    if (!oldReceipt || typeof oldReceipt !== "object" || !oldReceipt.schema_version) {
+      this._appendNotice(incomplete, "red");
+      return;
+    }
+
+    const jwks = await this._ensureJwks();
+    if (!jwks) {
+      this._appendNotice("Could not load Open Alvary's key list to check the signature. Try again.", "amber", {
+        retryFn: () => this._verifyProofText(raw, label),
+      });
+      return;
+    }
+    const check = await verifyReceipt(oldReceipt, jwks, { claim: oldClaim });
+    if (!check.ok) {
+      this._appendNotice(verificationErrorMessage(check.reason), "red");
+      return;
+    }
+
+    if (this.isPaused) {
+      // Checking a signature needs no server, so a saved proof can still be verified while paused.
+      this._appendResult(
+        { receipt: oldReceipt, claim: oldClaim, verification: check, source: "recheck" },
+        { persist: false, announce: true },
+      );
+      this._appendNotice("The signature is valid. Law check is paused, so the check was not repeated.", "grey");
+      return;
+    }
+
+    if (!oldReceipt.part) {
+      this._appendNotice("The signature is valid, but this receipt names no section, so it cannot be checked again. Check the citation with Check a quote.", "grey");
+      return;
+    }
+
+    let repeatClaim;
+    if (oldClaim) {
+      repeatClaim = { ...oldClaim };
+      delete repeatClaim.reading;
+    } else {
+      const matched = oldReceipt.findings?.matched_text;
+      if (!matched || [...matched].length > MAX_QUOTE_LEN) {
+        this._appendNotice(
+          "The signature is valid, but this copy does not hold the quote that was sent. Use the whole saved proof (from Save proof or Copy JSON), or check the quote again with Check a quote.",
+          "grey",
+        );
+        return;
+      }
+      repeatClaim = { anchor_id: oldReceipt.part.anchor_id, quote: matched };
+      if (oldReceipt.claim?.date_sent && oldReceipt.claim?.assessed_at) repeatClaim.as_of = oldReceipt.claim.assessed_at;
+      if (oldReceipt.claim?.jurisdiction) repeatClaim.jurisdiction = oldReceipt.claim.jurisdiction;
+      if (oldReceipt.part.language) repeatClaim.language = oldReceipt.part.language;
+    }
+
+    const fresh = await this._runDirectCheck(repeatClaim, { source: "recheck" });
+    if (fresh) this._appendRecheckNote(oldReceipt, fresh.receipt);
+  }
+
+  _appendRecheckNote(oldReceipt, newReceipt) {
     const issuedDate = formatLongDate(oldReceipt.issued_at || oldReceipt.claim?.assessed_at);
     const messages = [];
-
     if (newReceipt.status === "text_not_available") {
       messages.push("There is no published text to check now.");
     } else {
@@ -1147,27 +1743,15 @@ class LawCheckController {
       const oldState = oldReceipt.findings?.currentness?.state;
       const newState = newReceipt.findings?.currentness?.state;
       if (oldState && newState && oldState !== newState) {
-        if (newState === "not_in_force") {
-          messages.push("No longer recorded as in force.");
-        } else {
-          messages.push(`Record status changed from ${oldState} to ${newState}.`);
-        }
+        messages.push(
+          newState === "not_in_force"
+            ? "No longer recorded as in force."
+            : `Record status changed from ${oldState.replace(/_/g, " ")} to ${newState.replace(/_/g, " ")}.`,
+        );
       }
     }
-
-    if (!messages.length) {
-      messages.push(`Same words, same record as when checked on ${issuedDate}.`);
-    }
-
-    diffBox.replaceChildren();
-    const ul = document.createElement("ul");
-    for (const msg of messages) {
-      const li = document.createElement("li");
-      li.textContent = msg;
-      ul.appendChild(li);
-    }
-    diffBox.appendChild(ul);
-    diffBox.hidden = false;
+    if (!messages.length) messages.push(`Same words, same record as when checked on ${issuedDate}.`);
+    this._appendNotice("The saved proof is genuine. Checked again today:", "grey", { list: messages });
   }
 
   async _ensureJwks() {
@@ -1185,23 +1769,15 @@ class LawCheckController {
     }
   }
 
+  // ---- A check made by the page itself (no AI) -----------------------------------------------
+
   async _runDirectCheck(claim, { source = "form" } = {}) {
-    const submitBtn = document.getElementById(source === "recheck" ? "recheck-submit" : "check-submit");
-    const originalBtnLabel = submitBtn ? submitBtn.textContent : "Check quote";
-    this.isChecking = true;
-    if (submitBtn) {
-      submitBtn.textContent = "Checking…";
-      submitBtn.setAttribute("aria-disabled", "true");
-    }
-
-    const placeholder = this._prependCheckingPlaceholder();
-    const slowTimer = setTimeout(() => {
-      const p = placeholder.querySelector("p");
-      if (p) p.textContent = "Still checking…";
-    }, 5000);
-
+    this._setBusy(true);
+    const status = this._appendStatus("Checking the published text…");
+    const slowTimer = setTimeout(() => status.update("Still checking…"), 5000);
     const controller = new AbortController();
     const timeoutTimer = setTimeout(() => controller.abort(), 20000);
+    const retry = { retryFn: () => this._runDirectCheck(claim, { source }) };
 
     this.directCallCount++;
     try {
@@ -1214,383 +1790,291 @@ class LawCheckController {
         },
         body: JSON.stringify({
           jsonrpc: "2.0",
-          id: Date.now(),
+          id: ++this._rpcId,
           method: "tools/call",
           params: { name: "check_claim", arguments: claim },
         }),
         signal: controller.signal,
       });
 
-      if (!resp.ok) {
-        placeholder.remove();
-        this._prependNotice("Could not check now. Try again.", "red", {
-          retryFn: () => this._runDirectCheck(claim, { source }),
-        });
-        return null;
-      }
-
-      const rpc = parseJsonRpcText(await resp.text());
+      const rpc = resp.ok ? parseJsonRpcText(await resp.text()) : null;
       const result = rpc?.result;
       if (!result || rpc?.error) {
-        placeholder.remove();
-        this._prependNotice("Could not check now. Try again.", "red", {
-          retryFn: () => this._runDirectCheck(claim, { source }),
-        });
+        status.remove();
+        this._appendNotice("Could not check now. Try again.", "red", retry);
         return null;
       }
 
       if (result.isError) {
-        placeholder.remove();
-        const errInfo = parseToolError(result);
-        this._handleDirectToolError(errInfo, claim, source);
+        status.remove();
+        this._handleDirectToolError(parseToolError(result), claim, source);
         return null;
       }
 
       const envelope = parseCheckClaimEnvelope(result);
       if (!envelope) {
-        placeholder.remove();
-        this._prependNotice("Could not check now. Try again.", "red", {
-          retryFn: () => this._runDirectCheck(claim, { source }),
-        });
+        status.remove();
+        this._appendNotice("Could not check now. Try again.", "red", retry);
         return null;
       }
 
       const jwks = await this._ensureJwks();
       if (!jwks) {
-        placeholder.remove();
-        this._prependNotice(
-          "Could not load Open Alvary's key list to check the signature. Try again.",
-          "amber",
-          { retryFn: () => this._runDirectCheck(claim, { source }) },
-        );
+        status.remove();
+        this._appendNotice("Could not load Open Alvary's key list to check the signature. Try again.", "amber", retry);
         return null;
       }
 
       const verification = await verifyReceipt(envelope.receipt, jwks, { claim: envelope.claim || claim });
-      placeholder.remove();
-
+      status.remove();
       if (!verification.ok) {
-        this._prependNotice(verificationErrorMessage(verification.reason), "red");
+        this._appendNotice(verificationErrorMessage(verification.reason), "red");
         return null;
       }
 
-      const entry = {
-        receipt: envelope.receipt,
-        claim: envelope.claim || claim,
-        verification,
-        source,
-      };
-      this._addVerifiedEntry(entry, { persist: true, announce: true });
+      const entry = { receipt: envelope.receipt, claim: envelope.claim || claim, verification, source };
+      this._appendResult(entry, { persist: true, announce: true });
       return entry;
     } catch {
-      placeholder.remove();
-      this._prependNotice("Could not check now. Try again.", "red", {
-        retryFn: () => this._runDirectCheck(claim, { source }),
-      });
+      status.remove();
+      this._appendNotice("Could not check now. Try again.", "red", retry);
       return null;
     } finally {
       this.directCallCount = Math.max(0, this.directCallCount - 1);
       clearTimeout(slowTimer);
       clearTimeout(timeoutTimer);
-      this.isChecking = false;
-      if (submitBtn) {
-        submitBtn.textContent = originalBtnLabel;
-        if (!this.isPaused && !this.rateLimitTimer) {
-          submitBtn.removeAttribute("aria-disabled");
-        }
-      }
+      this._setBusy(false);
     }
   }
 
   _handleDirectToolError({ code, seconds, text }, claim, source) {
-    const quoteInput = document.getElementById("quote-input");
-    if (code === "quote_too_short" && source === "form" && quoteInput) {
-      this._setFieldError(
-        quoteInput,
-        "Paste at least 40 characters (about eight words), or the whole section.",
-        { announce: true },
-      );
-      quoteInput.focus();
+    if (code === "quote_too_short") {
+      if (source === "form") this._restoreDraft(claim);
+      this._appendNotice("Paste at least 40 characters (about eight words), or the whole section.", "amber");
       return;
     }
-    if (code === "quote_too_spread" && source === "form" && quoteInput) {
-      this._setFieldError(
-        quoteInput,
-        text || "The quoted pieces are too far apart in the section.",
-        { announce: true },
-      );
-      quoteInput.focus();
+    if (code === "quote_too_spread") {
+      if (source === "form") this._restoreDraft(claim);
+      this._appendNotice("The quoted pieces are too far apart in the section. Quote a shorter passage.", "amber");
       return;
     }
     if (code === "result_too_large") {
-      this._prependNotice("That section is too large to check at once. Name a smaller part.", "grey");
+      this._appendNotice("That section is too large to check at once. Name a smaller part.", "grey");
       return;
     }
     if (code === "unavailable") {
-      // Plain non-receipt notice with link to /agents/records.json (§10.8)
-      this._prependUnavailableNotice();
+      this._appendUnavailableNotice();
       return;
     }
     if (code === "paused") {
-      this.isPaused = true;
-      this._showGlobalBanner(
-        "Law check is paused. Try again later. You can still verify a receipt you have.",
-        "amber",
-      );
-      this._setInteractiveDisabled(true);
+      this._setPaused();
       return;
     }
     if (code === "rate_limited") {
-      const wait = Math.max(1, Number(seconds) || 20);
-      this._startRateLimitCountdown(
-        wait,
-        `Too many checks from your connection just now. Try again in ${wait} seconds.`,
-      );
+      this._startRateLimitCountdown(Math.max(1, Number(seconds) || 20));
       return;
     }
     if (code === "service_rate_limited") {
       const wait = Math.max(1, Number(seconds) || 30);
-      this._prependNotice(
-        `Law check is busy right now. Try again in ${wait} seconds. You can still verify a receipt you have.`,
+      this._appendNotice(
+        `Law check is busy right now. Try again in ${wait} seconds. You can still verify a saved proof.`,
         "amber",
       );
       return;
     }
-    this._prependNotice("Could not check now. Try again.", "red", {
+    if (code === "invalid_arguments" || code === "invalid_request") {
+      if (source === "form") this._restoreDraft(claim);
+      this._appendNotice("Law check could not read that. Name the law and one section, then paste the quoted words.", "amber");
+      return;
+    }
+    void text;
+    this._appendNotice("Could not check now. Try again.", "red", {
       retryFn: () => this._runDirectCheck(claim, { source }),
     });
   }
 
-  _startRateLimitCountdown(seconds, initialMessage) {
-    const submitBtn = document.getElementById("check-submit");
-    if (submitBtn) submitBtn.setAttribute("aria-disabled", "true");
-    const notice = this._prependNotice(initialMessage, "amber");
+  _setPaused() {
+    this.isPaused = true;
+    this._showGlobalBanner("Law check is paused. Try again later. You can still verify a saved proof.", "amber");
+    this._refreshComposerState();
+  }
+
+  _startRateLimitCountdown(seconds) {
+    const text = (n) => `Too many checks from your connection just now. Try again in ${n} ${n === 1 ? "second" : "seconds"}.`;
+    const notice = this._appendNotice(text(seconds), "amber");
+    const p = notice.querySelector("p");
     let remaining = seconds;
     if (this.rateLimitTimer) clearInterval(this.rateLimitTimer);
     this.rateLimitTimer = setInterval(() => {
       remaining -= 1;
-      const p = notice.querySelector("p");
       if (remaining <= 0) {
         clearInterval(this.rateLimitTimer);
         this.rateLimitTimer = null;
-        if (submitBtn && !this.isPaused && !this.isChecking) {
-          submitBtn.removeAttribute("aria-disabled");
-        }
         if (p) p.textContent = "You can check another quote now.";
+        this._refreshComposerState();
       } else if (p) {
-        p.textContent = `Too many checks from your connection just now. Try again in ${remaining} seconds.`;
+        p.textContent = text(remaining);
       }
     }, 1000);
+    this._refreshComposerState();
+  }
+
+  _appendUnavailableNotice() {
+    const titles = this.records.map((rec) => rec.title).filter(Boolean);
+    if (titles.length && titles.length <= 12) {
+      this._appendNotice("Law check does not cover this record.", "grey", { list: [`It covers: ${titles.join("; ")}.`] });
+    } else {
+      this._appendNotice("Law check does not cover this record. See Coverage in the menu for what Open Alvary publishes.", "grey");
+    }
+  }
+
+  // ---- A question answered by the visitor's AI, on the challenge runtime -------------------------
+
+  _ensureRuntimeLoaded() {
+    if (this.runtimeLoaded) return Promise.resolve(true);
+    if (this.runtimeLoading) return this.runtimeLoading;
+    this.runtimeLoading = (async () => {
+      try {
+        const runtime = await import("./runtime/index.js");
+        const booted = await runtime.boot("#agent-app", {
+          originUrl: `${location.origin}/agents`,
+          sandboxWorkerUrl: "/agents/runtime/sandbox-worker.js",
+        });
+        // The runtime's own chat is not shown, so its questions to the visitor are asked in this thread.
+        booted.engine.onConsent = (info) => this._askConsent(info);
+        this.runtime = { engine: booted.engine, trace: booted.trace };
+        this.runtimeLoaded = true;
+        const agents = $("agents-disclosure");
+        if (agents) {
+          agents.hidden = false;
+          if (this.openAgentsView) agents.open = true;
+        }
+        return true;
+      } catch {
+        return false;
+      } finally {
+        this.runtimeLoading = null;
+      }
+    })();
+    return this.runtimeLoading;
+  }
+
+  _askConsent(info) {
+    return new Promise((resolve) => {
+      const label = shorten(info?.peerLabel || "another site", 80);
+      const origin = shorten(info?.peerOrigin || "", 120);
+      this._appendNotice(
+        `The AI wants to contact ${label}${origin ? ` (${origin})` : ""} on your behalf.`,
+        "amber",
+        {
+          actions: [
+            { label: "Allow", primary: true, onClick: (_item, row) => settle("allow", row) },
+            { label: "Decline", onClick: (_item, row) => settle("decline", row) },
+          ],
+        },
+      );
+      const settle = (decision, row) => {
+        const done = document.createElement("p");
+        done.textContent = decision === "allow" ? "Allowed." : "Declined.";
+        row.replaceWith(done);
+        resolve(decision);
+      };
+    });
+  }
+
+  async _runAiTurn(text) {
+    this._setBusy(true);
+    const status = this._appendStatus("Thinking…");
+    const turn = { checked: 0, found: 0, notFound: 0, failed: 0 };
+    this.activeAgentTurn = turn;
+    this.pendingAgentWork = [];
+    try {
+      const ready = await this._ensureRuntimeLoaded();
+      if (!ready) {
+        status.remove();
+        this._appendNotice("The assistant could not be loaded. Checking a quote still works.", "amber");
+        return;
+      }
+      let result = null;
+      for await (const event of this.runtime.engine.streamTurn(text, {})) {
+        if (event.type === "turn.completed") {
+          result = event.result;
+          continue;
+        }
+        if (event.visibility === "developer" || event.type === "agent.output.delta") continue;
+        status.update(statusLineForEvent(event));
+      }
+      if (!result) throw new Error("The turn ended without an answer.");
+      // Every receipt the agents fetched is verified and drawn before the answer is shown under them.
+      await Promise.allSettled(this.pendingAgentWork);
+      status.remove();
+      const answer = cleanAnswerText(result.text) || "The AI gave no written answer.";
+      this._appendAi(answer, this._answerSummary(turn));
+      this._announce(
+        turn.checked > 0
+          ? `Answer ready. ${turn.checked} ${turn.checked === 1 ? "quote" : "quotes"} checked: ${turn.found} found, ${turn.notFound} not found.`
+          : "Answer ready. Nothing in this answer was checked.",
+      );
+    } catch (err) {
+      await Promise.allSettled(this.pendingAgentWork);
+      status.remove();
+      const detail = shorten(String(err?.message || "").replace(/\s+/g, " ").trim(), 240);
+      this._appendNotice(
+        `Your AI provider could not answer.${detail ? ` It said: ${detail}` : ""} Check the key and model, then try again.`,
+        "red",
+        { actions: [{ label: "AI key settings", onClick: () => $("open-provider-modal")?.click() }] },
+      );
+    } finally {
+      this.activeAgentTurn = null;
+      this.pendingAgentWork = [];
+      this._setBusy(false);
+    }
+  }
+
+  _answerSummary(turn) {
+    if (turn.checked === 0 && turn.failed === 0) {
+      return { text: "Nothing in this answer was checked.", tone: "red" };
+    }
+    const parts = [`This answer: ${turn.checked} ${turn.checked === 1 ? "quote" : "quotes"} checked`];
+    if (turn.checked > 0) parts.push(`${turn.found} found, ${turn.notFound} not found`);
+    if (turn.failed > 0) parts.push(`${turn.failed} could not be checked`);
+    return { text: `${parts.join(", ")}. Sentences without a result card were not checked.`, tone: "" };
   }
 
   async _handleInterceptedAgentReceipt(envelope, args) {
     const jwks = await this._ensureJwks();
     if (!jwks) {
-      this._prependNotice("Could not load Open Alvary's key list to check the signature. Try again.", "amber");
+      this._appendNotice("Could not load Open Alvary's key list to check the signature. Try again.", "amber");
+      if (this.activeAgentTurn) this.activeAgentTurn.failed += 1;
       return;
     }
     const claim = envelope.claim || args || null;
     const verification = await verifyReceipt(envelope.receipt, jwks, { claim });
     if (!verification.ok) {
-      this._prependNotice(verificationErrorMessage(verification.reason), "red");
+      this._appendNotice(verificationErrorMessage(verification.reason), "red");
+      if (this.activeAgentTurn) this.activeAgentTurn.failed += 1;
       return;
     }
-    const entry = {
-      receipt: envelope.receipt,
-      claim,
-      verification,
-      source: "agent",
-    };
-    this._addVerifiedEntry(entry, { persist: true, announce: false });
+    this._appendResult({ receipt: envelope.receipt, claim, verification, source: "agent" }, { persist: true, announce: false });
     if (this.activeAgentTurn) {
       this.activeAgentTurn.checked += 1;
-      if (envelope.receipt.status === "matches" || envelope.receipt.status === "words_found" || envelope.receipt.status === "words_found_with_omissions") {
+      const status = envelope.receipt.status;
+      if (status === "matches" || status === "words_found" || status === "words_found_with_omissions") {
         this.activeAgentTurn.found += 1;
       } else {
         this.activeAgentTurn.notFound += 1;
       }
-      this._updateAnswerSummary();
     }
   }
 
   _handleInterceptedAgentError(errInfo) {
     if (errInfo.code === "paused") {
-      this.isPaused = true;
-      this._showGlobalBanner(
-        "Law check is paused. Try again later. You can still verify a receipt you have.",
-        "amber",
-      );
-      this._setInteractiveDisabled(true);
+      this._setPaused();
       return;
     }
-    if (errInfo.code === "unavailable") {
-      this._prependUnavailableNotice();
-    } else {
-      this._prependNotice("Could not check now.", "red");
-    }
-    if (this.activeAgentTurn) {
-      this.activeAgentTurn.failed += 1;
-      this._updateAnswerSummary();
-    }
-  }
-
-  _addVerifiedEntry(entry, { persist = true, announce = false } = {}) {
-    const list = document.getElementById("receipts-list");
-    const empty = document.getElementById("empty-receipts");
-    if (empty) empty.hidden = true;
-
-    // Collapse earlier form cards when a new form card arrives
-    if (entry.source === "form") {
-      for (const existing of list.querySelectorAll("oa-receipt")) {
-        existing._collapsible = true;
-        existing.collapsed = true;
-      }
-    }
-
-    const card = document.createElement("oa-receipt");
-    card.setData({
-      receipt: entry.receipt,
-      claim: entry.claim,
-      verification: entry.verification,
-      source: entry.source,
-      collapsible: entry.source !== "agent",
-      collapsed: false,
-    });
-    list.prepend(card);
-    this._setVerifiedPanelOpen(true);
-
-    if (entry.receipt.receipt_id) {
-      this.cardByReceiptId.set(entry.receipt.receipt_id, card);
-    }
-    const sid = entry.receipt.part?.source_id;
-    if (sid) {
-      const arr = this.cardsBySourceId.get(sid) || [];
-      arr.unshift(card);
-      this.cardsBySourceId.set(sid, arr);
-    }
-
-    this.entries.unshift(entry);
-    if (persist) this._saveSessionReceipts();
-
-    if (window.innerWidth <= 1100 && typeof card.scrollIntoView === "function") {
-      card.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    }
-
-    if (announce) {
-      const title = entry.receipt.part
-        ? `${entry.receipt.part.title}, ${entry.receipt.part.pinpoint}`
-        : entry.claim?.citation || entry.receipt.status;
-      const wl = wordsLineForReceipt(entry.receipt).text;
-      const rl = recordLinesForReceipt(entry.receipt)[0]?.text || "";
-      this._announce(`${title}. ${wl}. ${rl}`);
-    }
-  }
-
-  _saveSessionReceipts() {
-    try {
-      const slim = this.entries.slice(0, 30).map((e) => ({
-        receipt: e.receipt,
-        claim: e.claim,
-        source: e.source,
-      }));
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(slim));
-    } catch {
-      // sessionStorage unavailable or full
-    }
-  }
-
-  async _restoreSessionReceipts() {
-    let saved;
-    try {
-      const raw = sessionStorage.getItem(STORAGE_KEY);
-      if (!raw) return;
-      saved = JSON.parse(raw);
-      if (!Array.isArray(saved) || !saved.length) return;
-    } catch {
-      return;
-    }
-
-    const jwks = await this._ensureJwks();
-    if (!jwks) return;
-
-    // Re-verify every stored receipt before rendering (§10.3)
-    for (let i = saved.length - 1; i >= 0; i--) {
-      const item = saved[i];
-      if (!item?.receipt) continue;
-      const verification = await verifyReceipt(item.receipt, jwks, { claim: item.claim });
-      if (verification.ok) {
-        this._addVerifiedEntry(
-          { receipt: item.receipt, claim: item.claim || null, verification, source: item.source || "form" },
-          { persist: false, announce: false },
-        );
-      }
-    }
-  }
-
-  _prependCheckingPlaceholder() {
-    const list = document.getElementById("receipts-list");
-    const empty = document.getElementById("empty-receipts");
-    if (empty) empty.hidden = true;
-
-    const box = document.createElement("div");
-    box.className = "lc-notice-card";
-    box.setAttribute("role", "status");
-    const p = document.createElement("p");
-    p.textContent = "Checking a section…";
-    const bar1 = document.createElement("div");
-    bar1.className = "lc-skeleton-bar";
-    const bar2 = document.createElement("div");
-    bar2.className = "lc-skeleton-bar short";
-    box.append(p, bar1, bar2);
-    list.prepend(box);
-    return box;
-  }
-
-  _prependNotice(message, tone = "grey", { retryFn = null } = {}) {
-    const list = document.getElementById("receipts-list");
-    const empty = document.getElementById("empty-receipts");
-    if (empty) empty.hidden = true;
-
-    const box = document.createElement("div");
-    box.className = "lc-notice-card";
-    box.dataset.tone = tone;
-    const p = document.createElement("p");
-    p.textContent = message;
-    box.appendChild(p);
-    if (typeof retryFn === "function") {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "lc-btn-secondary";
-      btn.textContent = "Try again";
-      btn.addEventListener("click", () => {
-        box.remove();
-        retryFn();
-      });
-      box.appendChild(btn);
-    }
-    list.prepend(box);
-    this._announce(message);
-    return box;
-  }
-
-  _prependUnavailableNotice() {
-    const list = document.getElementById("receipts-list");
-    const empty = document.getElementById("empty-receipts");
-    if (empty) empty.hidden = true;
-
-    const box = document.createElement("div");
-    box.className = "lc-notice-card";
-    box.dataset.tone = "grey";
-    const p = document.createElement("p");
-    p.textContent = "Law check does not cover this record. ";
-    const a = document.createElement("a");
-    a.href = "/agents/records.json";
-    a.textContent = "See covered records";
-    p.appendChild(a);
-    box.appendChild(p);
-    list.prepend(box);
-    this._announce("Law check does not cover this record.");
-    return box;
+    if (errInfo.code === "unavailable") this._appendUnavailableNotice();
+    else this._appendNotice("One quote could not be checked now.", "red");
+    if (this.activeAgentTurn) this.activeAgentTurn.failed += 1;
   }
 
   _showGlobalBanner(text, tone = "amber") {
@@ -1609,14 +2093,6 @@ class LawCheckController {
     banner.textContent = "";
   }
 
-  _setInteractiveDisabled(disabled) {
-    const checkBtn = document.getElementById("check-submit");
-    if (checkBtn) {
-      if (disabled) checkBtn.setAttribute("aria-disabled", "true");
-      else checkBtn.removeAttribute("aria-disabled");
-    }
-  }
-
   _announce(text) {
     const live = document.getElementById("live-status");
     if (!live) return;
@@ -1624,85 +2100,6 @@ class LawCheckController {
     requestAnimationFrame(() => {
       live.textContent = text;
     });
-  }
-
-  _updateAnswerSummary() {
-    const el = document.getElementById("answer-summary");
-    if (!el || !this.activeAgentTurn) return;
-    const { checked, failed, done } = this.activeAgentTurn;
-    el.hidden = false;
-    if (done && checked === 0 && failed === 0) {
-      el.dataset.tone = "red";
-      el.textContent = "Nothing in this answer was checked.";
-      return;
-    }
-    delete el.dataset.tone;
-    const parts = [`This answer: ${checked} ${checked === 1 ? "quote" : "quotes"} checked`];
-    if (failed > 0) parts.push(`${failed} could not be checked`);
-    el.textContent = `${parts.join(", ")}. Sentences without a receipt were not checked.`;
-  }
-
-  async _ensureRuntimeLoaded() {
-    if (this.runtimeLoaded || this.runtimeLoading) return;
-    this.runtimeLoading = true;
-    const statusBox = document.getElementById("ask-status");
-    try {
-      const runtime = await import("./runtime/index.js");
-      const { trace } = await runtime.boot("#agent-app", {
-        originUrl: `${location.origin}/agents`,
-        sandboxWorkerUrl: "/agents/runtime/sandbox-worker.js",
-      });
-      this.runtimeLoaded = true;
-      this._wireRuntimeUx(trace);
-    } catch {
-      if (statusBox) {
-        statusBox.hidden = false;
-        statusBox.dataset.tone = "amber";
-        statusBox.replaceChildren();
-        const p = document.createElement("p");
-        p.textContent = "The assistant could not be loaded. Checking a quote still works.";
-        statusBox.appendChild(p);
-      }
-    } finally {
-      this.runtimeLoading = false;
-    }
-  }
-
-  _wireRuntimeUx(trace) {
-    const app = document.getElementById("agent-app");
-    if (app) {
-      // Replace default runtime greeting (§10.5)
-      const firstBot = app.querySelector(".ns-msg.bot");
-      if (firstBot && /Ask me anything/i.test(firstBot.textContent || "")) {
-        firstBot.textContent =
-          "Ask what a published law says. I quote the text and check each quote. I do not give legal advice.";
-      }
-      // Ensure chat input has an accessible name (§10.5)
-      const chatInput = app.querySelector(".ns-input, textarea, input[type='text']");
-      if (chatInput && !chatInput.getAttribute("aria-label")) {
-        chatInput.setAttribute("aria-label", "Ask a question about a published law");
-      }
-    }
-
-    if (trace && typeof trace.subscribe === "function") {
-      trace.subscribe((ev) => {
-        if (ev?.type === "run_start" || ev?.kind === "run_start") {
-          this.activeAgentTurn = { checked: 0, found: 0, notFound: 0, failed: 0, done: false };
-          this._updateAnswerSummary();
-        } else if (ev?.type === "run_end" || ev?.kind === "run_end") {
-          if (this.activeAgentTurn) {
-            this.activeAgentTurn.done = true;
-            this._updateAnswerSummary();
-            const { checked, found, notFound } = this.activeAgentTurn;
-            this._announce(
-              checked > 0
-                ? `Answer ready. ${checked} receipts: ${found} found, ${notFound} not found.`
-                : "Answer ready. Nothing in this answer was checked.",
-            );
-          }
-        }
-      });
-    }
   }
 }
 

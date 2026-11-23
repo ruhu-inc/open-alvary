@@ -8,6 +8,8 @@ import {
   normalizeText,
   parseLawCheckReply,
   evaluateLegalBasisGate,
+  findWholeWords,
+  sectionReferences,
   ACCEPTED_LABEL,
   REJECTED_LABEL,
 } from "../gate.js";
@@ -26,6 +28,17 @@ import { TraceBus } from "../../../web/public/agents/runtime/trace.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEMO_DIR = path.resolve(__dirname, "..");
+
+// The golden receipts the Python signer produced (clients/receipt/vectors.json). Every
+// fixture below starts from one of them, so the gate is always tested against the shape
+// the server really signs. If that shape changes, these tests fail with it.
+const VECTORS = JSON.parse(
+  await readFile(path.resolve(DEMO_DIR, "../../clients/receipt/vectors.json"), "utf8"),
+);
+const GOLDEN_MATCHES = VECTORS.cases.find((c) => c.name === "valid_matches");
+const GOLDEN_WORDS_FOUND = VECTORS.cases.find((c) => c.name === "retired_key_still_valid");
+const NOW = "2026-12-16T00:00:00Z";
+const JUST_BEFORE_NOW = "2026-12-15T23:59:00Z";
 
 const encoder = new TextEncoder();
 
@@ -69,44 +82,47 @@ async function signReceipt(unsignedReceipt, privateKey) {
   return { ...unsignedReceipt, signature: bytesToBase64Url(sig) };
 }
 
+/**
+ * A receipt in the server's real shape, signed with a test key. It is the golden
+ * "matches" receipt with its claim digest, time and the fields named here replaced.
+ */
 async function makeSignedReceipt({
   privateKey,
   kid,
   claim,
   status = "matches",
-  applicability = { jurisdiction: "ng", status: "bound", basis: "national" },
+  applicability = { binds: "bound", relation: "national" },
+  issuedAt = JUST_BEFORE_NOW,
+  pinpoint = "s. 1(1)",
+  dateSent = false,
+  jurisdiction = "ng",
 }) {
-  const digest = await claimDigest(claim);
-  const unsigned = {
-    schema_version: "oa-receipt-1",
-    receipt_id: "rcpt_demo_001",
-    issued_at: "2026-12-15T12:00:00Z",
-    assessed_as_of: "2026-12-15",
-    dataset_revision: "1:42",
-    key: { kid, alg: "ES256" },
-    mechanism: { kind: "deterministic_text_match", version: "1" },
-    claim: { digest },
-    status,
-    part: {
-      source_id: "ng-foi-act-2011",
-      title: "Freedom of Information Act 2011",
-      pinpoint: "s. 1(1)",
-      anchor_id: "anc_foi_s1_1",
-      language: "en",
-      jurisdiction: "ng",
+  const { signature: _goldenSignature, ...unsigned } = structuredClone(GOLDEN_MATCHES.receipt);
+  const absent = status === "wording_differs";
+  unsigned.receipt_id = "rcp_01JDDEMOTEST00000000000001";
+  unsigned.issued_at = issuedAt;
+  unsigned.key = { alg: "ES256", kid };
+  unsigned.claim = {
+    digest: await claimDigest(claim),
+    assessed_at: issuedAt.slice(0, 10),
+    date_sent: dateSent,
+    jurisdiction,
+  };
+  unsigned.part.pinpoint = pinpoint;
+  unsigned.status = status;
+  unsigned.findings = {
+    ...unsigned.findings,
+    quote: absent ? "absent" : "exact",
+    matched_text: absent ? null : claim.quote,
+    opening_text: absent ? "Notwithstanding anything contained in any other Act" : null,
+    context_before: absent ? null : "1. (1) ",
+    context_after: absent ? null : ".",
+    currentness: {
+      state: status === "not_in_force" ? "not_in_force" : "in_force",
+      basis: status === "matches" ? "provision" : "record",
+      assessed_at: issuedAt.slice(0, 10),
     },
-    findings: {
-      quote_match: status === "wording_differs" ? "absent" : "exact",
-      matched_text: claim.quote || null,
-      context_before: "",
-      context_after: "",
-      currentness: {
-        status: status === "not_in_force" ? "not_in_force" : "in_force",
-        basis: status === "matches" ? "reviewed_events" : "record",
-      },
-      applicability,
-    },
-    statement: "Open Alvary's published text of Freedom of Information Act 2011, s. 1(1) contains the quoted words.",
+    applicability,
   };
   return signReceipt(unsigned, privateKey);
 }
@@ -212,7 +228,7 @@ test("legal-basis gate accepts published wording with live verified receipt bind
   const result = await evaluateLegalBasisGate({
     clause,
     jwks,
-    now: "2026-12-16T00:00:00Z",
+    now: NOW,
     callCheckClaim: async (sentClaim) => {
       assert.equal(sentClaim.as_of, undefined, "gate must not send as_of");
       assert.equal(sentClaim.jurisdiction, "ng");
@@ -265,7 +281,7 @@ test("legal-basis gate rejects cross-section citation/digest mismatch and tamper
   const crossSection = await evaluateLegalBasisGate({
     clause,
     jwks,
-    now: "2026-12-16T00:00:00Z",
+    now: NOW,
     callCheckClaim: async (sentClaim) => {
       const receipt = await makeSignedReceipt({
         privateKey,
@@ -278,12 +294,13 @@ test("legal-basis gate rejects cross-section citation/digest mismatch and tamper
   });
   assert.equal(crossSection.accepted, false);
   assert.equal(crossSection.label, REJECTED_LABEL);
+  assert.equal(crossSection.verified?.reason, "claim_digest_mismatch");
 
   // Tampered receipt statement after signing -> signature verification fails!
   const tampered = await evaluateLegalBasisGate({
     clause,
     jwks,
-    now: "2026-12-16T00:00:00Z",
+    now: NOW,
     callCheckClaim: async (sentClaim) => {
       const receipt = await makeSignedReceipt({
         privateKey,
@@ -297,6 +314,7 @@ test("legal-basis gate rejects cross-section citation/digest mismatch and tamper
   });
   assert.equal(tampered.accepted, false);
   assert.equal(tampered.label, REJECTED_LABEL);
+  assert.equal(tampered.verified?.reason, "invalid_signature");
 });
 
 test("legal-basis gate rejects wording_differs, non-ng binding, and declined consent", async () => {
@@ -312,7 +330,7 @@ test("legal-basis gate rejects wording_differs, non-ng binding, and declined con
   const differs = await evaluateLegalBasisGate({
     clause,
     jwks,
-    now: "2026-12-16T00:00:00Z",
+    now: NOW,
     callCheckClaim: async (sentClaim) => ({
       ok: true,
       receipt: await makeSignedReceipt({ privateKey, kid, claim: sentClaim, status: "wording_differs" }),
@@ -324,20 +342,39 @@ test("legal-basis gate rejects wording_differs, non-ng binding, and declined con
   const notBound = await evaluateLegalBasisGate({
     clause,
     jwks,
-    now: "2026-12-16T00:00:00Z",
+    now: NOW,
     callCheckClaim: async (sentClaim) => ({
       ok: true,
       receipt: await makeSignedReceipt({
         privateKey,
         kid,
         claim: sentClaim,
-        status: "matches",
-        applicability: { jurisdiction: "ng", status: "not_bound", basis: "record" },
+        status: "words_found",
+        applicability: { binds: "unknown", relation: null },
       }),
       claim: sentClaim,
     }),
   });
   assert.equal(notBound.accepted, false);
+  assert.match(notBound.reason, /binding in Nigeria/i);
+
+  const doesNotBind = await evaluateLegalBasisGate({
+    clause,
+    jwks,
+    now: NOW,
+    callCheckClaim: async (sentClaim) => ({
+      ok: true,
+      receipt: await makeSignedReceipt({
+        privateKey,
+        kid,
+        claim: sentClaim,
+        status: "does_not_bind",
+        applicability: { binds: "not_bound", relation: null },
+      }),
+      claim: sentClaim,
+    }),
+  });
+  assert.equal(doesNotBind.accepted, false);
 
   const declined = await evaluateLegalBasisGate({
     clause,
@@ -346,6 +383,144 @@ test("legal-basis gate rejects wording_differs, non-ng binding, and declined con
   });
   assert.equal(declined.accepted, false);
   assert.equal(declined.label, REJECTED_LABEL);
+});
+
+test("the golden receipts carry every field the gate reads", () => {
+  for (const golden of [GOLDEN_MATCHES, GOLDEN_WORDS_FOUND]) {
+    const r = golden.receipt;
+    assert.equal(typeof r.status, "string");
+    assert.equal(typeof r.issued_at, "string");
+    assert.equal(r.claim.date_sent, false);
+    assert.equal(r.claim.jurisdiction, "ng");
+    assert.deepEqual(sectionReferences(r.part.pinpoint), ["1(1)"]);
+    assert.ok(["exact", "normalised"].includes(r.findings.quote));
+    assert.equal(r.findings.applicability.binds, "bound");
+    // Names the server never sends; the gate must not depend on them.
+    assert.equal("status" in r.findings.applicability, false);
+    assert.equal("jurisdiction" in r.findings.applicability, false);
+  }
+});
+
+test("legal-basis gate accepts the server's own golden receipts, unchanged", async () => {
+  for (const golden of [GOLDEN_MATCHES, GOLDEN_WORDS_FOUND]) {
+    const clause = {
+      text: `Under ${golden.claim.citation}, "${golden.claim.quote}" applies to this request.`,
+      citation: golden.claim.citation,
+      quote: golden.claim.quote,
+    };
+    const result = await evaluateLegalBasisGate({
+      clause,
+      jwks: VECTORS.jwks,
+      now: Date.parse(golden.receipt.issued_at) + 30_000,
+      callCheckClaim: async (sentClaim) => {
+        assert.deepEqual(sentClaim, golden.claim, "the gate sends the clause's own citation and quote");
+        return { ok: true, receipt: structuredClone(golden.receipt), claim: sentClaim };
+      },
+    });
+    assert.equal(result.accepted, true, `${golden.name}: ${result.reason}`);
+    assert.equal(result.label, ACCEPTED_LABEL);
+    assert.equal(result.receipt.status, golden.receipt.status);
+  }
+});
+
+test("legal-basis gate refuses a clause that prints one section and cites another", async () => {
+  const quote = "the right of any person to access or request information";
+  const neverCalled = async () => {
+    throw new Error("check_claim must not be called for a clause that fails rule 1");
+  };
+
+  const printsAnother = await evaluateLegalBasisGate({
+    clause: {
+      text: `Under FOI Act 2011, s. 30, no person has "${quote}" unless resident in Abuja.`,
+      citation: "Freedom of Information Act 2011, s. 1(1)",
+      quote,
+    },
+    callCheckClaim: neverCalled,
+  });
+  assert.equal(printsAnother.accepted, false);
+  assert.match(printsAnother.reason, /does not name the section it cites/i);
+
+  const printsBoth = await evaluateLegalBasisGate({
+    clause: {
+      text: `Under FOI Act 2011, s. 1(1) and section 30, "${quote}" is limited.`,
+      citation: "Freedom of Information Act 2011, s. 1(1)",
+      quote,
+    },
+    callCheckClaim: neverCalled,
+  });
+  assert.equal(printsBoth.accepted, false);
+  assert.match(printsBoth.reason, /names s\. 30/i);
+
+  const citesNone = await evaluateLegalBasisGate({
+    clause: {
+      text: `Under the Freedom of Information Act 2011, "${quote}" applies.`,
+      citation: "Freedom of Information Act 2011",
+      quote,
+    },
+    callCheckClaim: neverCalled,
+  });
+  assert.equal(citesNone.accepted, false);
+  assert.match(citesNone.reason, /exactly one section/i);
+});
+
+test("legal-basis gate refuses a quote that only matches inside a longer word", async () => {
+  assert.equal(findWholeWords("A non-public institution shall not", "public institution shall not"), -1);
+  assert.equal(findWholeWords("the republic institution", "public institution"), -1);
+  assert.equal(findWholeWords('says "public institution" here', "public institution"), 6);
+
+  const quote = "public institution shall not be required to disclose the record";
+  const result = await evaluateLegalBasisGate({
+    clause: {
+      text: `Under FOI Act 2011, s. 1(1), a non-${quote}.`,
+      citation: "Freedom of Information Act 2011, s. 1(1)",
+      quote,
+    },
+    callCheckClaim: async () => {
+      throw new Error("check_claim must not be called when the quote is not whole words in the clause");
+    },
+  });
+  assert.equal(result.accepted, false);
+  assert.match(result.reason, /do not appear in the clause/i);
+});
+
+test("legal-basis gate refuses a receipt for another section, a dated one and a stale one", async () => {
+  const { privateKey, jwks, kid } = await createTestKeyPair();
+  const quote = "the right of any person to access or request information";
+  const clause = {
+    text: `Under FOI Act 2011, s. 1(1), "${quote}" applies.`,
+    citation: "Freedom of Information Act 2011, s. 1(1)",
+    quote,
+  };
+  const run = (overrides) =>
+    evaluateLegalBasisGate({
+      clause,
+      jwks,
+      now: NOW,
+      callCheckClaim: async (sentClaim) => ({
+        ok: true,
+        receipt: await makeSignedReceipt({ privateKey, kid, claim: sentClaim, ...overrides }),
+        claim: sentClaim,
+      }),
+    });
+
+  const baseline = await run({});
+  assert.equal(baseline.accepted, true, baseline.reason);
+
+  const otherSection = await run({ pinpoint: "s. 2" });
+  assert.equal(otherSection.accepted, false);
+  assert.match(otherSection.reason, /not about the section the clause cites/i);
+
+  const dated = await run({ dateSent: true });
+  assert.equal(dated.accepted, false);
+  assert.match(dated.reason, /as of today/i);
+
+  const stale = await run({ issuedAt: "2026-12-15T21:00:00Z" });
+  assert.equal(stale.accepted, false);
+  assert.match(stale.reason, /not issued just now/i);
+
+  const otherCountry = await run({ jurisdiction: "rw" });
+  assert.equal(otherCountry.accepted, false);
+  assert.match(otherCountry.reason, /binding in Nigeria/i);
 });
 
 test("unified consent controller shows one card for both peer call and check_claim", async () => {

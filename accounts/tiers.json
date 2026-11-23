@@ -225,7 +225,12 @@
       "shared_watches": false,
       "webhook_endpoints": 0,
       "withdrawals": "not_told",
-      "source_ids": []
+      "anchor_text_bytes": 8192,
+      "source_ids": [
+        "ng-foi-act-2011",
+        "ng-cbn-act-2007",
+        "ng-isa-2025"
+      ]
     },
     "published": false,
     "listing": {

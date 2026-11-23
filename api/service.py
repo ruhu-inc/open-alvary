@@ -94,6 +94,9 @@ AGENTS_BRIDGE_CSP = (
     "object-src 'none'; base-uri 'self'; form-action 'self'"
 )
 SANDBOX_WORKER_CSP = "default-src 'none'; script-src blob:; connect-src 'none'; worker-src 'none'"
+# The two modules another site needs to show and verify a receipt (the card and the verifier): a module
+# imported from another origin is fetched with CORS, so these two, and no other script, say any origin.
+AGENTS_SHARED_MODULES = frozenset({"/agents/receipt-card.js", "/agents/receipt.js"})
 SECURITY_HEADERS = {
     **BASE_SECURITY_HEADERS,
     "Content-Security-Policy": DEFAULT_CSP,
@@ -175,6 +178,8 @@ def create_service(
         if path.startswith("/agents/") and path.endswith(".json"):
             response.headers.setdefault("Access-Control-Allow-Origin", "*")
             response.headers["Cache-Control"] = "max-age=300"
+        elif path in AGENTS_SHARED_MODULES:
+            response.headers.setdefault("Access-Control-Allow-Origin", "*")
         return response
 
     @service.exception_handler(Exception)
