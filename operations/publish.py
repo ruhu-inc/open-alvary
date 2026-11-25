@@ -136,6 +136,26 @@ class Refused(RuntimeError):
     pass
 
 
+# Audited one-to-one mapping from a workbench work ID to a pre-existing seeded public Source.id
+# (ingestion/catalogue/ng.json), so reviewed texts publish onto permanent public record IDs cited in
+# docs without mutating workbench review tables or GCS manifests.
+PUBLISHED_WORK_ALIASES: dict[str, str] = {
+    "ng-act-2-2025": "ng-isa-2025",
+    "ng-act-constitution": "ng-constitution-1999",
+    "ng-act-freedom-of-information-act": "ng-foi-act-2011",
+}
+
+
+def published_work_id(act: dict, aliases: dict[str, str] | None = None) -> str:
+    """The public catalogue Source.id for a workbench document: its audited alias when mapped to a
+    pre-existing seeded record ID, else its own work/document ID."""
+    mapping = PUBLISHED_WORK_ALIASES if aliases is None else aliases
+    if len(set(mapping.values())) != len(mapping):
+        raise Refused("Duplicate target in PUBLISHED_WORK_ALIASES")
+    raw = act.get("work") or act["id"]
+    return mapping.get(raw, raw)
+
+
 # ---------- the owner's collection decision ----------
 def decision_path(jurisdiction: str) -> Path:
     if not re.fullmatch(r"[a-z]{2}", jurisdiction):
@@ -235,6 +255,8 @@ class Approved:
     approved_at: datetime
     # The wording as published (wording_hash) that an approver confirmed, for a record with names withheld.
     confirmed: frozenset = frozenset()
+    # Whether saved Details held a publication.url (even if dropped when publication.name was empty).
+    has_publication_url: bool = False
 
 
 def from_workbench(
@@ -245,12 +267,19 @@ def from_workbench(
     run looks only at documents an approval names: a work never approved was never published). What each
     document's approvals bind goes `into` the Texts given, without building a text."""
     works: dict[str, list[dict]] = {}
+    raw_by_published: dict[str, set[str]] = {}
     for listed in library.documents():
         if listed.get("jurisdiction") != jurisdiction or listed.get("part"):
             continue  # annexes follow their work, later
         if only is not None and listed["id"] not in only:
             continue
-        works.setdefault(listed.get("work") or listed["id"], []).append(listed)
+        raw = listed.get("work") or listed["id"]
+        pub = published_work_id(listed)
+        raw_by_published.setdefault(pub, set()).add(raw)
+        if len(raw_by_published[pub]) > 1:
+            clash = ", ".join(sorted(raw_by_published[pub]))
+            raise Refused(f"Distinct workbench works ({clash}) share published work id {pub!r}")
+        works.setdefault(pub, []).append(listed)
     approved, waiting = [], set()
     for work, documents in sorted(works.items()):
         found = None
@@ -265,7 +294,15 @@ def from_workbench(
             if record is None:
                 continue
             head = now["head"]
-            found = found or {"record": record, "languages": [], "head": head, "confirmed": set()}
+            found = found or {
+                "record": record,
+                "languages": [],
+                "head": head,
+                "confirmed": set(),
+                "has_publication_url": False,
+            }
+            if ((now.get("view") or {}).get("values") or {}).get("publication.url"):
+                found["has_publication_url"] = True
             confirmed = (head.get("materials") or {}).get("withheld_wording")
             if isinstance(confirmed, str):
                 found["confirmed"].add(confirmed)
@@ -286,6 +323,7 @@ def from_workbench(
                 approver,
                 when if isinstance(when, datetime) else datetime.fromisoformat(str(when)),
                 frozenset(found["confirmed"]),
+                found["has_publication_url"],
             )
         )
     return approved, waiting
@@ -483,6 +521,8 @@ def catalogue_entries(item: Approved, decision: dict) -> dict:
     record, place = item.record, item.record.place.code
     url = next((str(p.url) for p in record.publications if p.url), None)
     if url is None:
+        if item.has_publication_url:
+            raise Refused(f"{item.work}: official publication link has no publication name in its details")
         raise Refused(f"{item.work}: no official publication link in its details")
     body = record.issued_by[0] if record.issued_by else None
     kind = AUTHORITY_KIND.get(body.kind, "other") if body else "government"
@@ -705,7 +745,7 @@ def catalogue_links(approved: list[Approved], sources: dict[str, Source]) -> lis
     links: dict[str, Amendment] = {}
     for item in approved:
         for relation in item.record.relations:
-            other = relation.target.work_uri
+            other = PUBLISHED_WORK_ALIASES.get(relation.target.work_uri, relation.target.work_uri)
             if not other or other == item.work or other not in sources or item.work not in sources:
                 continue
             if relation.kind in FORWARD:
@@ -983,6 +1023,9 @@ class ApprovedText:
     provenance: dict
     effective_from: date | None = None
     past: set[str] | None = None  # every text its document's approvals bound; None when they were not read
+    from_mirror: bool = (
+        False  # True when its collection declares retrieval_mirror (never published as official_url)
+    )
 
 
 @dataclass
@@ -1031,7 +1074,7 @@ class Texts:
 def read_approvals(found: Texts, act: dict, now: dict, library) -> Bound:
     """Add to `found` what this document's approvals bind, from its review state (workbench.review)."""
     head, approvals = now["head"], now.get("approvals")
-    work = act.get("work") or act["id"]
+    work = published_work_id(act)
     bound = Bound(act["id"])
     if approvals is not None:
         bound.past = accepted_history(approvals)
@@ -1088,15 +1131,21 @@ def texts_from_workbench(review, library, store, jurisdiction: str, only=None) -
     With them, what each document's approvals bind, publishable or not. Of the documents in `only` when
     given."""
     found = Texts()
+    raw_by_published: dict[str, set[str]] = {}
     for listed in library.documents():
         if listed.get("jurisdiction") != jurisdiction or listed.get("part"):
             continue
         if only is not None and listed["id"] not in only:
             continue
         act = library.act(listed["id"])
+        raw = act.get("work") or act["id"]
+        work = published_work_id(act)
+        raw_by_published.setdefault(work, set()).add(raw)
+        if len(raw_by_published[work]) > 1:
+            clash = ", ".join(sorted(raw_by_published[work]))
+            raise Refused(f"Distinct workbench works ({clash}) share published work id {work!r}")
         now = review.state(act, text=True)
         head, built = now["head"], now["text"]
-        work = act.get("work") or act["id"]
         language = act.get("language") or "en"
         approvals = read_approvals(found, act, now, library)
         if not now["approved"]:
@@ -1130,6 +1179,8 @@ def texts_from_workbench(review, library, store, jurisdiction: str, only=None) -
         author = head["author"]
         when = head["created_at"]
         when = when if isinstance(when, datetime) else datetime.fromisoformat(str(when))
+        manifest = library.manifest_for(act["id"]) if hasattr(library, "manifest_for") else {}
+        from_mirror = bool(manifest.get("retrieval_mirror"))
         found.approved.append(
             ApprovedText(
                 document_id=act["id"],
@@ -1141,6 +1192,7 @@ def texts_from_workbench(review, library, store, jurisdiction: str, only=None) -
                 approved_at=when if when.tzinfo else when.replace(tzinfo=UTC),
                 provenance=provenance,
                 past=approvals.past,
+                from_mirror=from_mirror,
             )
         )
     # Details are shared by a work's language versions, so one withheld is all of them; whichever order
@@ -1158,7 +1210,9 @@ def version_from(item: ApprovedText, source: Source, prior: SourceVersion | None
     version = SourceVersion(
         id=f"ver_{uuid.uuid4()}",
         source_id=item.work,
-        canonical_url=item.provenance.get("url") or source.canonical_url,
+        canonical_url=source.canonical_url
+        if item.from_mirror
+        else (item.provenance.get("url") or source.canonical_url),
         retrieved_at=datetime.fromisoformat(item.provenance["retrieved_at"]),
         raw_hash=item.provenance["sha256"],
         content_hash=built.text_sha256,
@@ -1592,9 +1646,10 @@ class PublicationLog:
                     db.execute(insert(publication_status).values(**values))
 
 
-def _reasons(skipped: dict, most: int = 50) -> dict:
-    """Why each document was not published, for the run's report (the first `most`)."""
-    return {key: str(why)[:300] for key, why in list(skipped.items())[:most]}
+def _reasons(skipped: dict, most: int | None = 50) -> dict:
+    """Why each document was not published, for the run's report (the first `most`, or all when None)."""
+    items = list(skipped.items()) if most is None else list(skipped.items())[:most]
+    return {key: str(why)[:300] for key, why in items}
 
 
 def _count(report: dict) -> dict:
@@ -1616,7 +1671,7 @@ class Reading:
     left: dict[str, str] = field(default_factory=dict)  # a document no longer here -> its work
 
     def work(self, document: str) -> str:
-        return self.documents[document].get("work") or document
+        return published_work_id(self.documents[document])
 
     def key(self, document: str) -> tuple[str, str]:
         return self.work(document), self.documents[document].get("language") or "en"
@@ -1693,7 +1748,15 @@ def told_by(store):
 
 
 def publish_country(
-    reading: Reading, review, library, review_store, public_store, taken: dict, previous: dict[str, dict]
+    reading: Reading,
+    review,
+    library,
+    review_store,
+    public_store,
+    taken: dict,
+    previous: dict[str, dict],
+    *,
+    cap: int | None = 50,
 ):
     """One country's run, after its take-downs (`taken`): its details, then its texts, each under its
     decision; and where each of its documents stands afterwards, in words a reviewer reads. A record taken
@@ -1777,7 +1840,7 @@ def publish_country(
     summary = {
         "decision_until": decision["expires_at"][:10],
         "records": _count(records) | done,
-        "records_skipped": _reasons(records["skipped"]),
+        "records_skipped": _reasons(records["skipped"], most=cap),
     }
     try:
         text_decision = current_text_decision(jurisdiction)
@@ -1813,17 +1876,52 @@ def publish_country(
     summary["texts"] = _count(report)
     for key, count in undone.items():
         summary["texts"][key] += count
-    summary["texts_skipped"] = _reasons(report["skipped"])
+    summary["texts_skipped"] = _reasons(report["skipped"], most=cap)
     return summary, settled()
 
 
-def run(review, library, review_store, public_store, log: PublicationLog, *, allow_take_downs=0) -> dict:
+class _DryRunStore:
+    """In-memory view of a catalogue Store for `run --dry-run`: loads the live catalogue once, keeps
+    simulated take-downs, record writes and text writes in memory so `texts` evaluates against the
+    records `records` would publish, and never writes to the database."""
+
+    def __init__(self, real):
+        self.engine = real.engine
+        self._real = real
+        self._corpus: Corpus | None = None
+
+    def load(self) -> Corpus:
+        if self._corpus is None:
+            self._corpus = self._real.load()
+        return self._corpus.model_copy(deep=True)
+
+    def save(self, corpus: Corpus, confidential=(), *, lift_privacy_block: bool = False) -> None:
+        self._corpus = Corpus.model_validate(corpus.model_dump(mode="json"))
+
+
+def run(
+    review,
+    library,
+    review_store,
+    public_store,
+    log: PublicationLog,
+    *,
+    allow_take_downs=0,
+    dry_run: bool = False,
+) -> dict:
     """A publishing run. Every approval is read first, and a read that fails or finds nothing to read stops
     the run with nothing changed. Then every country's take-downs, which no decision can stop and no later
     failure can undo, or only those someone recorded when the rest look wrong, which stops the run there;
     then every country with an approved document, its details then its texts; and each document's standing
-    recorded for the workbench. A failure is recorded and raised."""
-    number, trigger, by = log.start()
+    recorded for the workbench. With ``dry_run=True``, simulates the whole run in memory without writing to
+    either database and reports uncapped skip lists. A failure is recorded and raised."""
+    if dry_run:
+        number, trigger, by = None, "dry_run", None
+        target_store = _DryRunStore(public_store)
+    else:
+        number, trigger, by = log.start()
+        target_store = public_store
+    cap: int | None = None if dry_run else 50
     summary: dict = {"trigger": trigger, "requested_by": by, "countries": {}}
     try:
         named = review_store.approved_ids()
@@ -1831,9 +1929,9 @@ def run(review, library, review_store, public_store, log: PublicationLog, *, all
         listed = {d["id"]: d for d in documents if d["id"] in named and not d.get("part")}
         missing = named - {d["id"] for d in documents}
         if missing:  # what they published comes down, within refused_take_downs: said on the run either way
-            summary["not_in_collection"] = sorted(missing)[:50]
+            summary["not_in_collection"] = sorted(missing) if cap is None else sorted(missing)[:cap]
         previous = log.statuses()
-        corpus = public_store.load()
+        corpus = target_store.load()
         public_texts = _public_reviewed_texts(corpus)
         places = {s.id: s.jurisdiction_id for s in corpus.sources}
         public_before = [s for s in previous.values() if "public" in (s["details"], s["text"])]
@@ -1843,7 +1941,7 @@ def run(review, library, review_store, public_store, log: PublicationLog, *, all
         for country in sorted(countries):
             ids = {i for i, d in listed.items() if d.get("jurisdiction") == country}
             reading = read_country(review, library, review_store, country, ids)
-            account_for(corpus, reading, previous, told_by(public_store))
+            account_for(corpus, reading, previous, told_by(target_store))
             readings.append(reading)
         planned = {
             reading.jurisdiction: planned_take_downs(
@@ -1872,7 +1970,7 @@ def run(review, library, review_store, public_store, log: PublicationLog, *, all
         taken, summary["take_downs"] = {}, {}
         for reading in readings:
             done = take_down(
-                public_store,
+                target_store,
                 reading.jurisdiction,
                 reading.waiting,
                 reading.texts,
@@ -1887,13 +1985,24 @@ def run(review, library, review_store, public_store, log: PublicationLog, *, all
         rows: list[dict] = []
         for reading in readings:
             summary["countries"][reading.jurisdiction], found = publish_country(
-                reading, review, library, review_store, public_store, taken[reading.jurisdiction], previous
+                reading,
+                review,
+                library,
+                review_store,
+                target_store,
+                taken[reading.jurisdiction],
+                previous,
+                cap=cap,
             )
             rows += found
-        log.record(number, rows, previous)
+        if not dry_run:
+            log.record(number, rows, previous)
     except Exception as error:
-        log.finish(number, "failed", summary, f"{type(error).__name__}: {error}"[:2000])
+        if not dry_run:
+            log.finish(number, "failed", summary, f"{type(error).__name__}: {error}"[:2000])
         raise
+    if dry_run:
+        return {"run": None, "dry_run": True, **summary}
     log.finish(number, "succeeded", summary)
     return {"run": number, **summary}
 
@@ -1997,8 +2106,13 @@ def main(argv=None) -> int:
     texts_cmd = commands.add_parser("texts", parents=[allowance])
     texts_cmd.add_argument("--jurisdiction", required=True)
     texts_cmd.add_argument("--dry-run", action="store_true")
-    commands.add_parser(
+    run_cmd = commands.add_parser(
         "run", parents=[allowance], help="every country's details and texts, as the publish job runs them"
+    )
+    run_cmd.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="simulate the run in memory without writing to either database, with uncapped skip lists",
     )
     args = parser.parse_args(argv)
     try:
@@ -2014,6 +2128,7 @@ def main(argv=None) -> int:
                 Store(engine_for()),
                 PublicationLog(engine),
                 allow_take_downs=args.allow_take_downs,
+                dry_run=args.dry_run,
             )
             print(json.dumps(summary, indent=2, default=str))
             return 0

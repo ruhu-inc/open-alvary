@@ -860,22 +860,32 @@ def create_app(
                 }
             )
         provenance = library.provenance(act_id)
+        manifest = library.manifest_for(act_id)
+        mirror = manifest.get("retrieval_mirror") or ""
+        shown_url = provenance.get("url") or act.get("url")
+        shown_host = (urlsplit(shown_url or "").hostname or "").lower()
+        is_mirror = bool(mirror and shown_host and shown_host in mirror.lower())
         wording = withheld_wording(act, now)
+        values = (now.get("view") or {}).get("values") or {}
+        source_info = {
+            "official_url": shown_url,
+            "original_pdf": library.has_original(act_id),
+            **({"is_mirror": True, "mirror": mirror} if is_mirror else {}),
+        }
         return {
             "act": {
                 **act,
                 "title": shown_title(act),
-                "rights_basis": library.manifest_for(act_id).get("rights_basis", ""),
+                "rights_basis": manifest.get("rights_basis", ""),
             },
             "standing": standing(act),
             "readers": {"primary": reading["primary"], "checks": reading["checks"]},
             "pages": pages,
             # Where to check the document against its source: the address it was fetched from, and
-            # whether the original file itself can be opened here.
-            "source": {
-                "official_url": provenance.get("url") or act.get("url"),
-                "original_pdf": library.has_original(act_id),
-            },
+            # whether the original file itself can be opened here. A retrieval mirror is flagged so the
+            # UI labels it as a mirror rather than an official source.
+            "source": source_info,
+            "publication_url_missing": not bool((values.get("publication.url") or "").strip()),
             "readiness": blind(now["readiness"]),
             "text_check": publication.summary(now["text"]),
             "content_sha256": now["content_sha256"],
@@ -1543,6 +1553,12 @@ def create_app(
         except ValueError as error:
             raise HTTPException(422, str(error)) from error
         if status == "confirmed":
+            if given.get("publication.url") and not given.get("publication.name"):
+                raise HTTPException(
+                    422,
+                    "Publication: name the publication whenever an Official copy online address is entered "
+                    "(clear any absence on Publication and name the Gazette, court portal or official website)",
+                )
             gaps = record_view.missing(given, absent, specs)
             if gaps:
                 labels = [next(s.label for s in specs if s.key == key) for key in gaps]

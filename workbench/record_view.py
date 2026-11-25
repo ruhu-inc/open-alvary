@@ -1366,6 +1366,11 @@ def validate(values: dict, absent: dict, specs: list[FieldSpec]) -> tuple[dict, 
             raise ValueError(f"{key}: given and marked absent")
         if key in ESSENTIAL:
             raise ValueError(f"{by_key[key].label}: must be given; it cannot be marked absent")
+    if clean.get("publication.url") and "publication.name" in absent:
+        raise ValueError(
+            "Publication: name the publication whenever an Official copy online address is entered "
+            "(clear the absence on Publication and name the Gazette, court portal or official website)"
+        )
     return clean, dict(absent)
 
 

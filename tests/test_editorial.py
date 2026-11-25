@@ -237,3 +237,26 @@ def test_events_instructions_and_the_queue_need_a_signed_in_operator(world):
     reviewer = signed_in(world, "reviewer@example.org")
     del reviewer.headers["X-CSRF-Token"]
     assert reviewer.post(f"/api/documents/{ACT}/events/proposals").status_code == 403
+
+
+def test_events_source_url_prefers_official_publication_url_over_retrieval_mirror(world):
+    reviewer = signed_in(world, "reviewer@example.org")
+    # Before Details have publication.url, events fall back to the retrieved copy URL.
+    assert listed(reviewer)["source_url"] == SOURCE
+    official = "https://nass.gov.ng/documents/download/cybercrimes-2024.pdf"
+    saved = reviewer.post(
+        f"/api/documents/{ACT}/details",
+        json={
+            "expected_revision": 0,
+            "status": "draft",
+            "details": {
+                "identity.family": "legislation",
+                "identity.type": "act",
+                "publication.name": "Federal Republic of Nigeria Official Gazette",
+                "publication.url": official,
+            },
+            "absent": {},
+        },
+    )
+    assert saved.status_code == 200
+    assert listed(reviewer)["source_url"] == official

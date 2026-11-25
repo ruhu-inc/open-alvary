@@ -1419,6 +1419,12 @@ function approvalPanel(actId, data, current) {
   if (ready.text && ready.text.errors) blockers.append(el("li", { text: `${ready.text.errors} problem${ready.text.errors === 1 ? "" : "s"} in the text's structure: see Text and structure above` }));
   if (ready.status_pending) blockers.append(el("li", { text: ready.status_pending_message || "Legal status: research pending." }));
   panel.append(ready.ready ? el("p", {}, pill("ok", "Ready for approval")) : el("div", {}, el("p", { text: "Before approval:" }), blockers));
+  if (data.publication_url_missing) {
+    panel.append(el("p", {
+      class: "notice warn",
+      text: "No Official copy online link is recorded in Details. Publishing will skip this document until an official link (with a Publication name) is saved and confirmed.",
+    }));
+  }
   if (canApprove) {
     const basis = el("textarea", { rows: 3, value: (data.approvals[0] && data.approvals[0].rights_basis) || data.act.rights_basis || "" });
     const boxes = Object.entries(data.materials).map(([key, label]) => {
@@ -1824,7 +1830,15 @@ function sourcePanel(actId, numbers, source, first) {
   };
   const links = el("p", { class: "source-links" },
     source.official_url
-      ? el("a", { href: source.official_url, target: "_blank", rel: "noopener noreferrer", title: source.official_url, text: "Official source ↗" })
+      ? el("a", {
+          href: source.official_url,
+          target: "_blank",
+          rel: "noopener noreferrer",
+          title: source.is_mirror
+            ? `${source.mirror || "Retrieval mirror"} (${source.official_url}) — mirror copy, not an official publication link`
+            : source.official_url,
+          text: source.is_mirror ? "Retrieved copy (mirror) ↗" : "Official source ↗",
+        })
       : el("span", { class: "muted", text: "No official address recorded" }),
     source.original_pdf ? [" · ", el("a", { href: `/api/documents/${id}/original.pdf`, target: "_blank", rel: "noopener", text: "Original PDF ↗" })] : null,
     " · ", editor);
@@ -2804,7 +2818,15 @@ function buildViewer(view) {
       el("label", { class: "muted", title: "Keep the image on the text you are reading" }, follow, " follow text"),
       el("span", { class: "muted hint", text: "Drag to move when zoomed. Click the page to find its text." }),
       view.detail.source.official_url
-        ? el("a", { href: view.detail.source.official_url, target: "_blank", rel: "noopener noreferrer", title: view.detail.source.official_url, text: "Official source ↗" })
+        ? el("a", {
+            href: view.detail.source.official_url,
+            target: "_blank",
+            rel: "noopener noreferrer",
+            title: view.detail.source.is_mirror
+              ? `${view.detail.source.mirror || "Retrieval mirror"} (${view.detail.source.official_url}) — mirror copy, not an official publication link`
+              : view.detail.source.official_url,
+            text: view.detail.source.is_mirror ? "Retrieved copy (mirror) ↗" : "Official source ↗",
+          })
         : null),
     frame);
   viewer.addEventListener("wheel", (event) => {

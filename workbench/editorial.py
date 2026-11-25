@@ -27,7 +27,7 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from operations.events import EVENT_ID, EVENT_TYPES, EventFile, EventIn, propose_from
-from workbench import auth, content, publication
+from workbench import auth, content, publication, record_view
 from workbench.consolidation import Instruction
 from workbench.store import Conflict
 
@@ -256,6 +256,14 @@ def install(app: FastAPI, store, library, review) -> None:
         ]
 
     def source_url(act: dict) -> str | None:
+        if library.manifest_for(act["id"]).get("retrieval_mirror"):
+            record = store.latest_details(review.details_key(act))
+            values = (record or {}).get("details") or {}
+            if values and not record_view.is_view(values):
+                values = record_view.from_legacy(values, (record or {}).get("absent") or {})[0]
+            confirmed = (values.get("publication.url") or "").strip()
+            if confirmed:
+                return confirmed
         return library.provenance(act["id"]).get("url") or act.get("url") or None
 
     def held(work: str) -> str | None:

@@ -2625,3 +2625,112 @@ def test_details_accepts_long_urls_titles_and_citations():
     assert clean["identity.title"] == long_title
     assert clean["identity.citation"] == long_citation
     assert absent == {}
+
+
+def test_official_ng_url_allowlist_and_mirror_suggestion():
+    assert details.is_official_ng_url("https://sec.gov.ng/isa-2025.pdf")
+    assert details.is_official_ng_url("https://www.nafdac.gov.ng/out/2025/circular.pdf")
+    assert details.is_official_ng_url("https://scnwebsites3.s3.af-south-1.amazonaws.com/2024/case.pdf")
+    assert not details.is_official_ng_url("https://placng.org/i/wp-content/uploads/2024/05/act.pdf")
+    assert not details.is_official_ng_url("https://evil.s3.af-south-1.amazonaws.com/2024/case.pdf")
+    assert not details.is_official_ng_url("https://attacker.amazonaws.com/act.pdf")
+    assert not details.is_official_ng_url("http://sec.gov.ng/isa-2025.pdf")
+
+    sample_reading = {
+        "pages": [{"page": 1, "text": "Investments and Securities Act, 2025", "furniture": [], "nodes": []}]
+    }
+    # Mirror manifest never auto-drafts official_source_url, even if the URL host looks official.
+    mirrored = details.suggest(
+        sample_reading,
+        {"id": "ng-act-2-2025", "type": "act", "url": "https://sec.gov.ng/isa-2025.pdf"},
+        {"jurisdiction": "ng", "retrieval_mirror": "https://placng.org/"},
+    )
+    assert mirrored["official_source_url"]["absent"] == "unknown"
+    # Non-allowlisted host without retrieval_mirror stays absent.
+    non_official = details.suggest(
+        sample_reading,
+        {"id": "ng-act-2-2025", "type": "act", "url": "https://placng.org/i/act.pdf"},
+        {"jurisdiction": "ng"},
+    )
+    assert non_official["official_source_url"]["absent"] == "unknown"
+    # Direct official host without retrieval_mirror auto-drafts official_source_url.
+    direct = details.suggest(
+        sample_reading,
+        {"id": "ng-act-2-2025", "type": "act", "url": "https://sec.gov.ng/isa-2025.pdf"},
+        {"jurisdiction": "ng"},
+    )
+    assert direct["official_source_url"]["value"] == "https://sec.gov.ng/isa-2025.pdf"
+
+
+def test_option_a_blocks_publication_url_without_publication_name(world):
+    from schema.jurisdictions import registry
+
+    specs = record_view.fields("legislation", "act", registry().get("ng"))
+    with pytest.raises(ValueError, match="name the publication"):
+        record_view.validate(
+            {
+                "identity.family": "legislation",
+                "identity.type": "act",
+                "publication.url": "https://nass.gov.ng/act.pdf",
+            },
+            {"publication.name": "not_in_source"},
+            specs,
+        )
+
+    reviewer = signed_in(world, "reviewer@example.org")
+    # Partial draft with publication.url and no publication.name stays allowed.
+    draft = reviewer.post(
+        f"/api/documents/{ACT}/details",
+        json={
+            "expected_revision": 0,
+            "status": "draft",
+            "details": {
+                "identity.family": "legislation",
+                "identity.type": "act",
+                "publication.url": "https://nass.gov.ng/documents/download/cybercrimes-2024.pdf",
+            },
+            "absent": {},
+        },
+    )
+    assert draft.status_code == 200
+    # Confirming with publication.url and no publication.name is rejected (HTTP 422).
+    confirmed = reviewer.post(
+        f"/api/documents/{ACT}/details",
+        json={
+            "expected_revision": 1,
+            "status": "confirmed",
+            "details": {
+                "identity.family": "legislation",
+                "identity.type": "act",
+                "publication.url": "https://nass.gov.ng/documents/download/cybercrimes-2024.pdf",
+            },
+            "absent": {},
+        },
+    )
+    assert confirmed.status_code == 422 and "name the publication" in confirmed.json()["message"]
+
+
+def test_document_response_flags_mirror_source_and_missing_publication_url(world):
+    reviewer = signed_in(world, "reviewer@example.org")
+    initial = reviewer.get(f"/api/documents/{ACT}").json()
+    assert initial["source"]["is_mirror"] is True
+    assert "placng.org" in initial["source"]["mirror"]
+    assert initial["publication_url_missing"] is True
+
+    saved = reviewer.post(
+        f"/api/documents/{ACT}/details",
+        json={
+            "expected_revision": 0,
+            "status": "draft",
+            "details": {
+                "identity.family": "legislation",
+                "identity.type": "act",
+                "publication.name": "Federal Republic of Nigeria Official Gazette",
+                "publication.url": "https://nass.gov.ng/documents/download/cybercrimes-2024.pdf",
+            },
+            "absent": {},
+        },
+    )
+    assert saved.status_code == 200
+    after = reviewer.get(f"/api/documents/{ACT}").json()
+    assert after["publication_url_missing"] is False

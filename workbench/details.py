@@ -14,12 +14,44 @@ came from, for a reviewer to confirm or correct. Suggestions are never published
 import re
 from dataclasses import dataclass
 from datetime import date
+from urllib.parse import urlsplit
 
 from ingestion.first_collection import DOCUMENT_TYPES
 
 STANDARD = "details-1"
 LEGISLATION = {"act", "bill", "regulation", "order"}
 PASSED = {"act", "bill"}
+
+# Exact official Nigerian government, court and statutory-regulator hosts (never suffix-matched,
+# so the Supreme Court's storage bucket host does not allowlist all of amazonaws.com). Shared by
+# Details first-draft suggestions and the backfill-proposal script.
+OFFICIAL_NG_HOSTS = frozenset(
+    {
+        "nicnadr.gov.ng",
+        "scnwebsites3.s3.af-south-1.amazonaws.com",
+        "nerc.gov.ng",
+        "nigeriareposit.nln.gov.ng",
+        "nass.gov.ng",
+        "ncc.gov.ng",
+        "ncaa.gov.ng",
+        "sec.gov.ng",
+        "naicom.gov.ng",
+        "nesrea.gov.ng",
+        "www.nafdac.gov.ng",
+        "nafdac.gov.ng",
+        "news.cac.gov.ng",
+        "justice.gov.ng",
+        "www.fhc.gov.ng",
+    }
+)
+
+
+def is_official_ng_url(url: str | None) -> bool:
+    """Whether ``url`` is an https address on an exact allowlisted official Nigerian host."""
+    if not url or not isinstance(url, str):
+        return False
+    parts = urlsplit(url.strip())
+    return parts.scheme == "https" and (parts.hostname or "").lower() in OFFICIAL_NG_HOSTS
 
 
 @dataclass(frozen=True)
@@ -366,7 +398,11 @@ def suggest(reading: dict, document: dict, manifest: dict) -> dict:
         out["consolidation"] = _suggest("not_consolidated", None, manifest["description"])
     out["legal_status"] = _suggest("unknown", None, "Currentness has not been checked")
     out["status_checked_on"] = _absent("unknown", None, "Currentness has not been checked")
-    out["official_source_url"] = _absent("unknown", None, f"Retrieved from {document.get('url', 'a mirror')}")
+    url = document.get("url")
+    if url and not manifest.get("retrieval_mirror") and is_official_ng_url(url):
+        out["official_source_url"] = _suggest(url, None, "Collection manifest")
+    else:
+        out["official_source_url"] = _absent("unknown", None, f"Retrieved from {url or 'a mirror'}")
     return {key: value for key, value in out.items() if key in BY_KEY}
 
 

@@ -1631,3 +1631,124 @@ def test_a_text_whose_approval_was_revoked_comes_down_though_a_newer_one_was_app
     ]
     collection.run(store)
     assert {v.content_hash for v in public_corpus(store.load()).versions} == {newer}
+
+
+def test_mirror_provenance_uses_official_source_url_for_published_version(both_decisions, store, tmp_path):
+    """For a collection retrieved via a mirror (retrieval_mirror set), the published SourceVersion uses
+    the official publication URL from the catalogue Source rather than the mirror's retrieval URL, while
+    preserving raw_hash and retrieved_at; non-mirror collections keep provenance['url']."""
+    collection = Collection(tmp_path)
+    collection.add("rw-mirror", "rw-mirror", words="Mirrored text.", raw="1" * 64)
+    collection.add("rw-direct", "rw-direct", words="Direct text.", raw="2" * 64)
+    collection.manifest_for = lambda doc: (
+        {"retrieval_mirror": "https://placng.org/"} if doc == "rw-mirror" else {}
+    )
+    collection.provenance = lambda doc: {
+        "url": "https://placng.org/i/wp-content/uploads/2024/05/act.pdf"
+        if doc == "rw-mirror"
+        else "https://www.minijust.gov.rw/direct.pdf",
+        "retrieved_at": "2026-10-09T06:41:17+00:00",
+        "sha256": collection.docs[doc]["raw"],
+    }
+    collection.run(store)
+    versions = {v.source_id: v for v in store.load().versions}
+    assert str(versions["rw-mirror"].canonical_url) == "https://www.minijust.gov.rw/official-gazette"
+    assert versions["rw-mirror"].raw_hash == "1" * 64
+    assert versions["rw-mirror"].retrieved_at == datetime(2026, 10, 9, 6, 41, 17, tzinfo=UTC)
+    assert str(versions["rw-direct"].canonical_url) == "https://www.minijust.gov.rw/direct.pdf"
+
+
+def test_missing_publication_name_with_publication_url_reports_accurate_skip_reason(decisions):
+    """When Details hold publication.url without publication.name, record_view omits the Publication and
+    catalogue_entries must explain that the publication name is missing rather than claiming no link."""
+    decision = publish.decide("rw", "Ada Reviewer", 12, [], "", "")
+    item = publish.Approved(
+        "rw-no-name",
+        rwanda_law(publications=()),
+        ["en"],
+        "Ada Reviewer",
+        datetime.now(UTC),
+        has_publication_url=True,
+    )
+    with pytest.raises(publish.Refused, match="official publication link has no publication name"):
+        publish.catalogue_entries(item, decision)
+
+
+def test_published_work_aliases_publish_onto_seeded_id_and_reject_duplicate_targets(
+    decisions, store, tmp_path
+):
+    """Approach 1 alias map: approving ng-act-2-2025 publishes its catalogue record and full text onto
+    the seeded ng-isa-2025 work id without creating a duplicate source or losing seeded amendments, and
+    a subsequent seed() preserves the published full text."""
+    from api.store import seed
+
+    seed(store)
+    publish.decide("ng", "Ada Reviewer", 12, [], "", "")
+    publish.decide_text("ng", "Ada Reviewer", 12, EVIDENCE, **TEXT_DECISION)
+    ng_record = rwanda_law(
+        identity=Identity(
+            family="legislation",
+            type="act",
+            work_uri="/akn/ng/act/2025/2",
+            title="Investments and Securities Act, 2025",
+            year=2025,
+            citations=(RecordCitation(kind="official", text="Investments and Securities Act, 2025"),),
+        ),
+        place=Place(code="ng", name="Nigeria", level="national"),
+        issued_by=(Body(name="National Assembly", kind="legislature", id="national_assembly"),),
+        expressions=(Expression(language="en", authority="authoritative", this_text=True),),
+        publications=(
+            Publication(
+                kind="gazette",
+                name="Federal Republic of Nigeria Official Gazette",
+                url="https://sec.gov.ng/isa-2025.pdf",
+            ),
+        ),
+    )
+
+    collection = Collection(tmp_path, jurisdiction="ng")
+    collection.add("ng-act-2-2025", "ng-act-2-2025", record=ng_record, words="Section 1. Short title.")
+    summary = collection.run(store)["countries"]["ng"]
+    assert (
+        summary["records"]["updated"] == 1
+        and summary["records"]["published"] == 0
+        and summary["texts"]["published"] == 1
+    )
+    assert "ng-isa-2025" in public_records(store) and "ng-act-2-2025" not in public_records(store)
+    assert public_texts(store) == [("ng-isa-2025", "en")]
+    assert any(a.id == "amendment-ng-isa-2025-repeals-ng-isa-2007" for a in store.load().amendments)
+
+    # Re-running seed() (as migrate does on release) keeps the published text on ng-isa-2025.
+    seed(store)
+    assert public_texts(store) == [("ng-isa-2025", "en")]
+
+    # Two distinct works resolving to the same published id must be refused rather than silently merged.
+    collection.add("ng-isa-2025", "ng-isa-2025", record=ng_record, words="Duplicate.", raw="8" * 64)
+    with pytest.raises(publish.Refused, match="share published work id"):
+        publish.from_workbench(collection, collection, collection, "ng")
+
+
+def test_dry_run_simulates_records_into_texts_without_writing_and_returns_all_skips(
+    both_decisions, store, tmp_path
+):
+    """run(dry_run=True) simulates records into texts in memory (so newly eligible works are not
+    falsely skipped as missing a catalogue record), returns uncapped skip maps (>50), and writes
+    nothing to the public corpus store or publication log."""
+    collection = Collection(tmp_path)
+    collection.add("rw-good", "rw-good", words="Ready to publish.", raw="1" * 64)
+    for i in range(55):
+        collection.add(
+            f"rw-skip-{i:02d}",
+            f"rw-skip-{i:02d}",
+            record=rwanda_law(publications=()),
+            words=f"Skipped {i}.",
+            raw=f"{i:064x}",
+        )
+    summary = collection.run(store, dry_run=True)
+    assert summary["dry_run"] is True and summary["run"] is None
+    rw = summary["countries"]["rw"]
+    assert rw["records"]["published"] == 1 and rw["texts"]["published"] == 1
+    assert len(rw["records_skipped"]) == 55
+    assert "rw-good" not in rw["texts_skipped"]
+    assert public_records(store) == [] and public_texts(store) == []
+    assert collection.runs() == [] and collection.statuses() == {}
