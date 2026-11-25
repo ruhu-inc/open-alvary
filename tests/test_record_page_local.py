@@ -48,6 +48,22 @@ def test_the_invented_law_is_served_in_three_languages_with_the_structure_rwanda
     )
 
 
+def test_the_second_law_has_a_long_printed_contents_and_a_table_inside_an_article(tmp_path):
+    client = _client(tmp_path, tmp_path / "no-build")
+    page = client.get(f"/site/v1/sources/{record_page_local.LONG_ID}/versions").json()
+    (version,) = page["items"]
+    raw = version["canonical_text"].encode()
+    nodes = {node["locator"]: node for node in page["structure"]}
+    assert sum(node["kind"] == "article" for node in page["structure"]) == record_page_local.LONG_ARTICLES
+    # The printed contents: its heading and one line an article, more than the page shows unfolded.
+    listed = raw[nodes["contents"]["start_byte"] : nodes["contents"]["end_byte"]].decode().split("\n\n")
+    assert listed[0] == "TABLE OF CONTENTS" and len(listed) == 1 + record_page_local.LONG_ARTICLES
+    # The table is a block of article 2 with no node of its own, as rw-law-1 leaves Rwandan tables.
+    second = raw[nodes["art_2"]["start_byte"] : nodes["art_2"]["end_byte"]].decode()
+    assert "Code\tMeaning\n310\tFiling number\n320\tFiling date" in second.split("\n\n")
+    assert not any(node["kind"] == "table" for node in page["structure"])
+
+
 def test_the_other_text_has_no_structure(tmp_path):
     client = _client(tmp_path, tmp_path / "no-build")
     page = client.get(f"/site/v1/sources/{record_page_local.PLAIN_ID}/versions").json()

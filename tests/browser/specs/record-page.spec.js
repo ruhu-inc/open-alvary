@@ -1,11 +1,13 @@
 // The record page's text, on the local site (scripts/record_page_local.py): the built website and the
-// website's real data path over two published texts, an invented Rwandan law in three languages with
-// its structure and a text with none. No key, no secret and no outside call.
+// website's real data path over three published texts: an invented Rwandan law in three languages with
+// its structure, a longer one with a table, and a text with no structure. No key, no secret and no
+// outside call.
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
 const SITE = `http://127.0.0.1:${Number(process.env.RECORD_PAGE_PORT || 8774)}`;
 const LAW = "/sources/rw-law-000-2099";
+const LONG = "/sources/rw-law-001-2099";
 const PLAIN = "/sources/ng-foi-act-2011";
 
 test.use({ baseURL: SITE });
@@ -156,13 +158,55 @@ test.describe("a published law in three languages", () => {
   });
 
   test("the text and its Contents have no serious accessibility problem", async ({ page }) => {
-    await page.goto(LAW + "?lang=en");
-    await expect(contents(page).getByRole("link")).toHaveCount(7);
-    const results = await new AxeBuilder({ page }).include(".pub-reader").include(".pub-contents").analyze();
-    const serious = results.violations
-      .filter((violation) => ["serious", "critical"].includes(violation.impact))
-      .map((violation) => `${violation.id}: ${violation.nodes.map((node) => node.target.join(" ")).join(" | ")}`);
-    expect(serious).toEqual([]);
+    // The law in three languages, and the longer one with its folded table of contents and its table.
+    for (const [address, entries] of [[LAW + "?lang=en", 7], [LONG, 14]]) {
+      await page.goto(address);
+      await expect(contents(page).getByRole("link")).toHaveCount(entries);
+      const results = await new AxeBuilder({ page }).include(".pub-reader").include(".pub-contents").analyze();
+      const serious = results.violations
+        .filter((violation) => ["serious", "critical"].includes(violation.impact))
+        .map((violation) => `${violation.id}: ${violation.nodes.map((node) => node.target.join(" ")).join(" | ")}`);
+      expect(serious, address).toEqual([]);
+    }
+  });
+});
+
+test.describe("a longer law in one language", () => {
+  test("folds its long printed table of contents under its own heading, and opens it when asked @smoke", async ({ page }) => {
+    const versions = await served(page, LONG);
+    await page.goto(LONG);
+    // One text: nothing to switch between.
+    await expect(languages(page)).toHaveCount(0);
+    await expect(contents(page).getByRole("link")).toHaveCount(14);
+
+    const printed = page.locator("details.pub-printed-contents");
+    const summary = printed.locator("summary");
+    await expect(summary).toHaveText("TABLE OF CONTENTS");
+    await expect(summary).toHaveAttribute("data-note", "as printed, 14 lines");
+    const line = printed.getByText("Article 9: Matter 9", { exact: true });
+    await expect(line).toBeHidden();
+    // The first article is close under it: the folded list does not push the text away.
+    expect((await top(page.locator("#article-1"))) - (await top(summary))).toBeLessThan(140);
+    // Folded or not, the text on the page is the published text.
+    const whole = versions.en.canonical_text.replace(/[\t\n]/g, "");
+    expect((await text(page).evaluate((element) => element.textContent)).replace(/\n/g, "")).toBe(whole);
+
+    await summary.focus();
+    await page.keyboard.press("Enter");
+    await expect(line).toBeVisible();
+    await expect(printed.locator("[id]")).toHaveCount(0);
+  });
+
+  test("shows a table inside an article as a table", async ({ page }) => {
+    await page.goto(LONG);
+    const table = text(page).getByRole("table");
+    await expect(table).toHaveCount(1);
+    await expect(table.getByRole("row")).toHaveCount(3);
+    await expect(table.getByRole("row").nth(1).getByRole("cell")).toHaveText(["310", "Filing number"]);
+    // It sits in article 2, between that article's words and article 3.
+    await expect(page.locator("#article-2 + p")).toHaveText("Matter 2 is governed by this invented article.");
+    expect(await top(table)).toBeLessThan(await top(page.locator("#article-3")));
+    expect(await top(table)).toBeGreaterThan(await top(page.locator("#article-2")));
   });
 });
 

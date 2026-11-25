@@ -1,13 +1,15 @@
-"""The public site on this computer with two published texts, for trying the record page and for its
+"""The public site on this computer with three published texts, for trying the record page and for its
 browser tests.
 
 It serves the built website (``web/dist``; build it first with ``npm --prefix web run build``) and the
-website's own data path (``/site/v1``, the real one) over a small database in memory that holds:
+website's own data path (``/site/v1``, the real one) over a small database that holds:
 
 - ``rw-law-000-2099``: an invented Rwandan law, not legislation, in Kinyarwanda, English and French. Its
   structure is made by the structure rules that Rwandan laws are published with (``rw-law-1``), from
   units as a reviewer leaves them: a printed table of contents, two chapters, a division and four
   articles in each language.
+- ``rw-law-001-2099``: a second invented law, in English only, with fourteen articles, so that its printed
+  table of contents is long enough to be folded away, and a table inside an article.
 - ``ng-foi-act-2011``: the catalogue's record with one invented text and no structure, as texts were
   published before they had any.
 
@@ -50,6 +52,7 @@ from workbench.structure import RW_LAW, derive
 ROOT = Path(__file__).resolve().parent.parent
 DIST = ROOT / "web" / "dist"
 LAW_ID = "rw-law-000-2099"
+LONG_ID = "rw-law-001-2099"
 PLAIN_ID = "ng-foi-act-2011"
 OFFICIAL = "https://example.org/local-fixture"
 
@@ -138,6 +141,31 @@ LAW = {
         ("p", "Fait à Kigali, le 01/01/2099"),
     ],
 }
+LONG_ARTICLES = 14
+
+
+def long_law() -> list[dict]:
+    """The second invented law's units: a printed table of contents of fourteen lines, then the articles,
+    the second holding a table as Rwandan laws print them (a block of the article, with no node of its
+    own)."""
+    heading = [f"Article {n}: Matter {n}" for n in range(1, LONG_ARTICLES + 1)]
+    units = [
+        {"kind": "heading", "text": "LAW N° 001/2099 OF 01/01/2099 GOVERNING AN INVENTED LIST"},
+        {"kind": "paragraph", "text": "This text is invented to test the website. It is not a law."},
+        {"kind": "heading", "text": "TABLE OF CONTENTS"},
+        *({"kind": "paragraph", "text": line} for line in heading),
+    ]
+    for n, line in enumerate(heading, start=1):
+        units += [
+            {"kind": "heading", "text": line},
+            {"kind": "paragraph", "text": f"Matter {n} is governed by this invented article."},
+        ]
+        if n == 2:
+            rows = [["Code", "Meaning"], ["310", "Filing number"], ["320", "Filing date"]]
+            units.append({"kind": "table", "header_rows": 1, "rows": rows})
+    return units
+
+
 PLAIN_TEXT = (
     "Freedom of Information Act 2011 (invented copy for tests)\n"
     "Section 1. (1) The right of any person to access or request information is established.\n"
@@ -165,23 +193,22 @@ def _version(source_id: str, language: str, text: str, now: datetime) -> SourceV
     )
 
 
-def law_version(language: str, now: datetime) -> tuple[SourceVersion, list[StructureNode]]:
-    """One language of the invented law: its text as oa-text-1 writes it, and its rw-law-1 structure."""
-    units = [
-        {"kind": "heading" if kind == "h" else "paragraph", "text": text} for kind, text in LAW[language]
-    ]
+def law_version(
+    source_id: str, language: str, units: list[dict], now: datetime
+) -> tuple[SourceVersion, list[StructureNode]]:
+    """One language of an invented law: its text as oa-text-1 writes it, and its rw-law-1 structure."""
     pages = [{"page": 1, "units": units}]
     serialized = serialize(pages)
     structure = derive(serialized, pages, RW_LAW, language)
     if serialized.errors or structure.errors:
         raise SystemExit(f"The invented law does not read as a Rwandan law: {structure.errors}")
-    version = _version(LAW_ID, language, serialized.text, now)
-    ids = {id(node): f"nod-{LAW_ID}-{language}-{index}" for index, node in enumerate(structure.nodes)}
+    version = _version(source_id, language, serialized.text, now)
+    ids = {id(node): f"nod-{source_id}-{language}-{index}" for index, node in enumerate(structure.nodes)}
     raw = serialized.text.encode()
     nodes = [
         StructureNode(
             id=ids[id(node)],
-            source_id=LAW_ID,
+            source_id=source_id,
             version_id=version.id,
             parent_id=ids[id(node.parent)] if node.parent else None,
             kind=node.kind,
@@ -252,29 +279,43 @@ def corpus() -> Corpus:
             official_url=OFFICIAL,
         )
     )
-    held.sources.append(
-        Source(
-            id=LAW_ID,
-            jurisdiction_id="rw",
-            authority_id="rw-parliament",
-            title="Law n° 000/2099 of 01/01/2099 governing an invented register",
-            document_type="act",
-            canonical_url=f"{OFFICIAL}/{LAW_ID}",
-            citation="Law n° 000/2099 of 01/01/2099",
+    laws = {
+        LAW_ID: (
+            "Law n° 000/2099 of 01/01/2099 governing an invented register",
             # The record's own language is not the first text served (English): the page opens in it all
             # the same.
-            language="rw",
-            summary="An invented text for testing the record page. It is not legislation.",
-            year=2099,
+            "rw",
+            {
+                language: [
+                    {"kind": "heading" if kind == "h" else "paragraph", "text": text} for kind, text in units
+                ]
+                for language, units in LAW.items()
+            },
+        ),
+        LONG_ID: ("Law n° 001/2099 of 01/01/2099 governing an invented list", "en", {"en": long_law()}),
+    }
+    for source_id, (title, language, texts) in laws.items():
+        held.sources.append(
+            Source(
+                id=source_id,
+                jurisdiction_id="rw",
+                authority_id="rw-parliament",
+                title=title,
+                document_type="act",
+                canonical_url=f"{OFFICIAL}/{source_id}",
+                citation=title.split(" governing")[0],
+                language=language,
+                summary="An invented text for testing the record page. It is not legislation.",
+                year=2099,
+            )
         )
-    )
-    digests = []
-    for language in ("rw", "en", "fr"):
-        version, nodes = law_version(language, now)
-        held.versions.append(version)
-        held.structure.extend(nodes)
-        digests.append(version.content_hash)
-    held.rights.append(_rights("rights-" + LAW_ID, LAW_ID, digests, now))
+        digests = []
+        for text_language, units in texts.items():
+            version, nodes = law_version(source_id, text_language, units, now)
+            held.versions.append(version)
+            held.structure.extend(nodes)
+            digests.append(version.content_hash)
+        held.rights.append(_rights("rights-" + source_id, source_id, digests, now))
     plain = _version(PLAIN_ID, "en", PLAIN_TEXT, now)
     held.versions.append(plain)
     for index, rights in enumerate(held.rights):

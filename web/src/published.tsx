@@ -7,6 +7,7 @@ import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 import {
   chooseVersion,
+  foldsAway,
   layoutText,
   nodesFor,
   type Laid,
@@ -204,9 +205,22 @@ function Block({ piece }: { piece: Exclude<Piece, { type: "gap" }> }) {
 // The text. Every character of it is in the page once, in order: the line feeds between two blocks
 // are kept between their elements, where a browser shows nothing for them. A table's cells take the
 // place of its tabs and line feeds.
+//
+// The law's own printed table of contents stays where it is printed, set apart. A long one that the
+// Contents lists again is folded under its own heading until asked for: the Constitution's runs to
+// some 230 lines before the first chapter.
 export function PublishedText({ reading }: { reading: Reading }) {
   const { version, laid } = reading;
   const lang = version.language ?? undefined;
+  useEffect(() => {
+    // A printed copy has the whole text, whatever was folded on the screen.
+    const unfold = () =>
+      document
+        .querySelectorAll<HTMLDetailsElement>("details.pub-printed-contents")
+        .forEach((folded) => (folded.open = true));
+    window.addEventListener("beforeprint", unfold);
+    return () => window.removeEventListener("beforeprint", unfold);
+  }, []);
   if (!laid)
     return (
       <pre className="legal-text" lang={lang}>
@@ -214,31 +228,56 @@ export function PublishedText({ reading }: { reading: Reading }) {
       </pre>
     );
   const out: ReactNode[] = [];
-  let printed: ReactNode[] | null = null; // the document's own table of contents, kept together
-  const close = (key: number) => {
-    if (printed)
+  // The printed table of contents being gathered: its pieces, and how many of them are blocks.
+  type Printed = { nodes: ReactNode[]; blocks: number; headed: boolean };
+  let printed: Printed | null = null;
+  const close = (key: number, run: Printed | null) => {
+    printed = null;
+    if (!run) return;
+    const { nodes, blocks, headed } = run;
+    if (headed && foldsAway(blocks, laid.contents.length)) {
+      const [heading, ...rest] = nodes;
       out.push(
-        <div
+        <details
           key={"printed-" + key}
           className="pub-printed-contents"
-          role="group"
           aria-label="Table of contents as printed"
         >
-          {printed}
-        </div>,
+          <summary data-note={`as printed, ${blocks - 1} lines`}>
+            {heading}
+          </summary>
+          {rest}
+        </details>,
       );
-    printed = null;
+      return;
+    }
+    out.push(
+      <div
+        key={"printed-" + key}
+        className="pub-printed-contents"
+        role="group"
+        aria-label="Table of contents as printed"
+      >
+        {nodes}
+      </div>,
+    );
   };
   laid.pieces.forEach((piece, index) => {
     if (piece.type === "gap") {
-      (printed ?? out).push(piece.text);
+      ((printed as Printed | null)?.nodes ?? out).push(piece.text);
       return;
     }
-    if (piece.printed && !printed) printed = [];
-    if (!piece.printed) close(index);
-    (printed ?? out).push(<Block key={index} piece={piece} />);
+    if (!piece.printed) close(index, printed);
+    else if (!printed)
+      printed = { nodes: [], blocks: 0, headed: piece.type === "heading" };
+    const block = <Block key={index} piece={piece} />;
+    const run = printed as Printed | null;
+    if (run) {
+      run.nodes.push(block);
+      run.blocks++;
+    } else out.push(block);
   });
-  close(laid.pieces.length);
+  close(laid.pieces.length, printed);
   return (
     <div className="doc-text pub-text" lang={lang}>
       {out}

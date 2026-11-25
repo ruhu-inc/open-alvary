@@ -224,6 +224,20 @@ function tableRows(words: string): string[][] {
   return words.split("\n").map((row) => row.split("\t"));
 }
 
+// A table as oa-text-1 writes one: a block of rows, the same number of tabs in each. Rwandan laws'
+// tables have no node of their own, so the block's shape is all that tells them.
+function isGrid(words: string): boolean {
+  const tabs = words.split("\n").map((row) => row.split("\t").length - 1);
+  return tabs[0] > 0 && tabs.every((count) => count === tabs[0]);
+}
+
+// Whether a printed table of contents is folded away until asked for: a long one that the Contents
+// lists again. A short one stays open, and so does one the Contents cannot stand in for, such as a
+// text whose structure put its whole body under "contents".
+export function foldsAway(printedBlocks: number, entries: number): boolean {
+  return printedBlocks > 12 && entries > 0 && printedBlocks <= 2 * entries + 10;
+}
+
 // The text's pieces in reading order and its contents. `nodes` are one version's (nodesFor).
 export function layoutText(text: string, nodes: TextNode[]): Laid {
   const { parts, blocks } = cut(text);
@@ -385,16 +399,15 @@ export function layoutText(text: string, nodes: TextNode[]): Laid {
       if (!entry.label)
         entry.label = squeeze(block.text).slice(0, 80) || "Untitled";
 
-    if (
-      owner?.kind === "table" &&
-      squeeze(block.text) !== squeeze(owner.heading)
-    ) {
+    const captioned =
+      owner?.kind === "table" && squeeze(block.text) !== squeeze(owner.heading);
+    if (captioned || isGrid(block.text)) {
       pieces.push({
         type: "table",
         text: block.text,
         id,
         rows: tableRows(block.text),
-        states: owner.cell_states ?? {},
+        states: (captioned && owner?.cell_states) || {},
         printed: inPrinted,
       });
       continue;

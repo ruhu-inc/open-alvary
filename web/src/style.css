@@ -3322,6 +3322,10 @@ a.record-card:hover {
   line-height: inherit;
   color: inherit;
 }
+/* A table starts where the paragraphs around it do, and scrolls inside the text if it is wide. */
+.pub-text .reader-table {
+  margin-left: var(--num);
+}
 .pub-text .doc-heading:first-child {
   margin-top: 18px;
 }
@@ -3353,6 +3357,24 @@ a.record-card:hover {
 .pub-printed-contents .doc-p {
   margin-bottom: 6px;
   padding-left: 0;
+}
+/* A long one is folded under its own heading: the Contents lists the same parts. */
+.pub-printed-contents > summary {
+  padding: 6px 0;
+  cursor: pointer;
+}
+.pub-printed-contents > summary .doc-heading {
+  display: inline;
+  margin: 0;
+}
+.pub-printed-contents > summary::after {
+  content: attr(data-note);
+  margin-left: 10px;
+  font: 13px "DM Sans", sans-serif;
+  color: var(--muted);
+}
+.pub-printed-contents[open] > summary {
+  margin-bottom: 8px;
 }
 @media (max-width: 800px) {
   /* The Contents comes before the text, closed until asked for. */

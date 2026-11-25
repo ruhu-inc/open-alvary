@@ -10,6 +10,7 @@ import assert from "node:assert/strict";
 import {
   byteLength,
   chooseVersion,
+  foldsAway,
   layoutText,
   nodesFor,
 } from "../web/src/published-text.ts";
@@ -264,6 +265,41 @@ describe("the text laid out from its structure", () => {
     assert.deepEqual([heading.type, heading.id, caption.type, table.type], ["heading", "schedule-1", "paragraph", "table"]);
     assert.deepEqual(table.rows, [["Item", "Fee"], ["Entry", ""]]);
     assert.deepEqual(table.states, { "1,1": "illegible" });
+  });
+});
+
+describe("tables and long printed contents, as real Rwandan laws have them", () => {
+  it("reads a block of tabbed rows as a table though no node says so", () => {
+    // rw-law-1 gives a table no node of its own: it is a block of the article that holds it.
+    const grid = "Code\tMeaning\n310\tFiling number\n320\t";
+    const { text, nodes } = fixture(["Article 2: Codes", "The codes are these:", grid, "They apply from today."], [
+      ["article", "art_2", 0, 3, { label: "Article 2", heading: "Codes" }],
+    ]);
+    const laid = layoutText(text, nodes);
+    assert.equal(joined(laid), text);
+    assert.deepEqual(
+      blocksOf(laid).map((piece) => piece.type),
+      ["heading", "paragraph", "table", "paragraph"],
+    );
+    assert.deepEqual(blocksOf(laid)[2].rows, [["Code", "Meaning"], ["310", "Filing number"], ["320", ""]]);
+    // A stray tab in running words is no table: the rows must all have as many cells.
+    const stray = fixture(["Article 3: Words", "one\ttwo\nthree"], [
+      ["article", "art_3", 0, 1, { label: "Article 3", heading: "Words" }],
+    ]);
+    assert.deepEqual(
+      blocksOf(layoutText(stray.text, stray.nodes)).map((piece) => piece.type),
+      ["heading", "paragraph"],
+    );
+  });
+
+  it("folds a long printed table of contents away only where the Contents lists it again", () => {
+    assert.equal(foldsAway(231, 206), true); // the Constitution of Rwanda: 230 lines under "TABLE OF CONTENTS"
+    assert.equal(foldsAway(8, 7), false); // a short one stays open
+    assert.equal(foldsAway(13, 7), true);
+    assert.equal(foldsAway(12, 7), false);
+    // A text whose structure put its whole body under "contents" is never hidden: nothing lists it.
+    assert.equal(foldsAway(900, 0), false);
+    assert.equal(foldsAway(900, 20), false);
   });
 });
 
