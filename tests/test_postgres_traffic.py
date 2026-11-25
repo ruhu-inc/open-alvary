@@ -316,8 +316,9 @@ def test_a_search_through_the_service_counts_and_its_words_reach_no_table(
         )
         text = f"/site/v1/sources/{WORK}/text"
         assert client.get(text, headers=BROWSER).status_code == 200
-        # Another language of the record being shown: its text was read once, not twice.
-        assert client.get(text + "?language=en", headers={**BROWSER, "x-text-switch": "1"}).status_code == 200
+        # Every text served is a text read: a switch of language asks for one more.
+        assert client.get(text + "?language=en", headers=BROWSER).status_code == 200
+        assert client.get(text).status_code == 200  # a program, not the website: not a reader
         assert client.get("/site/v1/sources/no-such-record", headers=BROWSER).status_code == 404
         document = {"user-agent": CHROME, "sec-fetch-dest": "document", "x-client-country": "RW"}
         page = {**document, "referer": f"https://open.example.test/browse?q={MARKER}"}
@@ -327,16 +328,16 @@ def test_a_search_through_the_service_counts_and_its_words_reach_no_table(
         assert client.get("/.git/config", headers=document).status_code == 404  # no page: not found (item 20)
     assert total(pg_engine, namespace, "searches", "all") == 1
     assert total(pg_engine, namespace, "searches", "none_found") == 1
-    assert total(pg_engine, namespace, "bots", "other") == 2
+    assert total(pg_engine, namespace, "bots", "other") == 3
     assert total(pg_engine, namespace, "arrivals", "other") == 0
     assert total(pg_engine, namespace, "records", "views") == 1
-    assert total(pg_engine, namespace, "records", "texts") == 1
+    assert total(pg_engine, namespace, "records", "texts") == 2
     assert total(pg_engine, namespace, "searches.opened", "1") == 1
     assert total(pg_engine, namespace, "arrivals", "home") == 1
     assert total(pg_engine, namespace, "arrivals", "browse") == 1
     assert total(pg_engine, namespace, "people.country", "RW") == 2
     assert total(pg_engine, namespace, "people.referrer", "direct") == 1  # its own page is no referrer
-    assert rows(pg_engine, namespace, "traffic_record_day", "source_id, views, texts") == [(WORK, 1, 1)]
+    assert rows(pg_engine, namespace, "traffic_record_day", "source_id, views, texts") == [(WORK, 1, 2)]
     assert not any(
         "no-such-record" in str(row) or MARKER.lower() in str(row).lower()
         for table in ("traffic_day", "traffic_record_day", "traffic_record_month", "traffic_top")

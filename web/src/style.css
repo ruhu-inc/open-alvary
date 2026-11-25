@@ -3322,6 +3322,21 @@ a.record-card:hover {
   font-size: 14px;
   color: var(--primary);
 }
+/* What a link asked for that the record does not have, in one line above the text. */
+.pub-missed {
+  margin: 0;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+  color: var(--primary);
+}
+/* Why there is no text, and what the reader can do about it. */
+.pub-problem p {
+  margin: 0 0 12px;
+}
+.pub-problem p:last-child {
+  margin-bottom: 0;
+}
 /* The site's paragraphs are small and grey; the text is read in its own size and colour. */
 .pub-text {
   padding-top: 12px;

@@ -45,7 +45,6 @@ def test_every_page_of_the_website_has_its_route(client):
         "/site/v1/stats",
         "/site/v1/sources",
         f"/site/v1/sources/{SOURCE}",
-        f"/site/v1/sources/{SOURCE}/versions",
         f"/site/v1/sources/{SOURCE}/text",
         f"/site/v1/rights/{SOURCE}",
         "/site/v1/releases",
@@ -180,13 +179,14 @@ def test_withdrawal_takes_effect_on_the_next_request(cleared, store, tmp_path):
     store.save(cleared)
     client = TestClient(create_service(store, tmp_path))
     source = cleared.sources[0].id
-    assert client.get(f"/site/v1/sources/{source}/versions").json()["items"]
-    assert client.get(f"/site/v1/sources/{source}/text").json()["texts"]
+    reading = client.get(f"/site/v1/sources/{source}/text").json()
+    assert reading["text"] and reading["canonical_text"] and reading["texts"]
     cleared.rights[0].status = "RIGHTS_UNDER_REVIEW"
     store.save(cleared)
-    assert client.get(f"/site/v1/sources/{source}/versions").json()["items"] == []
     reading = client.get(f"/site/v1/sources/{source}/text").json()
-    assert reading["items"] == [] and reading["texts"] == []
+    assert reading["text"] is None and reading["texts"] == [] and "canonical_text" not in reading
+    # The route that sent every language of a record at once is gone: no page asks for it.
+    assert client.get(f"/site/v1/sources/{source}/versions").status_code == 404
 
 
 def test_legacy_api_unchanged_beside_the_site(client):

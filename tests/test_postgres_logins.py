@@ -197,7 +197,7 @@ def test_the_public_service_serves_every_door_on_its_own_login(signed, monkeypat
             "/site/v1/project",
             "/site/v1/sources",
             f"/site/v1/sources/{WORK}",
-            f"/site/v1/sources/{WORK}/versions",
+            f"/site/v1/sources/{WORK}/text",
             f"/site/v1/sources/{WORK}/relationships",
             f"/site/v1/rights/{WORK}",
             "/site/v1/search?q=enacted",
@@ -303,7 +303,7 @@ def test_on_two_logins_an_anonymous_request_never_reaches_the_consoles_and_the_c
         for path in (
             "/site/v1/sources",
             f"/site/v1/sources/{WORK}",
-            f"/site/v1/sources/{WORK}/versions",
+            f"/site/v1/sources/{WORK}/text",
             f"/site/v1/sources/{WORK}/relationships",
             f"/site/v1/rights/{WORK}",
             "/site/v1/search?q=enacted",
@@ -579,10 +579,10 @@ def test_the_publish_job_writes_the_catalogue_and_the_gate_still_decides_what_is
     publish_act(publisher, UNITS)
     client = TestClient(create_service(store=Store(signed.engine(SERVICE))))
     assert client.get(f"/site/v1/sources/{WORK}").status_code == 200
-    versions = client.get(f"/site/v1/sources/{WORK}/versions").json()
-    assert versions["items"] and "ENACTED" in json.dumps(versions)
+    reading = client.get(f"/site/v1/sources/{WORK}/text").json()
+    assert reading["text"] and "ENACTED" in json.dumps(reading)
     withdraw(publisher)
-    assert "ENACTED" not in client.get(f"/site/v1/sources/{WORK}/versions").text
+    assert "ENACTED" not in client.get(f"/site/v1/sources/{WORK}/text").text
     with signed.owner.connect() as conn:
         log = signed.t(conn, "changes", "change_event")
         kinds = set(conn.scalars(text(f"SELECT event_type FROM {log}")))

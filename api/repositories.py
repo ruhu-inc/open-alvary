@@ -31,7 +31,7 @@ from api.search import FIELDS, fields_vector
 from api.store import RELATIONS, tables
 from rights.database import PolicyNamespace
 from schema.models import Amendment, Source
-from schema.public import RightsViewRecord, VersionGate, VersionViewRecord
+from schema.public import RightsViewRecord, TextDetails, VersionGate, VersionViewRecord
 
 BATCH_SIZE = 100
 # Where it reads them (LegacyCatalogue._walk), the website's catalogue reads at most this many public sources'
@@ -646,6 +646,49 @@ class LegacyRepository:
             if len(rows) < BATCH_SIZE:
                 return
             cursor = rows[-1]["id"]
+
+    def text_details(self, source_id: str, hashes: tuple[str, ...]) -> list[TextDetails]:
+        """The details of a source's texts under these hashes, in ID order, without their words (PRD-06).
+        Where the database keeps the gates (_gated), only texts that pass them are read, and each one's
+        record is read in a single pass: it is plain JSON, parsed again for every field asked for apart."""
+        if not hashes:
+            return []
+        if self._gated():
+            statement = text(
+                "SELECT v.id, v.source_id, v.language, v.gate_content_hash AS content_hash,"
+                " v.gate_verified_at AS content_verified_at, d.effective_from, d.retrieved_at,"
+                " d.prior_version_id"
+                " FROM versions v, json_to_record(v.payload)"
+                " AS d(effective_from text, retrieved_at text, prior_version_id text)"
+                " WHERE v.source_id = :source AND v.gate_text"
+                " AND v.gate_content_hash = ANY(CAST(:hashes AS text[]))"
+                " ORDER BY v.id LIMIT :bound"
+            ).bindparams(source=source_id, hashes=list(hashes), bound=MAX_UNPAGED_ROWS + 1)
+            asked = {"verification_status": "verified", "content_verifier": "recorded"}
+        else:
+            table = tables["versions"]
+            fields = ("content_hash", "verification_status", "content_verifier", "content_verified_at")
+            fields += ("effective_from", "retrieved_at", "prior_version_id")
+            statement = (
+                select(
+                    table.c.id,
+                    table.c.source_id,
+                    table.c.language,
+                    *(table.c.payload[key].as_string().label(key) for key in fields),
+                )
+                .where(
+                    table.c.source_id == source_id,
+                    self._identity_matches(table),
+                    table.c.payload["content_hash"].as_string().in_(hashes),
+                )
+                .order_by(table.c.id)
+                .limit(MAX_UNPAGED_ROWS + 1)
+            )
+            asked = {}
+        rows = self.connection.execute(statement).mappings().all()
+        if len(rows) > MAX_UNPAGED_ROWS:
+            raise ResultTooLarge("Pilot unpaged response exceeds row bound")
+        return [TextDetails.model_validate({**row, **asked}) for row in rows]
 
     def gates_of_versions(self, version_ids) -> dict[str, VersionGate]:
         """These versions' policy inputs, by ID, reading no text. Where the database keeps the gates

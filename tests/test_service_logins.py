@@ -51,7 +51,7 @@ def test_every_route_that_serves_the_catalogue_reads_the_catalogues_store_and_no
         "/site/v1/coverage",
         "/site/v1/sources",
         f"/site/v1/sources/{SOURCE}",
-        f"/site/v1/sources/{SOURCE}/versions",
+        f"/site/v1/sources/{SOURCE}/text",
         f"/site/v1/sources/{SOURCE}/relationships",
         f"/site/v1/rights/{SOURCE}",
         "/site/v1/search?q=freedom",

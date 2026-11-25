@@ -20,20 +20,62 @@ function fixture(blocks, spec, version = "ver_1") {
   const text = blocks.join("\n\n") + "\n";
   const start = (i) => Buffer.byteLength(blocks.slice(0, i).join("\n\n")) + (i ? 2 : 0);
   const end = (i) => start(i) + Buffer.byteLength(blocks[i]);
-  const nodes = spec.map(([kind, locator, from, to, more = {}], order) => ({
+  const corpus = spec.map(([kind, locator, from, to, more = {}], order) => ({
     id: "n_" + locator,
-    version_id: version,
     parent_id: more.parent ? "n_" + more.parent : null,
     kind,
     locator,
-    order,
+    order: more.order ?? order,
     start_byte: start(from) + Buffer.byteLength(blocks[from].slice(0, more.skip ?? 0)),
-    end_byte: end(to),
+    end_byte: more.until === undefined ? end(to) : start(to) + more.until,
     label: more.label ?? null,
     heading: more.heading ?? null,
     cell_states: more.cell_states ?? null,
   }));
-  return { text, nodes, version: { id: version, language: "en", canonical_text: text, content_hash: "h" } };
+  return {
+    text,
+    nodes: sent(corpus),
+    version: { id: version, language: "en", canonical_text: text, content_hash: "h", bytes: Buffer.byteLength(text) },
+  };
+}
+
+// The corpus's nodes as the data path sends them (reader-1; api/reader.py is the code that does it, and
+// tests/test_reader_projection.py holds it to this): in document order, with no parents; an indentation
+// node with its depth and nothing else; some nodes not sent at all.
+function sent(corpus) {
+  const INDENTS = ["subsection", "paragraph", "subparagraph"];
+  const byId = new Map(corpus.map((node) => [node.id, node]));
+  const above = (node) => {
+    const up = [];
+    for (let at = byId.get(node.parent_id); at; at = byId.get(at.parent_id)) up.push(at);
+    return up;
+  };
+  const own = (node) => node.kind === "paragraph" && ["opinion", "order"].includes(byId.get(node.parent_id)?.kind);
+  const goes = (node) =>
+    node.end_byte > node.start_byte &&
+    !["definition", "quotation"].includes(node.kind) &&
+    !own(node) &&
+    !(node.kind === "contents_entry" && above(node).some((at) => at.kind === "contents"));
+  return corpus
+    .filter(goes)
+    .sort(
+      (a, b) =>
+        a.start_byte - b.start_byte ||
+        b.end_byte - a.end_byte ||
+        above(a).length - above(b).length ||
+        a.order - b.order ||
+        (a.id < b.id ? -1 : 1),
+    )
+    .map((node) => {
+      const { kind, start_byte, end_byte } = node;
+      if (INDENTS.includes(kind)) {
+        const depth = [node, ...above(node)].filter((at) => INDENTS.includes(at.kind) && !own(at)).length;
+        return { kind, start_byte, end_byte, depth: Math.min(3, depth) };
+      }
+      const full = { id: node.id, kind, locator: node.locator, start_byte, end_byte };
+      for (const name of ["label", "heading", "cell_states"]) if (node[name]) full[name] = node[name];
+      return full;
+    });
 }
 
 const joined = (laid) => laid.pieces.map((piece) => piece.text).join("");
@@ -307,20 +349,22 @@ describe("a version's structure", () => {
     const { version, nodes } = french_();
     assert.deepEqual(nodesFor(version, []), []);
     assert.deepEqual(nodesFor(version, undefined), []);
-    assert.deepEqual(nodesFor({ ...version, id: "ver_other" }, nodes), []);
     assert.equal(nodesFor(version, nodes).length, nodes.length);
   });
 
   it("is refused where it does not describe these words", () => {
     const { version, nodes } = french_();
     const with_ = (change) => nodes.map((node, index) => (index === 3 ? { ...node, ...change } : node));
-    // Past the end of the text, backwards, inside a character (É is two bytes), or of another text.
+    // Past the end of the text, backwards, with no bytes, inside a character (É is two bytes), out of
+    // the order they are sent in, or of a text of another length.
     assert.deepEqual(nodesFor(version, with_({ end_byte: byteLength(version.canonical_text) + 1 })), []);
-    assert.deepEqual(nodesFor(version, with_({ start_byte: 90, end_byte: 80 })), []);
+    assert.deepEqual(nodesFor(version, with_({ start_byte: nodes[3].end_byte + 1 })), []);
+    assert.deepEqual(nodesFor(version, with_({ end_byte: nodes[3].start_byte })), []);
     const inside = Buffer.byteLength(version.canonical_text.slice(0, version.canonical_text.indexOf("É"))) + 1;
-    assert.deepEqual(nodesFor(version, with_({ start_byte: inside })), []);
-    assert.deepEqual(nodesFor(version, with_({ source_hash: "another" })), []);
-    assert.equal(nodesFor(version, with_({ source_hash: "h" })).length, nodes.length);
+    assert.deepEqual(nodesFor(version, with_({ end_byte: inside })), []);
+    assert.deepEqual(nodesFor(version, [...nodes].reverse()), []);
+    assert.deepEqual(nodesFor({ ...version, bytes: version.bytes + 1 }, nodes), []);
+    assert.equal(nodesFor(version, with_({})).length, nodes.length);
   });
 });
 
@@ -361,12 +405,110 @@ describe("a paragraph a reading took for a heading", () => {
     assert.deepEqual([article.type, article.id, article.lead], ["paragraph", "article-3", 0]);
     assert.deepEqual(
       laid.contents.map((entry) => entry.label),
-      ["ARTICLE II: PROPERTY, FUNDS AND ASSETS", "SECTION 2.", "Article 3", "Article 4 " + long],
+      // A real heading stays a heading in the text; its entry is cut like any long entry.
+      ["ARTICLE II: PROPERTY, FUNDS AND ASSETS", "SECTION 2.", "Article 3", ("Article 4 " + long).slice(0, 140) + "…"],
     );
   });
 
   it("leaves a long heading that is one: the longest real ones run to 199 characters", () => {
     const real = blocksOf(laid)[4];
     assert.deepEqual([real.type, real.id, real.text.length], ["heading", "article-4", 200]);
+  });
+});
+
+describe("nodes as the data path sends them", () => {
+  it("reads nesting from spans: a part and its only section with the same span, the part first", () => {
+    // The corpus numbers siblings only, so the section (first of its part) has a lower order than the
+    // part (second of the document). Sent by span, then by how deep, the part still comes first.
+    const { text, nodes } = fixture(
+      ["An Act", "PART II — THE REGISTER", "4. The register is kept by the Registrar.", "(a) in the form set out;"],
+      [
+        ["document", "document", 0, 3],
+        ["part", "part_ii", 1, 3, { parent: "document", label: "PART II", heading: "THE REGISTER", order: 1 }],
+        ["section", "sec_4", 1, 3, { parent: "part_ii", label: "4.", order: 0 }],
+        ["paragraph", "sec_4__para_a", 3, 3, { parent: "sec_4", label: "(a)" }],
+      ],
+    );
+    assert.deepEqual(nodes.map((node) => node.kind), ["document", "part", "section", "paragraph"]);
+    const laid = layoutText(text, nodesFor({ canonical_text: text, bytes: Buffer.byteLength(text) }, nodes));
+    assert.equal(joined(laid), text);
+    const [, part, section, inner] = blocksOf(laid);
+    // The part's heading takes the anchor; the section is a level below it and listed after it.
+    assert.deepEqual([part.type, part.id, part.level], ["heading", "part-ii", 3]);
+    assert.deepEqual(laid.contents.map((entry) => entry.label), ["PART II — THE REGISTER", "4."]);
+    assert.deepEqual([section.type, section.depth, inner.depth], ["paragraph", 0, 1]);
+  });
+
+  it("does not let a node that opens part-way through a block hold that block", () => {
+    const { text, nodes } = fixture(
+      ["7. (1) The Minister may make rules.", "(2) Rules are laid before the House."],
+      [
+        ["section", "sec_7", 0, 1, { label: "7." }],
+        ["subsection", "sec_7__subsec_1", 0, 0, { parent: "sec_7", label: "(1)", skip: 3 }],
+        ["subsection", "sec_7__subsec_2", 1, 1, { parent: "sec_7", label: "(2)" }],
+      ],
+    );
+    const [first, second] = blocksOf(layoutText(text, nodes));
+    assert.deepEqual([first.depth, first.id, second.depth], [0, "section-7", 1]);
+  });
+
+  it("sets a judgment's numbered paragraphs flush, and what is inside one in one step", () => {
+    const { text, nodes } = fixture(
+      ["JUDGMENT", "[1] The appellant was convicted.", "(a) of theft; and", "[2] He appeals.", "ORDERS", "The appeal is dismissed."],
+      [
+        ["document", "document", 0, 5],
+        ["opinion", "opinion_1", 0, 3, { parent: "document", label: "JUDGMENT" }],
+        ["paragraph", "opinion_1__para_1", 1, 2, { parent: "opinion_1", label: "[1]" }],
+        ["subparagraph", "opinion_1__para_1__a", 2, 2, { parent: "opinion_1__para_1", label: "(a)" }],
+        ["paragraph", "opinion_1__para_2", 3, 3, { parent: "opinion_1", label: "[2]" }],
+        ["order", "order_1", 4, 5, { parent: "document", heading: "ORDERS" }],
+      ],
+    );
+    // The judgment's own paragraphs are not sent; the sub-paragraph is, one step in.
+    assert.deepEqual(nodes.map((node) => [node.kind, node.depth ?? null]), [
+      ["document", null],
+      ["opinion", null],
+      ["subparagraph", 1],
+      ["order", null],
+    ]);
+    const laid = layoutText(text, nodes);
+    assert.equal(joined(laid), text);
+    assert.deepEqual(
+      blocksOf(laid).map((piece) => [piece.type, piece.depth ?? null]),
+      [["heading", null], ["paragraph", 0], ["paragraph", 1], ["paragraph", 0], ["heading", null], ["paragraph", 0]],
+    );
+    assert.deepEqual(laid.contents, []);
+  });
+
+  it("treats a kind it does not know as a container: never a heading, never listed", () => {
+    const { text, nodes } = fixture(
+      ["RECITALS", "Whereas the parties agree.", "Article 1: Purpose", "Its words."],
+      [
+        ["recital", "recital_1", 0, 1, { label: "RECITALS", heading: "RECITALS" }],
+        ["article", "art_1", 2, 3, { label: "Article 1", heading: "Purpose" }],
+      ],
+    );
+    const laid = layoutText(text, nodes);
+    assert.deepEqual(blocksOf(laid).map((piece) => piece.type), ["paragraph", "paragraph", "heading", "paragraph"]);
+    assert.deepEqual(laid.contents.map((entry) => entry.label), ["Article 1: Purpose"]);
+  });
+
+  it("leaves out a definition's node but keeps the depth of what is inside it, and cuts a long entry", () => {
+    const long = "Interpretation of the words and expressions used in this Act and in every instrument made under it, " +
+      "including regulations, rules, orders and notices of every kind";
+    const { text, nodes } = fixture(
+      [long, "2. In this Act—", "“register” means—", "(a) the register kept under section 4;"],
+      [
+        ["section", "sec_2", 0, 3, { label: "2.", heading: long }],
+        ["definition", "sec_2__def_register", 2, 3, { parent: "sec_2" }],
+        ["paragraph", "sec_2__def_register__para_a", 3, 3, { parent: "sec_2__def_register", label: "(a)" }],
+      ],
+    );
+    assert.deepEqual(nodes.map((node) => node.kind), ["section", "paragraph"]);
+    const laid = layoutText(text, nodes);
+    assert.deepEqual(blocksOf(laid).map((piece) => piece.depth ?? null), [null, 0, 0, 1]);
+    const [entry] = laid.contents;
+    assert.ok(entry.label.length <= 141 && entry.label.endsWith("…") && entry.label.startsWith("2. Interpretation of the words"));
+    assert.ok(!entry.label.slice(0, -1).endsWith(" "));
   });
 });

@@ -1,11 +1,11 @@
 // A published text on its record page: one language at a time, laid out from the structure the
-// public API serves (published-text.ts), with a Contents panel beside it. The look is the review
-// workbench's reader (document.tsx), whose page blocks the public API does not serve. Text is
-// rendered as React text, never as HTML.
+// website's data path serves (published-text.ts), with a Contents panel beside it. The look is the
+// review workbench's reader (document.tsx). Text is rendered as React text, never as HTML.
 //
-// The page is sent one text at a time (/site/v1/sources/{id}/text): a law in three languages is not
-// refused for the size of all three, and the server chooses the text to open (the one a link names,
-// else the record's own language). The switch fetches another text when it is asked for.
+// The page is sent one text at a time as `reader-1` (/site/v1/sources/{id}/text): the server
+// chooses the text to open (the one a link names, else the record's own language) and says what a
+// link asked for that the record does not have. The switch fetches another text when it is asked
+// for. Every state a reader can meet is named here; none shows a status number alone.
 
 import {
   useEffect,
@@ -27,6 +27,8 @@ import {
 } from "./published-text";
 import { LANGUAGE_NAMES } from "./site";
 
+const SCHEMA = "reader-1";
+
 // A public text of the record without its words, for the switch.
 export type ListedText = {
   id: string;
@@ -34,11 +36,14 @@ export type ListedText = {
   effective_from?: string | null;
   retrieved_at: string;
 };
-type ReaderPage = {
-  items: TextVersion[]; // the one text, or none when the record has no public text
+type Missed = ("version" | "language")[];
+type ReaderAnswer = {
+  schema: string;
+  text: Omit<TextVersion, "canonical_text"> | null; // null: the record has no public text
   texts: ListedText[];
-  structure?: TextNode[];
-  notice?: string | null;
+  missed: Missed | null;
+  canonical_text?: string;
+  nodes: TextNode[];
 };
 
 export type Reading = {
@@ -47,148 +52,311 @@ export type Reading = {
   laid: Laid | null; // null: the text has no structure, and is shown as plain text
   pending: string | null; // the text being fetched, by its ID, while the one before it stays shown
   failed: boolean; // the text last asked for could not be fetched
+  line: string | null; // what the link asked for that the record does not have
   choose: (text: ListedText) => void;
 };
 
-// What the data path takes for a version or a language: an ID. Anything else in a link is left out.
+// Why there is no text to read. "none": the record has no public text. "gone": the record is not
+// public (any more). "outdated": the data path speaks a newer contract than this page.
+export type TextState =
+  | "loading"
+  | "ready"
+  | "none"
+  | "gone"
+  | "outdated"
+  | "too-large"
+  | "busy"
+  | "failed";
+
+// What the data path takes for a version or a language: an ID.
 const NAMED = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$/;
 
+// What the address asks for. A value that is not an ID is not sent, and counts as something the
+// record does not have.
 function asked() {
   const query = new URLSearchParams(location.search);
-  const named = (name: string) => {
+  const read = (name: "version" | "lang") => {
     const value = query.get(name);
-    return value && NAMED.test(value) ? value : null;
+    return {
+      value: value && NAMED.test(value) ? value : null,
+      odd: value !== null && !NAMED.test(value),
+    };
   };
-  return { version: named("version"), language: named("lang") };
+  return { version: read("version"), language: read("lang") };
 }
 
-// The address names the text shown (?lang=fr), so a link to an article opens in the language it was
-// copied in; a language with several texts names the text too. An article's anchor belongs to the
-// text it was read in, so it is dropped.
-function nameInAddress(text: TextVersion, texts: ListedText[]) {
+// The address names the text shown (?lang=fr); a language with several texts names the text too.
+function nameInAddress(
+  text: { id: string; language?: string | null },
+  texts: ListedText[],
+  keepAnchor: boolean,
+) {
   const query = new URLSearchParams(location.search);
   if (text.language) query.set("lang", text.language);
   else query.delete("lang");
   if (texts.filter((other) => other.language === text.language).length > 1)
     query.set("version", text.id);
   else query.delete("version");
+  const named = query.toString();
   history.replaceState(
     history.state,
     "",
-    location.pathname + "?" + query.toString(),
+    location.pathname +
+      (named ? "?" + named : "") +
+      (keepAnchor ? location.hash : ""),
   );
+}
+
+function languageName(code?: string | null) {
+  return (code && LANGUAGE_NAMES[code.toLowerCase()]) || null;
+}
+
+// The line for a link that asked for a text the record does not have (PRD-03). It never repeats a
+// value the site has no name for.
+function missedLine(
+  missed: Missed,
+  askedLanguage: string | null,
+  shown: string | null | undefined,
+) {
+  const showing = languageName(shown)
+    ? `Showing the ${languageName(shown)} text.`
+    : "Showing the available text.";
+  if (missed.includes("version"))
+    return `The text this link names is not here. ${showing}`;
+  const name = languageName(askedLanguage);
+  return name
+    ? `This record has no ${name} text. ${showing}`
+    : `This record has no text in that language. ${showing}`;
+}
+
+class Refused extends Error {
+  constructor(
+    readonly status: number,
+    readonly code: string,
+  ) {
+    super(code);
+  }
+}
+
+// What a refusal means for the reader, by its code and never by its status alone.
+function stateOf(problem: unknown): TextState {
+  if (!(problem instanceof Refused)) return "failed";
+  if (problem.status === 404 || problem.code === "unavailable") return "gone";
+  if (problem.code === "result_too_large") return "too-large";
+  if (
+    ["rate_limited", "capacity_exhausted", "temporarily_unavailable"].includes(
+      problem.code,
+    )
+  )
+    return "busy";
+  return "failed";
 }
 
 type Held = {
   source: string;
-  page?: ReaderPage;
-  error?: string; // nothing could be shown
+  state: TextState;
+  answer?: ReaderAnswer;
+  line?: string | null;
   pending?: string;
   failed?: boolean;
 };
 
 // The text being read and its layout, fetched one text at a time. A text already read in this visit
-// to the record is kept, so going back to a language does not fetch it again.
+// to the record is kept in the page's memory, so going back to a language asks for nothing; it ends
+// when the reader leaves the record, and nothing is stored in the browser.
 export function useReading(source: string): {
   reading: Reading | null;
-  loaded: boolean;
-  error?: string;
+  state: TextState;
+  retry: () => void;
 } {
-  // The text chosen with the switch; until then, whatever the address names.
+  // The text chosen with the switch (until then, whatever the address names), and each new try.
   const [want, setWant] = useState<{
     source: string;
-    version: string;
+    version: string | null;
     attempt: number;
-  } | null>(null);
-  const [held, setHeld] = useState<Held>({ source: "" });
-  const read = useRef({ source, pages: new Map<string, ReaderPage>() });
-  const version = want?.source === source ? want.version : null;
-  const attempt = want?.source === source ? want.attempt : 0;
+  }>({ source, version: null, attempt: 0 });
+  const [held, setHeld] = useState<Held>({ source: "", state: "loading" });
+  const read = useRef({ source, answers: new Map<string, ReaderAnswer>() });
+  const version = want.source === source ? want.version : null;
+  const attempt = want.source === source ? want.attempt : 0;
   useEffect(() => {
     if (read.current.source !== source)
-      read.current = { source, pages: new Map() };
-    const pages = read.current.pages;
-    const show = (page: ReaderPage) => {
-      setHeld({ source, page });
-      if (version && page.items[0]) nameInAddress(page.items[0], page.texts);
-    };
-    const kept = version ? pages.get(version) : undefined;
-    if (kept) return show(kept);
-    const query = new URLSearchParams();
+      read.current = { source, answers: new Map() };
+    const answers = read.current.answers;
+    const kept = version ? answers.get(version) : undefined;
+    if (kept?.text) {
+      // A text chosen with the switch: the anchor belonged to the text before it.
+      setHeld({ source, state: "ready", answer: kept });
+      nameInAddress(kept.text, kept.texts, false);
+      return;
+    }
     const link = asked();
+    const query = new URLSearchParams();
     if (version) query.set("version", version);
     else {
-      if (link.version) query.set("version", link.version);
-      if (link.language) query.set("language", link.language);
+      if (link.version.value) query.set("version", link.version.value);
+      if (link.language.value) query.set("language", link.language.value);
     }
     const controller = new AbortController();
     setHeld((before) =>
-      before.source === source && before.page && version
-        ? { source, page: before.page, pending: version }
-        : { source },
+      before.source === source && before.answer?.text && version
+        ? { ...before, pending: version, failed: false }
+        : { source, state: "loading" },
     );
     fetch(
       "/site/v1/sources/" +
         encodeURIComponent(source) +
         "/text" +
         (query.size ? "?" + query.toString() : ""),
-      {
-        signal: controller.signal,
-        // Another text of the record being shown: the record's text is counted as read once.
-        headers: version ? { "X-Text-Switch": "1" } : undefined,
-      },
+      { signal: controller.signal },
     )
-      .then((answer) => {
-        if (!answer.ok) throw new Error(`Request failed (${answer.status})`);
-        return answer.json() as Promise<ReaderPage>;
+      .then(async (response) => {
+        if (response.ok) return response.json() as Promise<ReaderAnswer>;
+        const problem = await response.json().catch(() => ({}));
+        throw new Refused(response.status, String(problem?.code ?? ""));
       })
-      .then((page) => {
+      .then((answer) => {
         if (controller.signal.aborted) return;
-        if (page.items[0]) pages.set(page.items[0].id, page);
-        show(page);
+        if (answer?.schema !== SCHEMA)
+          return setHeld({ source, state: "outdated" });
+        if (!answer.text) return setHeld({ source, state: "none", answer });
+        answers.set(answer.text.id, answer);
+        if (version) {
+          setHeld({ source, state: "ready", answer });
+          return nameInAddress(answer.text, answer.texts, false);
+        }
+        // Opened from a link. What it asked for that is not there, in one line; and an address
+        // that names the text shown. The anchor stays only if the text it belongs to was found.
+        const missed: Missed = [
+          ...(answer.missed ?? []),
+          ...(link.version.odd && !answer.missed?.includes("version")
+            ? (["version"] as const)
+            : []),
+          ...(link.language.odd && !answer.missed?.includes("language")
+            ? (["language"] as const)
+            : []),
+        ];
+        const line = missed.length
+          ? missedLine(missed, link.language.value, answer.text.language)
+          : null;
+        setHeld({ source, state: "ready", answer, line });
+        const named = new URLSearchParams(location.search);
+        const other =
+          (named.get("lang") ?? answer.text.language ?? "").toLowerCase() !==
+          (answer.text.language ?? "").toLowerCase();
+        if (missed.length || other)
+          nameInAddress(answer.text, answer.texts, !missed.length);
       })
       .catch((problem) => {
         if (controller.signal.aborted || problem.name === "AbortError") return;
-        // A text that cannot be fetched leaves the one being read where it is.
+        const state = stateOf(problem);
+        // A record that has gone takes its text with it. Any other failure of a switch leaves the
+        // text being read where it is.
         setHeld((before) =>
-          before.source === source && before.page
-            ? { source, page: before.page, failed: true }
-            : { source, error: problem.message },
+          version &&
+          before.source === source &&
+          before.answer?.text &&
+          state !== "gone"
+            ? { ...before, pending: undefined, failed: true }
+            : { source, state },
         );
       });
     return () => controller.abort();
   }, [source, version, attempt]);
 
-  const mine = held.source === source ? held : { source };
-  const page = mine.page;
-  const text = page?.items[0];
+  const mine: Held =
+    held.source === source ? held : { source, state: "loading" };
+  const answer = mine.answer;
+  const text = useMemo(
+    () =>
+      answer?.text
+        ? { ...answer.text, canonical_text: answer.canonical_text ?? "" }
+        : null,
+    [answer],
+  );
   const laid = useMemo(() => {
     if (!text) return null;
-    const nodes = nodesFor(text, page?.structure);
+    const nodes = nodesFor(text, answer?.nodes);
     return nodes.length ? layoutText(text.canonical_text, nodes) : null;
-  }, [text, page]);
+  }, [text, answer]);
   return {
-    loaded: Boolean(page),
-    error: mine.error,
+    state: mine.state,
+    retry: () => setWant({ source, version, attempt: attempt + 1 }),
     reading:
-      page && text
+      answer && text && mine.state === "ready"
         ? {
-            texts: page.texts,
+            texts: answer.texts,
             version: text,
             laid,
             pending: mine.pending ?? null,
             failed: Boolean(mine.failed),
+            line: mine.line ?? null,
             choose: (next) => {
-              if (next.id !== text.id || mine.failed)
-                setWant({ source, version: next.id, attempt: attempt + 1 });
+              if (next.id === text.id && !mine.failed) return;
+              // The line belonged to the link that was opened: it goes with the first choice.
+              setHeld((before) => ({ ...before, line: null }));
+              setWant({ source, version: next.id, attempt: attempt + 1 });
             },
           }
         : null,
   };
 }
 
-function languageName(code?: string | null) {
-  return (code && LANGUAGE_NAMES[code]) || code || "Text";
+// Why there is no text, in words, with what the reader can do about it.
+export function TextProblem({
+  state,
+  official,
+  retry,
+}: {
+  state: TextState;
+  official: string;
+  retry: () => void;
+}) {
+  if (state === "loading")
+    return (
+      <div className="notice" role="status">
+        Loading the text…
+      </div>
+    );
+  const again = (
+    <button type="button" className="button secondary" onClick={retry}>
+      Try again
+    </button>
+  );
+  return (
+    <div className="notice pub-problem" role="alert">
+      {state === "too-large" ? (
+        <p>
+          This text is too large to show on this page. Read the{" "}
+          <a href={official} target="_blank" rel="noreferrer">
+            official copy
+          </a>
+          .
+        </p>
+      ) : state === "outdated" ? (
+        <>
+          <p>This page is out of date.</p>
+          <button
+            type="button"
+            className="button secondary"
+            onClick={() => location.reload()}
+          >
+            Reload
+          </button>
+        </>
+      ) : state === "busy" ? (
+        <>
+          <p>The text cannot be sent right now. Please try again shortly.</p>
+          {again}
+        </>
+      ) : (
+        <>
+          <p>This text could not be loaded. Please try again.</p>
+          {again}
+        </>
+      )}
+    </div>
+  );
 }
 
 // The record's texts by language; a language with several texts tells them apart by date.
@@ -225,7 +393,7 @@ export function TextLanguages({ reading }: { reading: Reading }) {
             reading.choose(text);
           }}
         >
-          {languageName(text.language)}
+          {languageName(text.language) ?? text.language ?? "Text"}
           {several(text) ? (
             <span className="doc-languages-note" lang="en">
               {text.effective_from

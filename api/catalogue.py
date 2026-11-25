@@ -10,7 +10,7 @@ from typing import Protocol
 
 from sqlalchemy import text
 
-from api import applicable, pinpoint, text_index
+from api import applicable, pinpoint, reader, text_index
 from api.reach import country
 from api.repositories import (
     EDGE_ORDER,
@@ -42,14 +42,12 @@ from schema.public import (
     JurisdictionView,
     LanguageRuleView,
     LinkedAct,
-    ListedText,
     MembershipBasis,
     MembershipList,
     MembershipView,
     NodeViewRecord,
     ProvisionLookup,
     ProvisionMatch,
-    ReaderPage,
     RelatedSource,
     RightsHistory,
     RightsRevision,
@@ -326,29 +324,6 @@ def select_versions(versions: list, as_of=None, language=None) -> tuple[VersionS
     return selection, alternatives
 
 
-def reader_text(versions: list, record_language=None, version_id=None, language=None):
-    """The text the website's record page opens among a record's public ones: the one a link asks for
-    by ID, else the latest in the language it asks for, else in the record's own language, else in the
-    first language listed. Within a language, the latest text that no later one replaces. A choice of
-    what to show first, never a statement of which text is in force: the page lists the others."""
-    if not versions:
-        return None
-    for version in versions:
-        if version.id == version_id:
-            return version
-    replaced = {v.prior_version_id for v in versions if v.prior_version_id}
-
-    def latest(wanted):
-        texts = [v for v in versions if wanted and v.language.casefold() == wanted.casefold()]
-        best = None
-        for version in [v for v in texts if v.id not in replaced] or texts:
-            if best is None or (version.effective_from or date.min) >= (best.effective_from or date.min):
-                best = version
-        return best
-
-    return latest(language) or latest(record_language) or latest(versions[0].language) or versions[0]
-
-
 # The website's filters (MAC-01): each is a source field, except access, which follows the rights
 # decision. Values are counted over at most the pilot's bound of examined sources.
 FACETS = ("jurisdiction", "type", "language", "status", "year", "access")
@@ -609,21 +584,41 @@ class LegacyCatalogue:
             selection, versions = select_versions(versions, as_of, language)
         return self._version_page(source, rights, versions, selection, editions)
 
-    def reading(self, source_id, *, version_id=None, language=None) -> ReaderPage:
-        """One public text of a source with its structure, for the website's record page, which shows
-        one text at a time: the one ``reader_text`` picks. ``texts`` lists every public text of the
-        record without its words, in the order they are kept, for the page's language switch."""
+    def reading(self, source_id, *, version_id=None, language=None) -> dict:
+        """One public text of a source as the website's record page reads it (``reader-1``, PRD-04): the
+        text ``reader.reader_text`` chooses, chosen from the texts' details so that no other text is read
+        (PRD-06), with its nodes checked against it as every answer's are."""
         source, rights = self._require(source_id)
-        versions = self._texts(source, rights)
-        chosen = reader_text(versions, source.language, version_id, language)
-        page = self._version_page(source, rights, [chosen] if chosen else [], None, False)
-        listed = tuple(
-            ListedText(
-                id=v.id, language=v.language, effective_from=v.effective_from, retrieved_at=v.retrieved_at
-            )
-            for v in versions
+        texts = [
+            details
+            for details in self.repository.text_details(source.id, rights.approved_content_hashes)
+            if decide(rights, details, now=self.now).full_text
+        ]
+        chosen, matched, missed = reader.reader_text(texts, source.language, version_id, language)
+        if chosen is None:
+            notice = "No version has passed both rights and content review."
+            return reader.answer(None, (), texts, None, None, notice)
+        version = self.repository.version(chosen.id, source.id)
+        if version.content_hash != chosen.content_hash or not decide(rights, version, now=self.now).full_text:
+            raise PublicUnavailable("Version policy changed during lookup")
+        page = self._version_page(source, rights, [version], None, False)
+        return reader.answer(page.items[0], page.structure, texts, matched, missed)
+
+    def still_served(self, source_id, version_id=None, content_hash=None) -> bool:
+        """The check before a text is sent (REL-01), reading no text: the source is still public (else
+        SourceUnavailable), and the text sent, if one was, is still approved under the hash it was read
+        with. Rights policy asks only for the rights record and the text's gate."""
+        source, rights = self._require(source_id)
+        if version_id is None:
+            return True
+        gate = self.repository.gates_of_versions([version_id]).get(version_id)
+        return bool(
+            gate is not None
+            and gate.source_id == source.id
+            and gate.content_hash == content_hash
+            and content_hash in rights.approved_content_hashes
+            and decide(rights, gate, now=self.now).full_text
         )
-        return ReaderPage(**{name: getattr(page, name) for name in VersionPage.model_fields}, texts=listed)
 
     def _texts(self, source, rights) -> list:
         versions = []

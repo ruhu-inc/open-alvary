@@ -1,27 +1,29 @@
 // A published text laid out from its structure, with no DOM and no imports, so the same file runs
 // in the browser and under `node --test` (tests/test_published_text.mjs).
 //
-// The public API serves a text version's words (`canonical_text`) and its structure: nodes with
-// UTF-8 byte spans over those words (`start_byte`, `end_byte`), a kind, the printed number (`label`)
-// and the heading. The words are cut where the text itself breaks them (a blank line between two
-// blocks, as oa-text-1 writes them), never where a node starts, because a node may open inside a
-// block ("23. (1) …" holds section 23 and its subsection 1). Each block is then a heading, a
-// paragraph or a table, from the nodes that open in it. The pieces, joined in order, are the
-// text: every character once.
+// The website's data path serves one text's words (`canonical_text`) and its nodes as `reader-1`
+// (docs: PRD-04): UTF-8 byte spans over those words (`start_byte`, `end_byte`) with a kind. A full
+// node also has an `id`, a `locator`, the printed number (`label`) and the heading; an indentation
+// node (a subsection, paragraph or subparagraph) has only how far its words are set in (`depth`).
+// Nodes come in document order and carry no parent: a node is inside another when its span is,
+// which the server confirms agrees with the corpus before it sends them.
+//
+// The words are cut where the text itself breaks them (a blank line between two blocks, as
+// oa-text-1 writes them), never where a node starts, because a node may open inside a block
+// ("23. (1) …" holds section 23 and its subsection 1). Each block is then a heading, a paragraph
+// or a table, from the nodes that open in it. The pieces, joined in order, are the text: every
+// character once.
 
 export type TextNode = {
-  id: string;
-  version_id: string;
-  parent_id?: string | null;
   kind: string;
-  locator: string;
-  order: number;
   start_byte: number;
   end_byte: number;
-  source_hash?: string | null;
+  id?: string;
+  locator?: string;
   label?: string | null;
   heading?: string | null;
   cell_states?: Record<string, string> | null;
+  depth?: number;
 };
 
 export type TextVersion = {
@@ -29,6 +31,7 @@ export type TextVersion = {
   language?: string | null;
   canonical_text: string;
   content_hash: string;
+  bytes: number; // the text's length in UTF-8, as the data path states it
 };
 
 export type Piece =
@@ -80,17 +83,26 @@ const PARTS = new Set([
 ]);
 // The document's own printed table of contents: shown where it is printed, never listed again.
 const PRINTED_CONTENTS = new Set(["contents", "contents_entry"]);
-// Provisions' inner units open with their number and their words in one block: never a heading.
-const NEVER_HEADED = new Set([
-  "subsection",
-  "paragraph",
-  "subparagraph",
-  "definition",
-  "contents_entry",
-  "table",
-  "quotation",
+// The kinds whose block can be their heading. A closed list: a kind the page does not know is a
+// container, never a heading and never listed.
+const HEADED = new Set([
+  "document",
+  "preamble",
+  "notice",
+  "contents",
+  "title",
+  "part",
+  "chapter",
+  "division",
+  "schedule",
+  "annex",
+  "article",
+  "section",
+  "opinion",
+  "order",
 ]);
-const DEEPER = new Set(["subsection", "paragraph", "subparagraph"]);
+// A Contents entry longer than this is cut at a word.
+const ENTRY_LIMIT = 140;
 const RANKS: Record<string, 1 | 2 | 3 | 4> = {
   document: 1,
   title: 2,
@@ -121,29 +133,28 @@ export function byteLength(text: string): number {
 const squeeze = (value: string | null | undefined) =>
   (value ?? "").replace(/\s+/g, " ").trim();
 
-// A version's nodes, or none where they cannot be trusted to describe its words: nodes of another
-// version or another text, and spans that run past the end or cut a character in two.
+// A text's nodes, or none where they cannot be trusted to describe its words: a text that is not the
+// length the data path states, and spans that run past the end, run backwards, come out of order
+// or cut a character in two. The text is then shown plain.
 export function nodesFor(
   version: TextVersion,
-  structure: TextNode[] | undefined | null,
+  nodes: TextNode[] | undefined | null,
 ): TextNode[] {
-  const nodes = (structure ?? []).filter(
-    (node) => node.version_id === version.id,
-  );
-  if (!nodes.length) return [];
+  if (!nodes?.length) return [];
   const bytes = encoder.encode(version.canonical_text);
+  if (bytes.length !== version.bytes) return [];
   const boundary = (at: number) =>
     at === bytes.length || (bytes[at] & 0xc0) !== 0x80;
   const sound = nodes.every(
-    (node) =>
+    (node, index) =>
       Number.isInteger(node.start_byte) &&
       Number.isInteger(node.end_byte) &&
       node.start_byte >= 0 &&
-      node.start_byte <= node.end_byte &&
+      node.start_byte < node.end_byte &&
       node.end_byte <= bytes.length &&
       boundary(node.start_byte) &&
       boundary(node.end_byte) &&
-      (!node.source_hash || node.source_hash === version.content_hash),
+      (index === 0 || nodes[index - 1].start_byte <= node.start_byte),
   );
   return sound ? nodes : [];
 }
@@ -204,7 +215,7 @@ function headingOf(
 }
 
 function anchorFor(node: TextNode): string {
-  const id = node.locator
+  const id = (node.locator ?? node.kind)
     .toLowerCase()
     .split("__")
     .map((token) => {
@@ -247,32 +258,36 @@ function headingLimit(kind: string): number {
 // The text's pieces in reading order and its contents. `nodes` are one version's (nodesFor).
 export function layoutText(text: string, nodes: TextNode[]): Laid {
   const { parts, blocks } = cut(text);
-  const byId = new Map(nodes.map((node) => [node.id, node]));
-  const chain = (node: TextNode) => {
-    const up: TextNode[] = [];
-    for (
-      let at: TextNode | undefined = node, steps = 0;
-      at && steps < 64;
-      steps++
-    ) {
-      up.push(at);
-      at = at.parent_id ? byId.get(at.parent_id) : undefined;
-    }
-    return up;
-  };
-  const depthOf = new Map(nodes.map((node) => [node.id, chain(node).length]));
-  // Document order: by where a node starts, the enclosing node first.
-  const ordered = nodes
-    .filter((node) => node.end_byte > node.start_byte)
-    .sort(
-      (a, b) =>
-        a.start_byte - b.start_byte ||
-        b.end_byte - a.end_byte ||
-        depthOf.get(a.id)! - depthOf.get(b.id)! ||
-        a.order - b.order,
+  // Read in the order sent. For each node, from the nodes that hold it (those before it whose span
+  // contains its own): whether it is in the printed table of contents, and its heading's level.
+  const ordered = nodes;
+  const inContents = new Map<TextNode, boolean>();
+  const levelOf = new Map<TextNode, number>();
+  const holding: TextNode[] = [];
+  for (const node of ordered) {
+    while (
+      holding.length &&
+      holding[holding.length - 1].end_byte <= node.start_byte
+    )
+      holding.pop();
+    const around = holding.filter((at) => at.end_byte >= node.end_byte);
+    inContents.set(
+      node,
+      PRINTED_CONTENTS.has(node.kind) ||
+        around.some((at) => PRINTED_CONTENTS.has(at.kind)),
     );
-  const printed = (node: TextNode) =>
-    chain(node).some((at) => PRINTED_CONTENTS.has(at.kind));
+    levelOf.set(
+      node,
+      Math.min(
+        6,
+        3 +
+          around.filter((at) => PARTS.has(at.kind) || PROVISIONS.has(at.kind))
+            .length,
+      ),
+    );
+    holding.push(node);
+  }
+  const printed = (node: TextNode) => inContents.get(node) ?? false;
   const listed = (node: TextNode) =>
     (PROVISIONS.has(node.kind) || PARTS.has(node.kind)) && !printed(node);
 
@@ -308,13 +323,15 @@ export function layoutText(text: string, nodes: TextNode[]): Laid {
       continue;
     }
     const block = part;
-    while (next < ordered.length && ordered[next].start_byte <= block.start)
-      open.push(ordered[next++]);
+    // The nodes that hold this block: they start at or before it and end after its first byte.
     while (open.length && open[open.length - 1].end_byte <= block.start)
       open.pop();
+    for (; next < ordered.length; next++) {
+      if (ordered[next].start_byte > block.start) break;
+      if (ordered[next].end_byte > block.start) open.push(ordered[next]);
+    }
     const owner: TextNode | undefined = open[open.length - 1];
-    const around = owner ? chain(owner) : [];
-    const inPrinted = around.some((at) => PRINTED_CONTENTS.has(at.kind));
+    const inPrinted = open.some((at) => PRINTED_CONTENTS.has(at.kind));
     const starts = opening.get(block) ?? [];
 
     // The anchor: the outermost listed node that opens here. Others opening here share it.
@@ -329,7 +346,7 @@ export function layoutText(text: string, nodes: TextNode[]): Laid {
     // A paragraph a reading took for a heading: set as the text it is, listed by its number.
     const overlong = new Set<TextNode>();
     for (const { node, exact } of starts) {
-      if (!exact || NEVER_HEADED.has(node.kind)) continue;
+      if (!exact || !HEADED.has(node.kind)) continue;
       if (node.kind !== "contents" && printed(node)) continue;
       const how = headingOf(block.text, node);
       if (how && squeeze(block.text).length > headingLimit(node.kind)) {
@@ -360,15 +377,7 @@ export function layoutText(text: string, nodes: TextNode[]): Laid {
       contents.push(entry);
     }
 
-    const level = (node: TextNode) =>
-      Math.min(
-        6,
-        3 +
-          chain(node).filter(
-            (at) =>
-              at !== node && (PARTS.has(at.kind) || PROVISIONS.has(at.kind)),
-          ).length,
-      );
+    const level = (node: TextNode) => levelOf.get(node) ?? 3;
     const rank = (node: TextNode) => RANKS[node.kind] ?? 3;
 
     if (headed) {
@@ -442,10 +451,23 @@ export function layoutText(text: string, nodes: TextNode[]): Laid {
       type: "paragraph",
       text: block.text,
       id,
-      depth: Math.min(3, around.filter((at) => DEEPER.has(at.kind)).length),
+      // Set in as far as the innermost indentation node that holds the block says.
+      depth: Math.min(
+        3,
+        Math.max(0, [...open].reverse().find((at) => at.depth)?.depth ?? 0),
+      ),
       lead,
       printed: inPrinted,
     });
   }
+  for (const entry of contents) entry.label = shortened(entry.label);
   return { pieces, contents };
+}
+
+// A long Contents entry, cut at a word.
+function shortened(label: string): string {
+  if (label.length <= ENTRY_LIMIT) return label;
+  const head = label.slice(0, ENTRY_LIMIT);
+  const space = head.lastIndexOf(" ");
+  return (space > ENTRY_LIMIT / 2 ? head.slice(0, space) : head) + "…";
 }

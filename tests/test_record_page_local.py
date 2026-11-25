@@ -1,209 +1,265 @@
 """The local site for the record page (scripts.record_page_local): the website's real data path over an
-invented Rwandan law in three languages and a text with no structure. The browser tests in
+invented Rwandan law in three languages, a longer one and a text with no structure, and the answer the
+record page reads from it (``reader-1``, /site/v1/sources/{id}/text). The browser tests in
 tests/browser/specs/record-page.spec.js run against this server."""
 
-from datetime import date
+import json
 from hashlib import sha256
-from types import SimpleNamespace
 
+import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import event
 
 from api import site
-from api.catalogue import reader_text
 from scripts import record_page_local
 
+LAW = f"/site/v1/sources/{record_page_local.LAW_ID}"
+FULL = {"id", "kind", "locator", "start_byte", "end_byte", "label", "heading", "cell_states"}
 
-def _client(tmp_path, dist) -> TestClient:
-    return TestClient(record_page_local.build_app(tmp_path, dist))
+
+def _client(tmp_path, dist=None) -> TestClient:
+    return TestClient(record_page_local.build_app(tmp_path, dist or tmp_path / "no-build"))
 
 
-def test_the_invented_law_is_served_in_three_languages_with_the_structure_rwandan_laws_get(tmp_path):
-    client = _client(tmp_path, tmp_path / "no-build")
-    record = client.get(f"/site/v1/sources/{record_page_local.LAW_ID}").json()
+def _kept(source_id):
+    """The record's texts and their nodes as the corpus keeps them, by language."""
+    held = record_page_local.corpus()
+    texts = {v.language: v for v in held.versions if v.source_id == source_id}
+    return texts, {
+        language: [n for n in held.structure if n.version_id == v.id] for language, v in texts.items()
+    }
+
+
+def test_the_invented_law_is_kept_in_three_languages_with_the_structure_rwandan_laws_get(tmp_path):
+    record = _client(tmp_path).get(LAW).json()
     assert record["has_full_text"] and record["language"] == "rw" and record["jurisdiction_name"] == "Rwanda"
-    page = client.get(f"/site/v1/sources/{record_page_local.LAW_ID}/versions").json()
-    texts = {version["language"]: version for version in page["items"]}
+    texts, structure = _kept(record_page_local.LAW_ID)
     assert sorted(texts) == ["en", "fr", "rw"]
-    # The record's own language is not the first served: the page has to choose it.
-    assert page["items"][0]["language"] != record["language"]
     for language, version in texts.items():
-        raw = version["canonical_text"].encode()
-        nodes = [node for node in page["structure"] if node["version_id"] == version["id"]]
-        kinds = [node["kind"] for node in nodes]
+        raw = version.canonical_text.encode()
+        kinds = [node.kind for node in structure[language]]
         assert kinds.count("article") == 4 and kinds.count("chapter") == 2, language
         assert kinds.count("division") == 1 and kinds.count("contents") == 1, language
-        for node in nodes:
-            span = raw[node["start_byte"] : node["end_byte"]]
-            assert sha256(span).hexdigest() == node["span_hash"]
-            if node["kind"] in ("article", "chapter", "division"):
+        for node in structure[language]:
+            span = raw[node.start_byte : node.end_byte]
+            assert sha256(span).hexdigest() == node.span_hash
+            if node.kind in ("article", "chapter", "division"):
                 # A heading's number and words open its span, as the page's layout expects.
                 words = span.decode()
-                assert words.startswith(node["label"]) and node["heading"] in words.split("\n\n")[0]
+                assert words.startswith(node.label) and node.heading in words.split("\n\n")[0]
         # Bytes and characters differ in every language: ’ in Kinyarwanda, “ ” in English, é in French.
-        assert len(raw) > len(version["canonical_text"]), language
+        assert len(raw) > len(version.canonical_text), language
     # The printed table of contents is one node holding its lines: none of them is an article.
-    french = [node for node in page["structure"] if node["version_id"] == texts["fr"]["id"]]
-    contents = next(node for node in french if node["kind"] == "contents")
-    assert contents["heading"] == "TABLE DES MATIÈRES"
+    contents = next(node for node in structure["fr"] if node.kind == "contents")
+    assert contents.heading == "TABLE DES MATIÈRES"
     assert all(
-        not (contents["start_byte"] <= node["start_byte"] < contents["end_byte"])
-        for node in french
-        if node["kind"] == "article"
+        not (contents.start_byte <= node.start_byte < contents.end_byte)
+        for node in structure["fr"]
+        if node.kind == "article"
     )
 
 
-def test_the_record_page_is_served_one_text_at_a_time_and_told_of_the_others(tmp_path):
-    client = _client(tmp_path, tmp_path / "no-build")
-    law = f"/site/v1/sources/{record_page_local.LAW_ID}"
-    whole = client.get(law + "/versions").json()
-    by_language = {version["language"]: version for version in whole["items"]}
+def test_the_record_page_is_sent_one_text_as_reader_1_and_told_of_the_others(tmp_path):
+    client = _client(tmp_path)
+    texts, structure = _kept(record_page_local.LAW_ID)
 
     def one(query=""):
-        answer = client.get(law + "/text" + query)
+        answer = client.get(LAW + "/text" + query)
         assert answer.status_code == 200 and answer.headers["cache-control"] == "no-store", query
         page = answer.json()
-        # Whatever is asked, every public text is listed, in the order they are kept, without its words.
-        assert page["texts"] == [
-            {name: version[name] for name in ("id", "language", "effective_from", "retrieved_at")}
-            for version in whole["items"]
-        ], query
-        (version,) = page["items"]
-        # The one text is whole, and the structure is its own and nobody else's.
-        assert version == by_language[version["language"]], query
-        assert page["structure"] == [n for n in whole["structure"] if n["version_id"] == version["id"]], query
-        assert page["structure"] and page["rights"] == whole["rights"] and page["notice"] is None, query
-        return version["language"]
+        assert page["schema"] == "reader-1" and page["modes"] == ["reading"] and page["notice"] is None
+        assert "rights" not in page and "items" not in page  # the page reads the rights record elsewhere
+        # Whatever is asked, every public text is listed without its words: by language, then latest first.
+        assert [(t["language"], t["id"]) for t in page["texts"]] == [(k, texts[k].id) for k in sorted(texts)]
+        assert all(set(t) == {"id", "language", "effective_from", "retrieved_at"} for t in page["texts"])
+        kept = texts[page["text"]["language"]]
+        assert page["canonical_text"] == kept.canonical_text
+        assert page["text"] == {
+            "id": kept.id,
+            "language": kept.language,
+            "content_hash": kept.content_hash,
+            "effective_from": None,
+            "retrieved_at": page["text"]["retrieved_at"],
+            "bytes": len(kept.canonical_text.encode()),
+        }
+        # Its nodes are its own, in document order, each with only what the page uses.
+        nodes = page["nodes"]
+        assert [n["id"] for n in nodes] == [
+            n.id for n in sorted(structure[kept.language], key=lambda n: (n.start_byte, -n.end_byte, n.order))
+        ]
+        assert all(set(n) <= FULL and "parent_id" not in n and "span_hash" not in n for n in nodes)
+        assert [n["start_byte"] for n in nodes] == sorted(n["start_byte"] for n in nodes)
+        return page["text"]["language"], page["matched"], page["missed"]
 
-    # Unasked: the record's own language, which is not the first kept.
-    assert one() == "rw" and whole["items"][0]["language"] == "en"
-    assert one("?language=fr") == "fr" and one("?language=FR") == "fr"
-    assert one("?version=" + by_language["en"]["id"]) == "en"
-    assert one("?language=fr&version=" + by_language["en"]["id"]) == "en"
-    # A text the record does not have is not an error: an old link still opens the record's text.
-    assert one("?language=pt&version=ver-gone") == "rw"
-    for query in ("?lang=fr", "?language=", "?version=a%20b", "?language=" + "f" * 161):
-        refused = client.get(law + "/text" + query)
+    # Unasked: the record's own language, which is not the first by code.
+    assert one() == ("rw", "default", [])
+    assert one("?language=fr") == ("fr", "language", []) == one("?language=FR")
+    assert one("?version=" + texts["en"].id) == ("en", "version", [])
+    # A version that is found settles it: the language sent with it is not looked at.
+    assert one("?language=fr&version=" + texts["en"].id) == ("en", "version", [])
+    assert one("?language=pt&version=" + texts["en"].id) == ("en", "version", [])
+    # What the record does not have is not an error: the answer says what was missed.
+    assert one("?language=pt") == ("rw", "default", ["language"])
+    assert one("?version=ver-gone") == ("rw", "default", ["version"])
+    assert one("?language=pt&version=ver-gone") == ("rw", "default", ["version", "language"])
+    assert one("?language=fr&version=ver-gone") == ("fr", "language", ["version"])
+    for query in ("?lang=fr", "?language=", "?version=a%20b", "?language=" + "f" * 161, "?part=1"):
+        refused = client.get(LAW + "/text" + query)
         assert refused.status_code == 400 and refused.json()["code"] == "invalid_input", query
 
 
-def test_a_law_too_large_in_all_its_languages_together_still_opens_in_each(tmp_path, monkeypatch):
-    client = _client(tmp_path, tmp_path / "no-build")
-    law = f"/site/v1/sources/{record_page_local.LAW_ID}"
-    whole = client.get(law + "/versions")
-    each = {language: client.get(f"{law}/text?language={language}") for language in ("en", "fr", "rw")}
-    largest = max(len(answer.content) for answer in each.values())
-    assert largest < len(whole.content)
-    monkeypatch.setattr(site, "MAX_VERSIONS_BYTES", largest)
-    refused = client.get(law + "/versions")
-    assert refused.status_code == 413 and refused.json()["code"] == "result_too_large"
+def test_a_law_in_three_languages_is_bounded_one_text_at_a_time(tmp_path, monkeypatch):
+    client = _client(tmp_path)
+    each = {language: client.get(f"{LAW}/text?language={language}") for language in ("en", "fr", "rw")}
+    sizes = sorted(len(answer.content) for answer in each.values())
+    # The bound sits between the largest text and all three together: each still opens.
+    monkeypatch.setattr(site, "MAX_TEXT_BYTES", sizes[-1])
     for language, before in each.items():
-        again = client.get(f"{law}/text?language={language}")
+        again = client.get(f"{LAW}/text?language={language}")
         assert again.status_code == 200 and again.content == before.content, language
-    # One text larger than a page may be is still refused.
-    monkeypatch.setattr(site, "MAX_VERSIONS_BYTES", largest - 1)
-    assert sorted(client.get(f"{law}/text?language={language}").status_code for language in each) == [
-        200,
-        200,
-        413,
+    # One text larger than an answer may be is refused, with a code the page reads.
+    monkeypatch.setattr(site, "MAX_TEXT_BYTES", sizes[-1] - 1)
+    refused = [client.get(f"{LAW}/text?language={language}") for language in each]
+    assert sorted(answer.status_code for answer in refused) == [200, 200, 413]
+    large = next(answer for answer in refused if answer.status_code == 413)
+    assert large.json()["code"] == "result_too_large"
+    assert large.headers["content-type"].startswith("application/problem+json")
+
+
+def test_choosing_a_text_reads_no_other_text_and_the_check_before_sending_reads_none(tmp_path):
+    store = record_page_local.build_store(tmp_path)
+    client = TestClient(site.create_site_app(store, tmp_path))
+    texts, _ = _kept(record_page_local.LAW_ID)
+    read = []
+
+    @event.listens_for(store.engine, "before_cursor_execute")
+    def note(connection, cursor, statement, parameters, context, many):
+        read.append((statement, json.dumps(parameters, default=str)))
+
+    law = f"/sources/{record_page_local.LAW_ID}"
+    assert client.get(law + "/text?language=fr").json()["text"]["id"] == texts["fr"].id
+    # Whole stored texts are read by ID. Only the chosen one is, and once: choosing is done from the
+    # texts' details, and the check before sending asks for the gate alone.
+    whole = [
+        parameters
+        for statement, parameters in read
+        if " ".join(statement.split()).startswith("SELECT versions.payload FROM versions")
     ]
+    assert len(whole) == 1 and texts["fr"].id in whole[0]
+    assert not any(texts[other].id in parameters for _, parameters in read for other in ("en", "rw"))
 
 
-def test_a_text_is_counted_as_read_once_for_each_time_its_record_is_opened(tmp_path):
-    class Counted:
-        def __init__(self):
-            self.read = []
+class Counted:
+    def __init__(self):
+        self.read = []
 
-        def text_read(self, scope, source_id):
-            self.read.append(source_id)
+    def text_read(self, scope, source_id):
+        self.read.append(source_id)
 
-        def record_opened(self, *args):
-            pass
+    def record_opened(self, *args):
+        pass
 
+
+def test_every_text_served_is_a_text_read_and_nothing_else_is(tmp_path, monkeypatch):
     traffic = Counted()
     store = record_page_local.build_store(tmp_path)
     client = TestClient(site.create_site_app(store, tmp_path, traffic=traffic))
     law = f"/sources/{record_page_local.LAW_ID}"
-    french = client.get(law + "/text?language=fr").json()["items"][0]["id"]
-    assert traffic.read == [record_page_local.LAW_ID]  # opened from a link that names a language
-    # The switch asks for another text of the record on screen, and says so: not read again.
-    switched = client.get(f"{law}/text?version={french}", headers={"X-Text-Switch": "1"})
-    assert switched.status_code == 200 and switched.json()["items"][0]["language"] == "fr"
+    french = client.get(law + "/text?language=fr").json()["text"]["id"]
     assert traffic.read == [record_page_local.LAW_ID]
-    # Opened again, or all its texts asked for at once: read again.
+    # A switch of language asks for another text, and that is another text read.
+    assert client.get(f"{law}/text?version={french}").status_code == 200
     assert client.get(law + "/text").status_code == 200
-    assert client.get(law + "/versions").status_code == 200
     assert traffic.read == [record_page_local.LAW_ID] * 3
-    # A record with no public text has none to read.
+    # A record with no public text has none to read; nor has a refusal sent one.
     closed = client.get("/sources?access=metadata").json()["items"][0]["id"]
-    assert client.get(f"/sources/{closed}/text").json()["items"] == []
+    assert client.get(f"/sources/{closed}/text").json()["text"] is None
+    assert client.get("/sources/no-such-record/text").status_code == 404
+    monkeypatch.setattr(site, "MAX_TEXT_BYTES", 10)
+    assert client.get(law + "/text").status_code == 413
     assert len(traffic.read) == 3
 
 
+def test_a_record_withdrawn_while_its_text_is_being_sent_is_refused_with_a_code_and_not_counted(
+    tmp_path, monkeypatch
+):
+    from api.catalogue import LegacyCatalogue
+
+    traffic = Counted()
+    store = record_page_local.build_store(tmp_path)
+    client = TestClient(site.create_site_app(store, tmp_path, traffic=traffic))
+    monkeypatch.setattr(LegacyCatalogue, "still_served", lambda *args, **more: False)
+    changed = client.get(LAW.removeprefix("/site/v1") + "/text")
+    assert changed.status_code == 503 and changed.json()["code"] == "temporarily_unavailable"
+    assert changed.json()["retryable"] is True and "changed" in changed.json()["detail"]
+    assert changed.headers["content-type"].startswith("application/problem+json")
+    assert "canonical_text" not in changed.text and traffic.read == []
+
+
+def test_the_check_before_sending_asks_for_the_record_the_text_and_its_hash(tmp_path):
+    from api.catalogue import LegacyCatalogue, SourceUnavailable
+    from api.repositories import LegacyRepository
+
+    store = record_page_local.build_store(tmp_path)
+    texts, _ = _kept(record_page_local.LAW_ID)
+    french = texts["fr"]
+    with store.engine.begin() as connection:
+        service = LegacyCatalogue(LegacyRepository(connection))
+        law = record_page_local.LAW_ID
+        assert service.still_served(law, french.id, french.content_hash)
+        assert service.still_served(law)  # an answer with no text: the record must still be public
+        assert not service.still_served(law, french.id, texts["en"].content_hash)  # read under another hash
+        assert not service.still_served(law, "ver-gone", french.content_hash)
+        # Another record's text is not this record's.
+        other, _ = _kept(record_page_local.LONG_ID)
+        assert not service.still_served(law, other["en"].id, other["en"].content_hash)
+        with pytest.raises(SourceUnavailable):
+            service.still_served("no-such-record")
+
+
 def test_a_record_with_no_public_text_has_an_empty_reading(tmp_path):
-    client = _client(tmp_path, tmp_path / "no-build")
+    client = _client(tmp_path)
     records = client.get("/site/v1/sources?access=metadata").json()["items"]
     assert records, "the local site keeps at least one record without a public text"
     page = client.get(f"/site/v1/sources/{records[0]['id']}/text").json()
-    assert page["items"] == [] and page["texts"] == [] and page["structure"] == []
-    assert page["notice"] == "No version has passed both rights and content review."
-    assert client.get("/site/v1/sources/no-such-record/text").status_code == 404
-
-
-def test_the_text_opened_first_is_the_one_asked_for_then_the_records_language_then_the_first():
-    def text(id, language, **more):
-        return SimpleNamespace(id=id, language=language, effective_from=None, prior_version_id=None, **more)
-
-    served = [text("ver_en", "en"), text("ver_fr", "fr"), text("ver_rw", "rw")]
-    assert reader_text(served, "rw").id == "ver_rw"
-    assert reader_text(served, "sw").id == "ver_en"
-    assert reader_text(served).id == "ver_en"
-    assert reader_text([], "en") is None
-    assert reader_text(served, "rw", language="fr").id == "ver_fr"
-    assert reader_text(served, "rw", language="FR").id == "ver_fr"
-    assert reader_text(served, "rw", "ver_en", "fr").id == "ver_en"
-    # A language or version the record does not have changes nothing.
-    assert reader_text(served, "rw", "ver_gone", "pt").id == "ver_rw"
-
-    def dated(id, day, prior=None):
-        return SimpleNamespace(id=id, language="en", effective_from=day, prior_version_id=prior)
-
-    # Within a language: the latest text that no later one replaces.
-    several = [
-        dated("ver_2016", date(2016, 1, 1)),
-        dated("ver_2020_misread", date(2020, 6, 1)),
-        dated("ver_2020", date(2020, 6, 1), "ver_2020_misread"),
-        dated("ver_undated", None),
-        text("ver_fr", "fr"),
-    ]
-    assert reader_text(several, "en").id == "ver_2020"
-    assert reader_text(several, "en", "ver_2016").id == "ver_2016"
+    assert page == {
+        "schema": "reader-1",
+        "modes": ["reading"],
+        "text": None,
+        "texts": [],
+        "matched": None,
+        "missed": None,
+        "nodes": [],
+        "notice": "No version has passed both rights and content review.",
+    }
+    # Asking for a language changes nothing: there is no line to show for a text that is not there.
+    assert client.get(f"/site/v1/sources/{records[0]['id']}/text?language=fr").json() == page
+    missing = client.get("/site/v1/sources/no-such-record/text")
+    assert missing.status_code == 404 and missing.json()["code"] == "unavailable"
 
 
 def test_the_second_law_has_a_long_printed_contents_and_a_table_inside_an_article(tmp_path):
-    client = _client(tmp_path, tmp_path / "no-build")
-    page = client.get(f"/site/v1/sources/{record_page_local.LONG_ID}/versions").json()
-    (version,) = page["items"]
-    raw = version["canonical_text"].encode()
-    nodes = {node["locator"]: node for node in page["structure"]}
-    assert sum(node["kind"] == "article" for node in page["structure"]) == record_page_local.LONG_ARTICLES
+    page = _client(tmp_path).get(f"/site/v1/sources/{record_page_local.LONG_ID}/text").json()
+    raw = page["canonical_text"].encode()
+    nodes = {node["locator"]: node for node in page["nodes"]}
+    assert sum(node["kind"] == "article" for node in page["nodes"]) == record_page_local.LONG_ARTICLES
     # The printed contents: its heading and one line an article, more than the page shows unfolded.
     listed = raw[nodes["contents"]["start_byte"] : nodes["contents"]["end_byte"]].decode().split("\n\n")
     assert listed[0] == "TABLE OF CONTENTS" and len(listed) == 1 + record_page_local.LONG_ARTICLES
     # The table is a block of article 2 with no node of its own, as rw-law-1 leaves Rwandan tables.
     second = raw[nodes["art_2"]["start_byte"] : nodes["art_2"]["end_byte"]].decode()
     assert "Code\tMeaning\n310\tFiling number\n320\tFiling date" in second.split("\n\n")
-    assert not any(node["kind"] == "table" for node in page["structure"])
+    assert not any(node["kind"] == "table" for node in page["nodes"])
 
 
 def test_the_other_text_has_no_structure(tmp_path):
-    client = _client(tmp_path, tmp_path / "no-build")
-    page = client.get(f"/site/v1/sources/{record_page_local.PLAIN_ID}/versions").json()
-    assert [version["language"] for version in page["items"]] == ["en"]
-    assert page["structure"] == []
+    page = _client(tmp_path).get(f"/site/v1/sources/{record_page_local.PLAIN_ID}/text").json()
+    assert [text["language"] for text in page["texts"]] == ["en"] and page["text"]["language"] == "en"
+    assert page["nodes"] == [] and page["canonical_text"]
 
 
 def test_every_address_is_the_built_site_and_a_missing_build_says_so(tmp_path):
-    assert _client(tmp_path / "a", tmp_path / "no-build").get("/sources/x").status_code == 503
+    assert _client(tmp_path / "a").get("/sources/x").status_code == 503
     dist = tmp_path / "dist"
     (dist / "assets").mkdir(parents=True)
     (dist / "index.html").write_text("<!doctype html><title>site</title>")

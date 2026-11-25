@@ -45,7 +45,7 @@ import {
   type Source,
 } from "./site";
 import { RootBoundary } from "./safe";
-import { PublishedText, TextContents, TextLanguages, useReading } from "./published";
+import { PublishedText, TextContents, TextLanguages, TextProblem, useReading } from "./published";
 import { LiveStatsBlock } from "./livestats";
 
 // The documentation loads only when a /docs page is opened.
@@ -780,7 +780,7 @@ function Reader({ id }: { id: string }) {
       document.title = (source.error ? "Record unavailable" : "Loading the record") + " · Open Alvary";
   }, [source.data, source.error, source.status]);
   // A missing record is not found, not a failure to try again (findings 2026-11-16, item 18).
-  if (source.status === 404) return <NotFound record />;
+  if (source.status === 404 || text.state === "gone") return <NotFound record />;
   if (!source.data)
     return (
       <div className="page">
@@ -827,14 +827,19 @@ function Reader({ id }: { id: string }) {
                 </a>{" "}
                 prevails where the two differ.
               </p>
+              {reading.line ? (
+                <p className="pub-missed" role="status">
+                  {reading.line}
+                </p>
+              ) : null}
               <TextLanguages reading={reading} />
               <PublishedText reading={reading} />
               <p className="hash">SHA-256 {reading.version.content_hash}</p>
             </article>
-          ) : text.loaded ? (
+          ) : text.state === "none" ? (
             <TextStatus source={s} />
           ) : (
-            <Feedback error={text.error} />
+            <TextProblem state={text.state} official={s.canonical_url} retry={text.retry} />
           )}
           <RecordTimeline source={s} history={history.data} />
         </div>

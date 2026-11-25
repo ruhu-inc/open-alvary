@@ -1,7 +1,7 @@
 // The record page's text, on the local site (scripts/record_page_local.py): the built website and the
 // website's real data path over three published texts: an invented Rwandan law in three languages with
 // its structure, a longer one with a table, and a text with no structure. The page is sent one text at a
-// time (/site/v1/sources/{id}/text). No key, no secret and no outside call.
+// time as reader-1 (/site/v1/sources/{id}/text). No key, no secret and no outside call.
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
@@ -13,14 +13,16 @@ const PLAIN = "/sources/ng-foi-act-2011";
 test.use({ baseURL: SITE });
 
 // Nothing may leave this computer. Every request to another address is stopped and written down.
-test.beforeEach(async ({ page }) => {
-  page.outside = [];
-  await page.route("**/*", (route) => {
+const guard = (page) =>
+  page.route("**/*", (route) => {
     const url = route.request().url();
     if (url.startsWith(SITE) || url.startsWith("data:") || url.startsWith("blob:")) return route.continue();
     page.outside.push(url);
     return route.abort();
   });
+test.beforeEach(async ({ page }) => {
+  page.outside = [];
+  await guard(page);
 });
 test.afterEach(async ({ page }) => {
   expect(page.outside).toEqual([]);
@@ -30,13 +32,30 @@ const text = (page) => page.locator(".pub-text");
 const languages = (page) => page.getByRole("navigation", { name: "Language versions" });
 const contents = (page) => page.getByRole("navigation", { name: "Contents" });
 
-/** The record's texts, all of them at once, by language: what each text on the page is compared with. */
+/** The record's texts as the data path serves them one at a time, by language: what the page is compared with. */
 async function served(page, source) {
-  const answer = await page.request.get(`/site/v1${source}/versions`);
-  expect(answer.ok()).toBe(true);
-  const body = await answer.json();
-  return Object.fromEntries(body.items.map((version) => [version.language, version]));
+  const first = await (await page.request.get(`/site/v1${source}/text`)).json();
+  const texts = {};
+  for (const listed of first.texts) {
+    const answer = await page.request.get(`/site/v1${source}/text?version=${listed.id}`);
+    expect(answer.ok()).toBe(true);
+    const body = await answer.json();
+    texts[listed.language] = { ...body.text, canonical_text: body.canonical_text };
+  }
+  return texts;
 }
+
+/** Answers the page's next requests for a text as the data path would refuse them. */
+const refuse = (page, status, code, headers = {}) =>
+  page.route(/\/site\/v1\/sources\/[^/]+\/text/, (route) =>
+    route.fulfill({
+      status,
+      contentType: "application/problem+json",
+      headers,
+      body: JSON.stringify({ status, code, title: "Request refused", detail: "x", retryable: status !== 413 }),
+    }),
+  );
+const problem = (page) => page.locator(".pub-problem");
 
 /** How far below the top of the window an element starts. */
 const top = (locator) => locator.evaluate((element) => Math.round(element.getBoundingClientRect().top));
@@ -70,13 +89,12 @@ test.describe("a published law in three languages", () => {
   test("is fetched one text at a time: the switch fetches the next, once @smoke", async ({ page }) => {
     const versions = await served(page, LAW);
     const fetched = [];
-    const switches = [];
     page.on("request", (request) => {
       const url = new URL(request.url());
       if (!/\/site\/v1\/sources\/[^/]+\/(text|versions)$/.test(url.pathname)) return;
       fetched.push(url.pathname + url.search);
-      // The page says when it asks for another text of the record on screen: counted as read once.
-      if (request.headers()["x-text-switch"] === "1") switches.push(url.search);
+      // The page sends nothing extra with it.
+      expect(request.headers()["x-text-switch"]).toBeUndefined();
     });
     const data = "/site/v1" + LAW + "/text";
     await page.goto(LAW);
@@ -88,9 +106,11 @@ test.describe("a published law in three languages", () => {
       languages(page).getByRole("link", { name: "Français" }).click(),
     ]);
     const answer = await first.json();
-    expect(answer.items.map((version) => version.language)).toEqual(["fr"]);
+    expect([answer.schema, answer.text.language, answer.matched, answer.missed]).toEqual(["reader-1", "fr", "version", []]);
     expect(answer.texts.map((listed) => listed.language)).toEqual(["en", "fr", "rw"]);
-    expect(answer.structure.every((node) => node.version_id === versions.fr.id)).toBe(true);
+    // Nodes in document order, with no parents and no hashes: only what the page lays the text out from.
+    expect(answer.nodes.length).toBeGreaterThan(5);
+    expect(answer.nodes.every((node) => !("parent_id" in node) && !("span_hash" in node) && !("version_id" in node))).toBe(true);
     await expect(text(page)).toHaveAttribute("lang", "fr");
     expect(fetched).toEqual([data, `${data}?version=${versions.fr.id}`]);
 
@@ -105,12 +125,105 @@ test.describe("a published law in three languages", () => {
     await page.goto(LAW + "?lang=fr");
     await expect(text(page)).toHaveAttribute("lang", "fr");
     expect(fetched.slice(2)).toEqual([data + "?language=fr"]);
-    expect(switches).toEqual([`?version=${versions.fr.id}`]);
-    // A language the record does not have, or something that is no language, opens the record's own.
-    for (const odd of ["pt", "a%20b"]) {
-      await page.goto(LAW + "?lang=" + odd);
-      await expect(text(page)).toHaveAttribute("lang", "rw");
+  });
+
+  test("a link to a text the record does not have opens another, says so, and corrects its address @smoke", async ({ page }) => {
+    const versions = await served(page, LAW);
+    const line = page.locator(".pub-missed");
+    // A language the site has a name for; one it has not; and something that is no language at all.
+    for (const [asked, said] of [
+      ["?lang=pt#article-2", "This record has no Português text. Showing the Ikinyarwanda text."],
+      ["?lang=zz", "This record has no text in that language. Showing the Ikinyarwanda text."],
+      ["?lang=a%20b", "This record has no text in that language. Showing the Ikinyarwanda text."],
+      ["?version=ver-gone&lang=fr#article-2", "The text this link names is not here. Showing the Français text."],
+      ["?version=ver-gone&lang=pt", "The text this link names is not here. Showing the Ikinyarwanda text."],
+    ]) {
+      await page.goto(LAW + asked);
+      await expect(line).toHaveText(said);
+      const shown = said.includes("Français") ? "fr" : "rw";
+      await expect(text(page)).toHaveAttribute("lang", shown);
+      // The address names the text shown, and the anchor, which belonged to another text, is gone.
+      await expect(page).toHaveURL(new RegExp(`${LAW}\\?lang=${shown}$`));
+      expect(await text(page).evaluate((element) => element.textContent)).toBe(versions[shown].canonical_text);
     }
+    // The line belongs to the link: it goes with the first choice, and does not come back.
+    await languages(page).getByRole("link", { name: "English" }).click();
+    await expect(text(page)).toHaveAttribute("lang", "en");
+    await expect(line).toHaveCount(0);
+    await languages(page).getByRole("link", { name: "Ikinyarwanda" }).click();
+    await expect(text(page)).toHaveAttribute("lang", "rw");
+    await expect(line).toHaveCount(0);
+
+    // A version that is found settles it. The address named another language: corrected without a
+    // word, and the anchor, which belongs to the text found, is kept.
+    await page.setViewportSize({ width: 1280, height: 420 });
+    await page.goto(`${LAW}?lang=fr&version=${versions.en.id}#article-3`);
+    await expect(text(page)).toHaveAttribute("lang", "en");
+    await expect(line).toHaveCount(0);
+    await expect(page).toHaveURL(new RegExp(`${LAW}\\?lang=en#article-3$`));
+    await expect(page.locator("#article-3")).toBeInViewport();
+  });
+
+  test("says why there is no text, by the refusal's code, and lets the reader try again", async ({ page }) => {
+    // Too large for one answer: the official copy, and nothing promised.
+    await refuse(page, 413, "result_too_large");
+    await page.goto(LAW);
+    await expect(problem(page)).toHaveText("This text is too large to show on this page. Read the official copy.");
+    await expect(problem(page).getByRole("link", { name: "official copy" })).toHaveAttribute("href", /^https?:/);
+    await expect(page.locator(".pub-text")).toHaveCount(0);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible(); // the record itself is shown
+
+    // Busy, by any of its codes: a line and a control, and the control fetches the text.
+    for (const [status, code] of [[429, "rate_limited"], [503, "capacity_exhausted"], [503, "temporarily_unavailable"]]) {
+      await page.unrouteAll({ behavior: "wait" });
+      await guard(page);
+      await refuse(page, status, code, { "Retry-After": "7" });
+      await page.goto(LAW);
+      await expect(problem(page)).toContainText("The text cannot be sent right now. Please try again shortly.");
+      await expect(problem(page)).not.toContainText(String(status));
+      await page.unrouteAll({ behavior: "wait" });
+      await guard(page);
+      await problem(page).getByRole("button", { name: "Try again" }).click();
+      await expect(text(page)).toHaveAttribute("lang", "rw");
+      await expect(problem(page)).toHaveCount(0);
+    }
+
+    // Anything else on first load, or no answer at all.
+    await page.route(/\/site\/v1\/sources\/[^/]+\/text/, (route) => route.abort());
+    await page.goto(LAW);
+    await expect(problem(page)).toContainText("This text could not be loaded. Please try again.");
+    await page.unrouteAll({ behavior: "wait" });
+    await guard(page);
+    await problem(page).getByRole("button", { name: "Try again" }).click();
+    await expect(text(page)).toHaveAttribute("lang", "rw");
+  });
+
+  test("a page older than the data path says so, and a record that goes takes its text with it", async ({ page }) => {
+    // The data path speaks a contract this page does not know: no guess at the text.
+    await page.route(/\/site\/v1\/sources\/[^/]+\/text/, async (route) => {
+      const answer = await route.fetch();
+      await route.fulfill({ response: answer, json: { ...(await answer.json()), schema: "reader-2" } });
+    });
+    await page.goto(LAW);
+    await expect(problem(page)).toContainText("This page is out of date.");
+    await expect(problem(page).getByRole("button", { name: "Reload" })).toBeVisible();
+    await expect(page.locator(".pub-text")).toHaveCount(0);
+    await page.unrouteAll({ behavior: "wait" });
+    await guard(page);
+
+    // The record is withdrawn between opening one language and asking for another.
+    await page.goto(LAW);
+    await expect(text(page)).toHaveAttribute("lang", "rw");
+    await page.route(/\/text\?version=/, (route) =>
+      route.fulfill({
+        status: 404,
+        contentType: "application/problem+json",
+        body: JSON.stringify({ status: 404, code: "unavailable", title: "Not available", detail: "x" }),
+      }),
+    );
+    await languages(page).getByRole("link", { name: "Français" }).click();
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("There is no record at this address.");
+    await expect(page.locator(".pub-text")).toHaveCount(0);
   });
 
   test("a text that cannot be fetched leaves the one being read, and says so", async ({ page }) => {

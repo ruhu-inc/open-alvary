@@ -266,7 +266,7 @@ def requests_for(rng: random.Random, records: int) -> list[tuple[str, str]]:
             ("browse", f"/site/v1/sources?jurisdiction=zz&page={rng.randint(1, 25)}"),
             ("browse", f"/site/v1/sources?type=regulation&year={rng.randint(1962, 2026)}"),
             ("detail", f"/site/v1/sources/{source}"),
-            ("detail", f"/site/v1/sources/{source}/versions"),
+            ("detail", f"/site/v1/sources/{source}/text"),
             ("detail", f"/site/v1/rights/{source}"),
             ("history", f"/site/v1/sources/{source}/relationships"),
             ("history", "/site/v1/sources/synthetic-00000/relationships"),  # a law enabling hundreds

@@ -12,6 +12,7 @@ This path makes bulk copying slow and visible; it cannot make it impossible, sin
 shows can be read by a program behaving like a browser.
 """
 
+import json
 import math
 import os
 import re
@@ -52,7 +53,7 @@ MAX_SITEMAPS = 50_000
 SITEMAP_RETRY_SECONDS = 5
 SITEMAP_REST_PER_WALK_SECOND = 49  # so walks take at most 2% of an instance's time
 MAX_PAGES = 25
-MAX_VERSIONS_BYTES = 2 * 1024 * 1024  # larger texts follow the public-reader specification
+MAX_TEXT_BYTES = 2 * 1024 * 1024  # one answer of the record page's text (PRD-05)
 ACCESS = {"all", "open", "metadata"}
 FILTER_VALUE = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9._:-]{0,63}")
 TEXT_ASKED = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}")  # an ID, as the schema bounds one
@@ -64,6 +65,8 @@ TITLES = {
     "withdrawn": "Withdrawn",
     "result_too_large": "Too large for one page",
     "temporarily_unavailable": "Temporarily unavailable",
+    "rate_limited": "Too many requests for now",
+    "capacity_exhausted": "At capacity for now",
 }
 
 
@@ -320,23 +323,38 @@ def create_site_app(
             "language_name": language[0].get("name") if language else None,
         }
 
-    def _texts(request: Request, source_id: str, page, counted: bool = True):
-        """A record's texts as read, sent only if every one of them is still public when sending starts."""
-        payload = page.model_dump_json().encode()
-        if len(payload) > MAX_VERSIONS_BYTES:
+    def _text(request: Request, source_id: str, payload: bytes, served: tuple[str, str] | None):
+        """A record's text as read, sent only if it is still public when sending starts (REL-01).
+        ``served`` is the text's ID and hash, or None where the answer holds no text."""
+        if len(payload) > MAX_TEXT_BYTES:
             raise SiteProblem(413, "result_too_large", "This source's text is too large for one page")
-        served = {(v.id, v.content_hash) for v in page.items}
+        asked = request.state.request_id
 
         def recheck():
             try:
                 with catalogue() as fresh:
-                    current = fresh.versions(source_id)
+                    return fresh.still_served(source_id, *(served or ()))
             except SourceUnavailable:
                 return False
-            return served <= {(v.id, v.content_hash) for v in current.items}
 
-        if traffic is not None and page.items and counted:
+        def refusal(status: int, detail: str):
+            changed = "The record changed while this answer was being sent. Request it again."
+            return problem(503, "temporarily_unavailable", changed if status == 409 else detail, asked)
+
+        def limited(status: int, detail: str, retry_after: int):
+            code, said = (
+                ("rate_limited", "The allowance for reading texts is used up for now")
+                if status == 429
+                else ("capacity_exhausted", "The service is at capacity for now")
+            )
+            response = problem(status, code, said, asked)
+            response.headers["Retry-After"] = str(retry_after)
+            return response
+
+        def read():
+            # Every text served is one text read (PRD-08): counted once the answer is allowed out.
             traffic.text_read(request.scope, source_id)
+
         limits = admission.byte_limits if admission is not None else None
         identity = getattr(request.state, "admission_identity", None)
         scopes = (
@@ -353,32 +371,27 @@ def create_site_app(
             ledger=ledger,
             scopes=scopes,
             lease_seconds=limits.emission_lease_seconds if limits is not None else None,
-            charged=admission is not None and bool(page.items),
+            charged=admission is not None and served is not None,
+            refusal=refusal,
+            limited=limited,
+            on_emit=read if traffic is not None and served is not None else None,
         )
-
-    @app.get("/sources/{source_id}/versions")
-    def versions(source_id: str, request: Request):
-        _only(request)
-        with catalogue() as service:
-            page = service.versions(source_id)
-        return _texts(request, source_id, page)
 
     @app.get("/sources/{source_id}/text")
     def text(source_id: str, request: Request):
-        """The record page's text: one text at a time, so a law in several languages is never refused
-        for the size of them all. `version` or `language` ask for one; a text the record does not have
-        is not an error, the page opens the text it would open unasked. `texts` lists them all.
-
-        A record's text is counted as read once each time the record is opened: the page says so
-        (X-Text-Switch) when it asks for another text of the record it is already showing."""
+        """The record page's text (PRD-02): one public text with what the page lays it out from, as
+        ``reader-1``. `version` or `language` ask for one; a text the record does not have is not an
+        error: the answer says what was missed and holds the text the page opens instead."""
         _only(request, "version", "language")
         asked = {name: request.query_params.get(name) for name in ("version", "language")}
         for name, value in asked.items():
             if value is not None and not TEXT_ASKED.fullmatch(value):
                 raise SiteProblem(400, "invalid_input", f"{name} is not a valid value")
         with catalogue() as service:
-            page = service.reading(source_id, version_id=asked["version"], language=asked["language"])
-        return _texts(request, source_id, page, counted=request.headers.get("x-text-switch") != "1")
+            answer = service.reading(source_id, version_id=asked["version"], language=asked["language"])
+        payload = json.dumps(answer, ensure_ascii=False, separators=(",", ":")).encode()
+        shown = answer["text"]
+        return _text(request, source_id, payload, (shown["id"], shown["content_hash"]) if shown else None)
 
     @app.get("/sources/{source_id}/relationships")
     def relationships(source_id: str, request: Request):
