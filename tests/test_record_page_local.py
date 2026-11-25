@@ -2,10 +2,14 @@
 invented Rwandan law in three languages and a text with no structure. The browser tests in
 tests/browser/specs/record-page.spec.js run against this server."""
 
+from datetime import date
 from hashlib import sha256
+from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
+from api import site
+from api.catalogue import reader_text
 from scripts import record_page_local
 
 
@@ -46,6 +50,102 @@ def test_the_invented_law_is_served_in_three_languages_with_the_structure_rwanda
         for node in french
         if node["kind"] == "article"
     )
+
+
+def test_the_record_page_is_served_one_text_at_a_time_and_told_of_the_others(tmp_path):
+    client = _client(tmp_path, tmp_path / "no-build")
+    law = f"/site/v1/sources/{record_page_local.LAW_ID}"
+    whole = client.get(law + "/versions").json()
+    by_language = {version["language"]: version for version in whole["items"]}
+
+    def one(query=""):
+        answer = client.get(law + "/text" + query)
+        assert answer.status_code == 200 and answer.headers["cache-control"] == "no-store", query
+        page = answer.json()
+        # Whatever is asked, every public text is listed, in the order they are kept, without its words.
+        assert page["texts"] == [
+            {name: version[name] for name in ("id", "language", "effective_from", "retrieved_at")}
+            for version in whole["items"]
+        ], query
+        (version,) = page["items"]
+        # The one text is whole, and the structure is its own and nobody else's.
+        assert version == by_language[version["language"]], query
+        assert page["structure"] == [n for n in whole["structure"] if n["version_id"] == version["id"]], query
+        assert page["structure"] and page["rights"] == whole["rights"] and page["notice"] is None, query
+        return version["language"]
+
+    # Unasked: the record's own language, which is not the first kept.
+    assert one() == "rw" and whole["items"][0]["language"] == "en"
+    assert one("?language=fr") == "fr" and one("?language=FR") == "fr"
+    assert one("?version=" + by_language["en"]["id"]) == "en"
+    assert one("?language=fr&version=" + by_language["en"]["id"]) == "en"
+    # A text the record does not have is not an error: an old link still opens the record's text.
+    assert one("?language=pt&version=ver-gone") == "rw"
+    for query in ("?lang=fr", "?language=", "?version=a%20b", "?language=" + "f" * 161):
+        refused = client.get(law + "/text" + query)
+        assert refused.status_code == 400 and refused.json()["code"] == "invalid_input", query
+
+
+def test_a_law_too_large_in_all_its_languages_together_still_opens_in_each(tmp_path, monkeypatch):
+    client = _client(tmp_path, tmp_path / "no-build")
+    law = f"/site/v1/sources/{record_page_local.LAW_ID}"
+    whole = client.get(law + "/versions")
+    each = {language: client.get(f"{law}/text?language={language}") for language in ("en", "fr", "rw")}
+    largest = max(len(answer.content) for answer in each.values())
+    assert largest < len(whole.content)
+    monkeypatch.setattr(site, "MAX_VERSIONS_BYTES", largest)
+    refused = client.get(law + "/versions")
+    assert refused.status_code == 413 and refused.json()["code"] == "result_too_large"
+    for language, before in each.items():
+        again = client.get(f"{law}/text?language={language}")
+        assert again.status_code == 200 and again.content == before.content, language
+    # One text larger than a page may be is still refused.
+    monkeypatch.setattr(site, "MAX_VERSIONS_BYTES", largest - 1)
+    assert sorted(client.get(f"{law}/text?language={language}").status_code for language in each) == [
+        200,
+        200,
+        413,
+    ]
+
+
+def test_a_record_with_no_public_text_has_an_empty_reading(tmp_path):
+    client = _client(tmp_path, tmp_path / "no-build")
+    records = client.get("/site/v1/sources?access=metadata").json()["items"]
+    assert records, "the local site keeps at least one record without a public text"
+    page = client.get(f"/site/v1/sources/{records[0]['id']}/text").json()
+    assert page["items"] == [] and page["texts"] == [] and page["structure"] == []
+    assert page["notice"] == "No version has passed both rights and content review."
+    assert client.get("/site/v1/sources/no-such-record/text").status_code == 404
+
+
+def test_the_text_opened_first_is_the_one_asked_for_then_the_records_language_then_the_first():
+    def text(id, language, **more):
+        return SimpleNamespace(id=id, language=language, effective_from=None, prior_version_id=None, **more)
+
+    served = [text("ver_en", "en"), text("ver_fr", "fr"), text("ver_rw", "rw")]
+    assert reader_text(served, "rw").id == "ver_rw"
+    assert reader_text(served, "sw").id == "ver_en"
+    assert reader_text(served).id == "ver_en"
+    assert reader_text([], "en") is None
+    assert reader_text(served, "rw", language="fr").id == "ver_fr"
+    assert reader_text(served, "rw", language="FR").id == "ver_fr"
+    assert reader_text(served, "rw", "ver_en", "fr").id == "ver_en"
+    # A language or version the record does not have changes nothing.
+    assert reader_text(served, "rw", "ver_gone", "pt").id == "ver_rw"
+
+    def dated(id, day, prior=None):
+        return SimpleNamespace(id=id, language="en", effective_from=day, prior_version_id=prior)
+
+    # Within a language: the latest text that no later one replaces.
+    several = [
+        dated("ver_2016", date(2016, 1, 1)),
+        dated("ver_2020_misread", date(2020, 6, 1)),
+        dated("ver_2020", date(2020, 6, 1), "ver_2020_misread"),
+        dated("ver_undated", None),
+        text("ver_fr", "fr"),
+    ]
+    assert reader_text(several, "en").id == "ver_2020"
+    assert reader_text(several, "en", "ver_2016").id == "ver_2016"
 
 
 def test_the_second_law_has_a_long_printed_contents_and_a_table_inside_an_article(tmp_path):

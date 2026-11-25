@@ -2,11 +2,21 @@
 // public API serves (published-text.ts), with a Contents panel beside it. The look is the review
 // workbench's reader (document.tsx), whose page blocks the public API does not serve. Text is
 // rendered as React text, never as HTML.
+//
+// The page is sent one text at a time (/site/v1/sources/{id}/text): a law in three languages is not
+// refused for the size of all three, and the server chooses the text to open (the one a link names,
+// else the record's own language). The switch fetches another text when it is asked for.
 
-import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { ChevronDown } from "lucide-react";
 import {
-  chooseVersion,
   foldsAway,
   layoutText,
   nodesFor,
@@ -17,69 +27,159 @@ import {
 } from "./published-text";
 import { LANGUAGE_NAMES } from "./site";
 
-export type PublishedVersion = TextVersion & { retrieved_at: string };
-export type PublishedVersions = {
-  items: PublishedVersion[];
+// A public text of the record without its words, for the switch.
+export type ListedText = {
+  id: string;
+  language?: string | null;
+  effective_from?: string | null;
+  retrieved_at: string;
+};
+type ReaderPage = {
+  items: TextVersion[]; // the one text, or none when the record has no public text
+  texts: ListedText[];
   structure?: TextNode[];
   notice?: string | null;
 };
 
 export type Reading = {
-  versions: PublishedVersion[];
-  version: PublishedVersion;
+  texts: ListedText[];
+  version: TextVersion;
   laid: Laid | null; // null: the text has no structure, and is shown as plain text
-  choose: (version: PublishedVersion) => void;
+  pending: string | null; // the text being fetched, by its ID, while the one before it stays shown
+  failed: boolean; // the text last asked for could not be fetched
+  choose: (text: ListedText) => void;
 };
+
+// What the data path takes for a version or a language: an ID. Anything else in a link is left out.
+const NAMED = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$/;
 
 function asked() {
   const query = new URLSearchParams(location.search);
-  return { version: query.get("version"), language: query.get("lang") };
+  const named = (name: string) => {
+    const value = query.get(name);
+    return value && NAMED.test(value) ? value : null;
+  };
+  return { version: named("version"), language: named("lang") };
 }
 
-// The text being read and its layout. The choice of language is kept in the address (?lang=fr), so
-// a link to an article opens in the language it was copied in.
-export function useReading(
-  data: PublishedVersions | undefined,
-  recordLanguage?: string | null,
-): Reading | null {
-  const [chosen, setChosen] = useState<string | null>(null);
-  const versions = data?.items;
-  const version = useMemo(() => {
-    if (!versions?.length) return undefined;
-    return (
-      versions.find((v) => v.id === chosen) ??
-      chooseVersion(versions, recordLanguage, asked())
+// The address names the text shown (?lang=fr), so a link to an article opens in the language it was
+// copied in; a language with several texts names the text too. An article's anchor belongs to the
+// text it was read in, so it is dropped.
+function nameInAddress(text: TextVersion, texts: ListedText[]) {
+  const query = new URLSearchParams(location.search);
+  if (text.language) query.set("lang", text.language);
+  else query.delete("lang");
+  if (texts.filter((other) => other.language === text.language).length > 1)
+    query.set("version", text.id);
+  else query.delete("version");
+  history.replaceState(
+    history.state,
+    "",
+    location.pathname + "?" + query.toString(),
+  );
+}
+
+type Held = {
+  source: string;
+  page?: ReaderPage;
+  error?: string; // nothing could be shown
+  pending?: string;
+  failed?: boolean;
+};
+
+// The text being read and its layout, fetched one text at a time. A text already read in this visit
+// to the record is kept, so going back to a language does not fetch it again.
+export function useReading(source: string): {
+  reading: Reading | null;
+  loaded: boolean;
+  error?: string;
+} {
+  // The text chosen with the switch; until then, whatever the address names.
+  const [want, setWant] = useState<{
+    source: string;
+    version: string;
+    attempt: number;
+  } | null>(null);
+  const [held, setHeld] = useState<Held>({ source: "" });
+  const read = useRef({ source, pages: new Map<string, ReaderPage>() });
+  const version = want?.source === source ? want.version : null;
+  const attempt = want?.source === source ? want.attempt : 0;
+  useEffect(() => {
+    if (read.current.source !== source)
+      read.current = { source, pages: new Map() };
+    const pages = read.current.pages;
+    const show = (page: ReaderPage) => {
+      setHeld({ source, page });
+      if (version && page.items[0]) nameInAddress(page.items[0], page.texts);
+    };
+    const kept = version ? pages.get(version) : undefined;
+    if (kept) return show(kept);
+    const query = new URLSearchParams();
+    const link = asked();
+    if (version) query.set("version", version);
+    else {
+      if (link.version) query.set("version", link.version);
+      if (link.language) query.set("language", link.language);
+    }
+    const controller = new AbortController();
+    setHeld((before) =>
+      before.source === source && before.page && version
+        ? { source, page: before.page, pending: version }
+        : { source },
     );
-  }, [versions, chosen, recordLanguage]);
+    fetch(
+      "/site/v1/sources/" +
+        encodeURIComponent(source) +
+        "/text" +
+        (query.size ? "?" + query.toString() : ""),
+      { signal: controller.signal },
+    )
+      .then((answer) => {
+        if (!answer.ok) throw new Error(`Request failed (${answer.status})`);
+        return answer.json() as Promise<ReaderPage>;
+      })
+      .then((page) => {
+        if (controller.signal.aborted) return;
+        if (page.items[0]) pages.set(page.items[0].id, page);
+        show(page);
+      })
+      .catch((problem) => {
+        if (controller.signal.aborted || problem.name === "AbortError") return;
+        // A text that cannot be fetched leaves the one being read where it is.
+        setHeld((before) =>
+          before.source === source && before.page
+            ? { source, page: before.page, failed: true }
+            : { source, error: problem.message },
+        );
+      });
+    return () => controller.abort();
+  }, [source, version, attempt]);
+
+  const mine = held.source === source ? held : { source };
+  const page = mine.page;
+  const text = page?.items[0];
   const laid = useMemo(() => {
-    if (!version) return null;
-    const nodes = nodesFor(version, data?.structure);
-    return nodes.length ? layoutText(version.canonical_text, nodes) : null;
-  }, [version, data?.structure]);
-  if (!versions || !version) return null;
+    if (!text) return null;
+    const nodes = nodesFor(text, page?.structure);
+    return nodes.length ? layoutText(text.canonical_text, nodes) : null;
+  }, [text, page]);
   return {
-    versions,
-    version,
-    laid,
-    choose: (next) => {
-      setChosen(next.id);
-      const query = new URLSearchParams(location.search);
-      if (next.language) query.set("lang", next.language);
-      else query.delete("lang");
-      // Named by its language unless the language has several texts.
-      if (
-        chooseVersion(versions, null, { language: next.language })?.id ===
-        next.id
-      )
-        query.delete("version");
-      else query.set("version", next.id);
-      // An article's anchor belongs to the text it was read in.
-      history.replaceState(
-        history.state,
-        "",
-        location.pathname + "?" + query.toString(),
-      );
-    },
+    loaded: Boolean(page),
+    error: mine.error,
+    reading:
+      page && text
+        ? {
+            texts: page.texts,
+            version: text,
+            laid,
+            pending: mine.pending ?? null,
+            failed: Boolean(mine.failed),
+            choose: (next) => {
+              if (next.id !== text.id || mine.failed)
+                setWant({ source, version: next.id, attempt: attempt + 1 });
+            },
+          }
+        : null,
   };
 }
 
@@ -89,24 +189,25 @@ function languageName(code?: string | null) {
 
 // The record's texts by language; a language with several texts tells them apart by date.
 export function TextLanguages({ reading }: { reading: Reading }) {
-  const { versions, version: current } = reading;
-  if (versions.length < 2) return null;
-  const several = (v: PublishedVersion) =>
-    versions.filter((w) => w.language === v.language).length > 1;
+  const { texts, version: current } = reading;
+  if (texts.length < 2) return null;
+  const several = (text: ListedText) =>
+    texts.filter((other) => other.language === text.language).length > 1;
   return (
     <nav className="doc-languages pub-languages" aria-label="Language versions">
-      {versions.map((v) => (
+      {texts.map((text) => (
         <a
-          key={v.id}
+          key={text.id}
           href={
             "?lang=" +
-            encodeURIComponent(v.language ?? "") +
-            (several(v) ? "&version=" + encodeURIComponent(v.id) : "")
+            encodeURIComponent(text.language ?? "") +
+            (several(text) ? "&version=" + encodeURIComponent(text.id) : "")
           }
-          lang={v.language ?? undefined}
-          hrefLang={v.language ?? undefined}
-          aria-current={v.id === current.id ? "true" : undefined}
-          className={v.id === current.id ? "current" : undefined}
+          lang={text.language ?? undefined}
+          hrefLang={text.language ?? undefined}
+          aria-current={text.id === current.id ? "true" : undefined}
+          aria-busy={text.id === reading.pending ? "true" : undefined}
+          className={text.id === current.id ? "current" : undefined}
           onClick={(event) => {
             if (
               event.metaKey ||
@@ -117,19 +218,24 @@ export function TextLanguages({ reading }: { reading: Reading }) {
               return;
             // The same page in another language: the reader stays where they are on it.
             event.preventDefault();
-            reading.choose(v);
+            reading.choose(text);
           }}
         >
-          {languageName(v.language)}
-          {several(v) ? (
+          {languageName(text.language)}
+          {several(text) ? (
             <span className="doc-languages-note" lang="en">
-              {v.effective_from
-                ? "from " + v.effective_from
-                : "read " + v.retrieved_at.slice(0, 10)}
+              {text.effective_from
+                ? "from " + text.effective_from
+                : "read " + text.retrieved_at.slice(0, 10)}
             </span>
           ) : null}
         </a>
       ))}
+      {reading.failed ? (
+        <span className="pub-languages-failed" role="alert">
+          That text could not be loaded. Please try again.
+        </span>
+      ) : null}
     </nav>
   );
 }
@@ -279,7 +385,11 @@ export function PublishedText({ reading }: { reading: Reading }) {
   });
   close(laid.pieces.length, printed);
   return (
-    <div className="doc-text pub-text" lang={lang}>
+    <div
+      className="doc-text pub-text"
+      lang={lang}
+      aria-busy={reading.pending ? "true" : undefined}
+    >
       {out}
     </div>
   );

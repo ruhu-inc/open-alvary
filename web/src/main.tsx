@@ -45,7 +45,7 @@ import {
   type Source,
 } from "./site";
 import { RootBoundary } from "./safe";
-import { PublishedText, TextContents, TextLanguages, useReading, type PublishedVersions } from "./published";
+import { PublishedText, TextContents, TextLanguages, useReading } from "./published";
 import { LiveStatsBlock } from "./livestats";
 
 // The documentation loads only when a /docs page is opened.
@@ -766,14 +766,14 @@ function RecordTitle({ source: s }: { source: Source }) {
 }
 function Reader({ id }: { id: string }) {
   const source = useData<Source>("/sources/" + encodeURIComponent(id));
-  const versions = useData<PublishedVersions>("/sources/" + encodeURIComponent(id) + "/versions");
   const rights = useData<{
     record: RightsRecord;
     decision: { reasons: string[] };
   }>("/rights/" + encodeURIComponent(id));
   const history = useData<History>("/sources/" + encodeURIComponent(id) + "/relationships");
-  // The text being read: one language at a time, laid out from its structure.
-  const reading = useReading(versions.data, source.data?.language);
+  // The text being read: one language at a time, fetched one at a time, laid out from its structure.
+  const text = useReading(id);
+  const reading = text.reading;
   // Until the record is shown, the tab does not keep the previous page's title.
   useEffect(() => {
     if (!source.data && source.status !== 404)
@@ -831,10 +831,10 @@ function Reader({ id }: { id: string }) {
               <PublishedText reading={reading} />
               <p className="hash">SHA-256 {reading.version.content_hash}</p>
             </article>
-          ) : versions.data ? (
+          ) : text.loaded ? (
             <TextStatus source={s} />
           ) : (
-            <Feedback error={versions.error} />
+            <Feedback error={text.error} />
           )}
           <RecordTimeline source={s} history={history.data} />
         </div>

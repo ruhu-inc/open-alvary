@@ -46,6 +46,7 @@ def test_every_page_of_the_website_has_its_route(client):
         "/site/v1/sources",
         f"/site/v1/sources/{SOURCE}",
         f"/site/v1/sources/{SOURCE}/versions",
+        f"/site/v1/sources/{SOURCE}/text",
         f"/site/v1/rights/{SOURCE}",
         "/site/v1/releases",
         "/site/v1/search?q=freedom",
@@ -180,9 +181,12 @@ def test_withdrawal_takes_effect_on_the_next_request(cleared, store, tmp_path):
     client = TestClient(create_service(store, tmp_path))
     source = cleared.sources[0].id
     assert client.get(f"/site/v1/sources/{source}/versions").json()["items"]
+    assert client.get(f"/site/v1/sources/{source}/text").json()["texts"]
     cleared.rights[0].status = "RIGHTS_UNDER_REVIEW"
     store.save(cleared)
     assert client.get(f"/site/v1/sources/{source}/versions").json()["items"] == []
+    reading = client.get(f"/site/v1/sources/{source}/text").json()
+    assert reading["items"] == [] and reading["texts"] == []
 
 
 def test_legacy_api_unchanged_beside_the_site(client):

@@ -9,7 +9,6 @@ import assert from "node:assert/strict";
 
 import {
   byteLength,
-  chooseVersion,
   foldsAway,
   layoutText,
   nodesFor,
@@ -322,36 +321,5 @@ describe("a version's structure", () => {
     assert.deepEqual(nodesFor(version, with_({ start_byte: inside })), []);
     assert.deepEqual(nodesFor(version, with_({ source_hash: "another" })), []);
     assert.equal(nodesFor(version, with_({ source_hash: "h" })).length, nodes.length);
-  });
-});
-
-describe("the text opened first", () => {
-  const text = (id, language, more = {}) => ({ id, language, canonical_text: "", content_hash: id, ...more });
-  const served = [text("ver_en", "en"), text("ver_fr", "fr"), text("ver_rw", "rw")];
-
-  it("is the record's own language, else the first served", () => {
-    assert.equal(chooseVersion(served, "rw").id, "ver_rw");
-    assert.equal(chooseVersion(served, "sw").id, "ver_en");
-    assert.equal(chooseVersion(served, undefined).id, "ver_en");
-    assert.equal(chooseVersion([], "en"), undefined);
-  });
-
-  it("is the one a link asks for, by language or by version", () => {
-    assert.equal(chooseVersion(served, "rw", { language: "fr" }).id, "ver_fr");
-    assert.equal(chooseVersion(served, "rw", { language: "FR" }).id, "ver_fr");
-    assert.equal(chooseVersion(served, "rw", { version: "ver_en", language: "fr" }).id, "ver_en");
-    // A language or version the record does not have changes nothing.
-    assert.equal(chooseVersion(served, "rw", { language: "pt", version: "ver_gone" }).id, "ver_rw");
-  });
-
-  it("is, within a language, the latest text that no later reading corrects", () => {
-    const several = [
-      text("ver_2016", "en", { effective_from: "2016-01-01" }),
-      text("ver_2020_misread", "en", { effective_from: "2020-06-01" }),
-      text("ver_2020", "en", { effective_from: "2020-06-01", prior_version_id: "ver_2020_misread" }),
-      text("ver_fr", "fr"),
-    ];
-    assert.equal(chooseVersion(several, "en").id, "ver_2020");
-    assert.equal(chooseVersion(several, "en", { version: "ver_2016" }).id, "ver_2016");
   });
 });

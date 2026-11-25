@@ -55,6 +55,7 @@ MAX_PAGES = 25
 MAX_VERSIONS_BYTES = 2 * 1024 * 1024  # larger texts follow the public-reader specification
 ACCESS = {"all", "open", "metadata"}
 FILTER_VALUE = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9._:-]{0,63}")
+TEXT_ASKED = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}")  # an ID, as the schema bounds one
 TITLES = {
     "invalid_input": "The request is not valid",
     "beyond_bounds": "Past the end of what this page shows",
@@ -319,11 +320,8 @@ def create_site_app(
             "language_name": language[0].get("name") if language else None,
         }
 
-    @app.get("/sources/{source_id}/versions")
-    def versions(source_id: str, request: Request):
-        _only(request)
-        with catalogue() as service:
-            page = service.versions(source_id)
+    def _texts(request: Request, source_id: str, page):
+        """A record's texts as read, sent only if every one of them is still public when sending starts."""
         payload = page.model_dump_json().encode()
         if len(payload) > MAX_VERSIONS_BYTES:
             raise SiteProblem(413, "result_too_large", "This source's text is too large for one page")
@@ -357,6 +355,27 @@ def create_site_app(
             lease_seconds=limits.emission_lease_seconds if limits is not None else None,
             charged=admission is not None and bool(page.items),
         )
+
+    @app.get("/sources/{source_id}/versions")
+    def versions(source_id: str, request: Request):
+        _only(request)
+        with catalogue() as service:
+            page = service.versions(source_id)
+        return _texts(request, source_id, page)
+
+    @app.get("/sources/{source_id}/text")
+    def text(source_id: str, request: Request):
+        """The record page's text: one text at a time, so a law in several languages is never refused
+        for the size of them all. `version` or `language` ask for one; a text the record does not have
+        is not an error, the page opens the text it would open unasked. `texts` lists them all."""
+        _only(request, "version", "language")
+        asked = {name: request.query_params.get(name) for name in ("version", "language")}
+        for name, value in asked.items():
+            if value is not None and not TEXT_ASKED.fullmatch(value):
+                raise SiteProblem(400, "invalid_input", f"{name} is not a valid value")
+        with catalogue() as service:
+            page = service.reading(source_id, version_id=asked["version"], language=asked["language"])
+        return _texts(request, source_id, page)
 
     @app.get("/sources/{source_id}/relationships")
     def relationships(source_id: str, request: Request):

@@ -29,9 +29,6 @@ export type TextVersion = {
   language?: string | null;
   canonical_text: string;
   content_hash: string;
-  effective_from?: string | null;
-  retrieved_at?: string | null;
-  prior_version_id?: string | null;
 };
 
 export type Piece =
@@ -433,41 +430,4 @@ export function layoutText(text: string, nodes: TextNode[]): Laid {
     });
   }
   return { pieces, contents };
-}
-
-// The text to open first: the one asked for (a link's ?version= or ?lang=), else the record's own
-// language, else the first language served. Within a language, the latest text that no later
-// reading corrects.
-export function chooseVersion<V extends TextVersion>(
-  versions: V[],
-  recordLanguage?: string | null,
-  wanted: { version?: string | null; language?: string | null } = {},
-): V | undefined {
-  if (!versions.length) return undefined;
-  const asked = versions.find((version) => version.id === wanted.version);
-  if (asked) return asked;
-  const same = (a?: string | null, b?: string | null) =>
-    Boolean(a) && a!.toLowerCase() === (b ?? "").toLowerCase();
-  const replaced = new Set(
-    versions.map((version) => version.prior_version_id).filter(Boolean),
-  );
-  const inLanguage = (language?: string | null) => {
-    const texts = versions.filter((version) =>
-      same(version.language, language),
-    );
-    const current = texts.filter((version) => !replaced.has(version.id));
-    return (current.length ? current : texts).reduce<V | undefined>(
-      (best, version) =>
-        !best || (version.effective_from ?? "") >= (best.effective_from ?? "")
-          ? version
-          : best,
-      undefined,
-    );
-  };
-  return (
-    inLanguage(wanted.language) ??
-    inLanguage(recordLanguage) ??
-    inLanguage(versions[0].language) ??
-    versions[0]
-  );
 }

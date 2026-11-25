@@ -3312,6 +3312,16 @@ a.record-card:hover {
 .pub-languages a:hover {
   border-color: currentColor;
 }
+/* A text is fetched when it is asked for: the one being fetched says so, and one that fails too. */
+.pub-languages a[aria-busy="true"] {
+  opacity: 0.6;
+  cursor: progress;
+}
+.pub-languages-failed {
+  flex-basis: 100%;
+  font-size: 14px;
+  color: var(--primary);
+}
 /* The site's paragraphs are small and grey; the text is read in its own size and colour. */
 .pub-text {
   padding-top: 12px;

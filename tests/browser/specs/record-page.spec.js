@@ -1,7 +1,7 @@
 // The record page's text, on the local site (scripts/record_page_local.py): the built website and the
 // website's real data path over three published texts: an invented Rwandan law in three languages with
-// its structure, a longer one with a table, and a text with no structure. No key, no secret and no
-// outside call.
+// its structure, a longer one with a table, and a text with no structure. The page is sent one text at a
+// time (/site/v1/sources/{id}/text). No key, no secret and no outside call.
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
@@ -30,7 +30,7 @@ const text = (page) => page.locator(".pub-text");
 const languages = (page) => page.getByRole("navigation", { name: "Language versions" });
 const contents = (page) => page.getByRole("navigation", { name: "Contents" });
 
-/** The record's texts as the website's data path serves them, by language. */
+/** The record's texts, all of them at once, by language: what each text on the page is compared with. */
 async function served(page, source) {
   const answer = await page.request.get(`/site/v1${source}/versions`);
   expect(answer.ok()).toBe(true);
@@ -65,6 +65,67 @@ test.describe("a published law in three languages", () => {
     await expect(page.locator(".pub-reader .hash")).toHaveText("SHA-256 " + versions.fr.content_hash);
     expect(await text(page).evaluate((element) => element.textContent)).toBe(versions.fr.canonical_text);
     await expect(contents(page).getByRole("link").first()).toHaveText("CHAPITRE PREMIER: DISPOSITIONS GÉNÉRALES");
+  });
+
+  test("is fetched one text at a time: the switch fetches the next, once @smoke", async ({ page }) => {
+    const versions = await served(page, LAW);
+    const fetched = [];
+    page.on("request", (request) => {
+      const url = new URL(request.url());
+      if (/\/site\/v1\/sources\/[^/]+\/(text|versions)$/.test(url.pathname)) fetched.push(url.pathname + url.search);
+    });
+    const data = "/site/v1" + LAW + "/text";
+    await page.goto(LAW);
+    await expect(text(page)).toHaveAttribute("lang", "rw");
+    // The server chose the text; the page never asks for all of them.
+    expect(fetched).toEqual([data]);
+    const [first] = await Promise.all([
+      page.waitForResponse((answer) => answer.url().includes("/text?version=")),
+      languages(page).getByRole("link", { name: "Français" }).click(),
+    ]);
+    const answer = await first.json();
+    expect(answer.items.map((version) => version.language)).toEqual(["fr"]);
+    expect(answer.texts.map((listed) => listed.language)).toEqual(["en", "fr", "rw"]);
+    expect(answer.structure.every((node) => node.version_id === versions.fr.id)).toBe(true);
+    await expect(text(page)).toHaveAttribute("lang", "fr");
+    expect(fetched).toEqual([data, `${data}?version=${versions.fr.id}`]);
+
+    // A text already read is not fetched again.
+    await languages(page).getByRole("link", { name: "Ikinyarwanda" }).click();
+    await expect(text(page)).toHaveAttribute("lang", "rw");
+    await expect(page).toHaveURL(/\?lang=rw$/);
+    expect(await text(page).evaluate((element) => element.textContent)).toBe(versions.rw.canonical_text);
+    expect(fetched).toHaveLength(2);
+
+    // A link that names a language asks for that one alone.
+    await page.goto(LAW + "?lang=fr");
+    await expect(text(page)).toHaveAttribute("lang", "fr");
+    expect(fetched.slice(2)).toEqual([data + "?language=fr"]);
+    // A language the record does not have, or something that is no language, opens the record's own.
+    for (const odd of ["pt", "a%20b"]) {
+      await page.goto(LAW + "?lang=" + odd);
+      await expect(text(page)).toHaveAttribute("lang", "rw");
+    }
+  });
+
+  test("a text that cannot be fetched leaves the one being read, and says so", async ({ page }) => {
+    const versions = await served(page, LAW);
+    await page.goto(LAW);
+    await expect(text(page)).toHaveAttribute("lang", "rw");
+    let refuse = true;
+    await page.route(/\/text\?version=/, (route) => (refuse ? route.abort() : route.continue()));
+    const french = languages(page).getByRole("link", { name: "Français" });
+    await french.click();
+    await expect(languages(page).getByRole("alert")).toHaveText("That text could not be loaded. Please try again.");
+    await expect(languages(page).locator("[aria-current]")).toHaveText("Ikinyarwanda");
+    expect(await text(page).evaluate((element) => element.textContent)).toBe(versions.rw.canonical_text);
+    await expect(page).toHaveURL(new RegExp(LAW + "$"));
+
+    refuse = false;
+    await french.click();
+    await expect(text(page)).toHaveAttribute("lang", "fr");
+    await expect(languages(page).getByRole("alert")).toHaveCount(0);
+    await expect(page).toHaveURL(/\?lang=fr$/);
   });
 
   test("sets chapters, divisions and articles as headings and the rest as paragraphs", async ({ page }) => {

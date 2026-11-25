@@ -42,12 +42,14 @@ from schema.public import (
     JurisdictionView,
     LanguageRuleView,
     LinkedAct,
+    ListedText,
     MembershipBasis,
     MembershipList,
     MembershipView,
     NodeViewRecord,
     ProvisionLookup,
     ProvisionMatch,
+    ReaderPage,
     RelatedSource,
     RightsHistory,
     RightsRevision,
@@ -324,6 +326,29 @@ def select_versions(versions: list, as_of=None, language=None) -> tuple[VersionS
     return selection, alternatives
 
 
+def reader_text(versions: list, record_language=None, version_id=None, language=None):
+    """The text the website's record page opens among a record's public ones: the one a link asks for
+    by ID, else the latest in the language it asks for, else in the record's own language, else in the
+    first language listed. Within a language, the latest text that no later one replaces. A choice of
+    what to show first, never a statement of which text is in force: the page lists the others."""
+    if not versions:
+        return None
+    for version in versions:
+        if version.id == version_id:
+            return version
+    replaced = {v.prior_version_id for v in versions if v.prior_version_id}
+
+    def latest(wanted):
+        texts = [v for v in versions if wanted and v.language.casefold() == wanted.casefold()]
+        best = None
+        for version in [v for v in texts if v.id not in replaced] or texts:
+            if best is None or (version.effective_from or date.min) >= (best.effective_from or date.min):
+                best = version
+        return best
+
+    return latest(language) or latest(record_language) or latest(versions[0].language) or versions[0]
+
+
 # The website's filters (MAC-01): each is a source field, except access, which follows the rights
 # decision. Values are counted over at most the pilot's bound of examined sources.
 FACETS = ("jurisdiction", "type", "language", "status", "year", "access")
@@ -578,6 +603,29 @@ class LegacyCatalogue:
             if owner != source.id or not edition or (language is not None and language != edition):
                 raise InvalidSearch("That expression_id is not an edition of this record")
             language = edition
+        versions = self._texts(source, rights)
+        selection = None
+        if as_of is not None or language is not None:
+            selection, versions = select_versions(versions, as_of, language)
+        return self._version_page(source, rights, versions, selection, editions)
+
+    def reading(self, source_id, *, version_id=None, language=None) -> ReaderPage:
+        """One public text of a source with its structure, for the website's record page, which shows
+        one text at a time: the one ``reader_text`` picks. ``texts`` lists every public text of the
+        record without its words, in the order they are kept, for the page's language switch."""
+        source, rights = self._require(source_id)
+        versions = self._texts(source, rights)
+        chosen = reader_text(versions, source.language, version_id, language)
+        page = self._version_page(source, rights, [chosen] if chosen else [], None, False)
+        listed = tuple(
+            ListedText(
+                id=v.id, language=v.language, effective_from=v.effective_from, retrieved_at=v.retrieved_at
+            )
+            for v in versions
+        )
+        return ReaderPage(**{name: getattr(page, name) for name in VersionPage.model_fields}, texts=listed)
+
+    def _texts(self, source, rights) -> list:
         versions = []
         size = 0
         for version in self._approved(source, rights):
@@ -585,9 +633,9 @@ class LegacyCatalogue:
             if len(versions) == MAX_UNPAGED_ROWS or size > MAX_BUFFER_BYTES:
                 raise ResultTooLarge("Pilot unpaged text result exceeds bound")
             versions.append(version)
-        selection = None
-        if as_of is not None or language is not None:
-            selection, versions = select_versions(versions, as_of, language)
+        return versions
+
+    def _version_page(self, source, rights, versions, selection, editions) -> VersionPage:
         nodes = tuple(
             NodeViewRecord.model_validate(row)
             for row in self.repository.rows(

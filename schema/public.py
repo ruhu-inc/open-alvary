@@ -413,6 +413,22 @@ class VersionPage(WireModel):
     selection: VersionSelection | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
+class ListedText(WireModel):
+    """A public text of a record without its words: enough to name it in a list of the record's texts."""
+
+    id: ID
+    language: ID
+    effective_from: date | None
+    retrieved_at: AwareDatetime
+
+
+class ReaderPage(VersionPage):
+    """The website's record page (MAC-01), which shows one text at a time: ``items`` holds that one
+    text, or nothing when the record has no public text, and ``texts`` lists every public text."""
+
+    texts: tuple[ListedText, ...]
+
+
 class RightsView(WireModel):
     record: RightsViewRecord
     decision: DecisionView
