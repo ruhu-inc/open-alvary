@@ -163,13 +163,13 @@ def test_a_public_text_too_large_for_the_record_page_is_said_beside_its_document
     # Published like any other: only the text's line says the page cannot show it.
     assert found["state"] == "public" and found["words"] == "Public since 2026-10-26."
     assert found["text"] == (
-        f"Text public since 2026-10-26. Too large to show on the record page ({measured}): "
+        f"Text public since 2026-10-26. Too large for the record page ({measured}): "
         "the page links the official copy instead."
     )
     assert publishing.short("approved", large, texts) == "public"
     # It is said too where the text decision has since lapsed, and of no text that fits the page.
     lapsed = publishing.standing(act, state(), large, DECIDED)["text"]
-    assert lapsed.startswith("Text public since 2026-10-26. Too large to show on the record page (")
+    assert lapsed.startswith("Text public since 2026-10-26. Too large for the record page (")
     assert lapsed.endswith("No other text goes public: No text decision for rw.")
     fits = publishing.standing(act, state(), row(text="public", text_since=NOW, reason=""), texts)
     assert fits["text"] == "Text public since 2026-10-26."
@@ -219,7 +219,7 @@ for (const [name, countries] of Object.entries(runs)) out[name] = sandbox.runWor
 console.log(JSON.stringify(out));
 """
     )
-    links = "too large to show on the record page, which links the official copy instead"
+    links = "too large for the record page, which links the official copy instead"
     assert said["one"] == (
         f"NG: 2 documents' details public, 1 text published, 1 public text {links}: ng-rules-2013 (en) ({why})"
     )

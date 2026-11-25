@@ -168,7 +168,7 @@ def _too_large(status: dict) -> str:
     if not reason.startswith(record_page.TOO_LARGE):
         return ""
     measured = reason.removeprefix(record_page.TOO_LARGE).lstrip(": ")
-    return f" Too large to show on the record page ({measured}): the page links the official copy instead."
+    return f" Too large for the record page ({measured}): the page links the official copy instead."
 
 
 def short(row_approval: str | None, status: dict | None, decided: dict) -> str | None:

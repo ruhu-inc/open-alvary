@@ -3605,7 +3605,7 @@ function runWords(run) {
     if (t.superseded) down.push(`${n(t.superseded, "text", "texts")} replaced by a correction`);
     // Public texts the website's record page cannot show (operations.record_page): published, and named here.
     const large = Object.entries(country.texts_too_large || {});
-    const tooLarge = large.length ? [`${n(t.too_large_for_record_page || large.length, "public text", "public texts")} too large to show on the record page, which links the official copy instead: ${large.map(([text, why]) => `${text} (${why})`).join("; ")}`] : [];
+    const tooLarge = large.length ? [`${n(t.too_large_for_record_page || large.length, "public text", "public texts")} too large for the record page, which links the official copy instead: ${large.map(([text, why]) => `${text} (${why})`).join("; ")}`] : [];
     if (country.blocked) { parts.push(`${code.toUpperCase()}: nothing new published (no country decision)${down.length + tooLarge.length ? `; ${[...down, ...tooLarge].join(", ")}` : ""}`); continue; }
     const bits = [`${n((r.published || 0) + (r.updated || 0), "document's details", "documents' details")} public`, ...down];
     const skipped = Object.entries(country.records_skipped || {});
