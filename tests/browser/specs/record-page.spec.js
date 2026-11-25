@@ -403,3 +403,20 @@ test.describe("a published text with no structure", () => {
     await expect(page.locator(".pub-text")).toHaveCount(0);
   });
 });
+
+test.describe("a record with nothing to read", () => {
+  test("says the status of a record with no public text, and that there is no record at an address that has none", async ({ page }) => {
+    const listed = await (await page.request.get("/site/v1/sources?access=metadata")).json();
+    const answer = await (await page.request.get(`/site/v1/sources/${listed.items[0].id}/text`)).json();
+    expect([answer.schema, answer.text, answer.missed]).toEqual(["reader-1", null, null]);
+    // Asked for a language too: there is no text to show another of, so no line.
+    await page.goto(`/sources/${listed.items[0].id}?lang=fr`);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await expect(page.locator(".pub-reader, .pub-problem, .pub-missed")).toHaveCount(0);
+    await expect(page.locator(".record-main")).toContainText(/text/i);
+
+    await page.goto("/sources/no-such-record");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("There is no record at this address.");
+    await expect(page.locator(".pub-reader, .pub-problem")).toHaveCount(0);
+  });
+});
