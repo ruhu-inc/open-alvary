@@ -187,8 +187,8 @@
           </div>
         </div>
 
-        <form id="composer-form" class="lc-composer" data-mode="quote" novalidate>
-          <div class="lc-field lc-citation-field" id="citation-field">
+        <form id="composer-form" class="lc-composer" data-mode="ask" novalidate>
+          <div class="lc-field lc-citation-field" id="citation-field" hidden>
             <label for="citation-input">Law and section</label>
             <input
               id="citation-input"
@@ -207,13 +207,13 @@
           </div>
 
           <div class="lc-field lc-message-field">
-            <label for="composer-input" id="composer-label">Quoted words</label>
+            <label for="composer-input" id="composer-label" class="sr-only">Your question</label>
             <textarea
               id="composer-input"
               name="message"
               class="lc-textarea lc-composer-textarea"
               rows="2"
-              placeholder="Paste the exact words from the section"
+              placeholder="Ask what a published law says, or type / for commands"
               aria-invalid="false"
               data-error="composer-error"
             ></textarea>
@@ -223,13 +223,13 @@
 
           <div class="lc-composer-bar">
             <div class="lc-mode" role="group" aria-label="What to send">
-              <button type="button" class="lc-mode-btn" id="mode-quote" aria-pressed="true" aria-label="Check a quote"><span class="lc-long">Check a quote</span><span class="lc-short">Quote</span></button>
-              <button type="button" class="lc-mode-btn" id="mode-ask" aria-pressed="false">Ask AI</button>
+              <button type="button" class="lc-mode-btn" id="mode-ask" aria-pressed="true">Ask AI</button>
+              <button type="button" class="lc-mode-btn" id="mode-quote" aria-pressed="false" aria-label="Check a quote"><span class="lc-long">Check a quote</span><span class="lc-short">Quote</span></button>
             </div>
             <button type="button" class="lc-attach-btn" id="attach-proof">Verify a saved proof</button>
             <input id="proof-file" type="file" accept=".json,application/json" class="sr-only" tabindex="-1" aria-hidden="true" />
-            <span class="lc-composer-note" id="composer-note">No AI is used for this check.</span>
-            <button type="submit" class="lc-btn-primary" id="composer-send">Check quote</button>
+            <span class="lc-composer-note" id="composer-note">Asking a question needs your own AI key.</span>
+            <button type="submit" class="lc-btn-primary" id="composer-send">Send</button>
           </div>
         </form>
 

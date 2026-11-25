@@ -399,7 +399,7 @@ class LawCheckController {
     this.directCallCount = 0;
     this.activeAgentTurn = null;
     this.pendingAgentWork = [];
-    this.mode = "quote";
+    this.mode = "ask";
     this.modeChosen = false;
     this.hasProviderKey = false;
     this.providerName = "";
@@ -578,8 +578,8 @@ class LawCheckController {
     } else if (hash === "check" || hash === "recheck" || hash === "verify") {
       this._setMode("quote", { updateHash: false });
     } else {
-      // No address given: checking a quote, until a saved key says the visitor asks questions.
-      this._setMode("quote", { updateHash: false, chosen: false });
+      // No address given: Ask AI comes first (owner, 2026-11-25); Check a quote is one click away.
+      this._setMode("ask", { updateHash: false, chosen: false });
     }
   }
 

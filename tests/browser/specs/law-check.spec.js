@@ -28,6 +28,9 @@ const messageBox = (page) => page.locator("#composer-input");
 const send = (page) => page.locator("#composer-send");
 
 async function checkQuote(page, quote, citation = CITATION) {
+  // The page opens on Ask AI (owner, 2026-11-25), so a quote is checked after choosing Check a quote.
+  const quoteMode = page.locator("#mode-quote");
+  if ((await quoteMode.getAttribute("aria-pressed")) !== "true") await quoteMode.click();
   await messageBox(page).click();
   await page.locator("#citation-input").fill(citation);
   await messageBox(page).fill(quote);
@@ -91,7 +94,7 @@ test.describe("checking a quote, with no AI and no key", () => {
   });
 
   test("an empty send says what is missing and moves the focus there", async ({ page }) => {
-    await page.goto("/agents/");
+    await page.goto("/agents/#check");
     await send(page).click();
     await expect(page.locator("#citation-error")).toContainText("Enter the law and section");
     await expect(page.locator("#citation-input")).toBeFocused();
@@ -127,6 +130,23 @@ test.describe("the result card", () => {
 });
 
 test.describe("the composer", () => {
+  test("with no address the page opens on Ask AI, the first of the two modes @smoke", async ({ page }) => {
+    await page.goto("/agents/");
+    const modes = page.locator(".lc-mode .lc-mode-btn");
+    await expect(modes.nth(0)).toHaveAttribute("id", "mode-ask");
+    await expect(modes.nth(1)).toHaveAttribute("id", "mode-quote");
+    await expect(page.locator("#mode-ask")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator("#mode-quote")).toHaveAttribute("aria-pressed", "false");
+    await expect(page.locator("#citation-field")).toBeHidden();
+    await expect(send(page)).toHaveText("Send");
+    await expect(page.locator("#composer-note")).toHaveText("Asking a question needs your own AI key.");
+
+    await page.locator("#mode-quote").click();
+    await expect(page.locator("#citation-field")).toBeVisible();
+    await expect(send(page)).toHaveText("Check quote");
+    await expect(page).toHaveURL(/#check$/);
+  });
+
   test("the slash menu is run from the keyboard and moves nothing", async ({ page }) => {
     await page.goto("/agents/");
     const form = page.locator("#composer-form");
