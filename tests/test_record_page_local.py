@@ -269,3 +269,36 @@ def test_every_address_is_the_built_site_and_a_missing_build_says_so(tmp_path):
     assert client.get("/assets/main.js").text == "// built"
     # A path that climbs out of the build is the page, never another file.
     assert "site" in client.get("/assets/%2e%2e/%2e%2e/pyproject.toml").text
+
+
+@pytest.mark.parametrize(
+    "blocked, status, code",
+    [(("ip:a",), 429, "rate_limited"), (("global:bytes",), 503, "capacity_exhausted")],
+)
+def test_a_byte_budget_that_is_used_up_refuses_with_a_code_and_counts_no_text(
+    tmp_path, monkeypatch, blocked, status, code
+):
+    from rights.bytes import Reservation
+    from tests.test_emission import SCOPES
+
+    class Spent:
+        def reserve(self, admission_id, nbytes, scopes, lease):
+            return Reservation(False, blocked=blocked, retry_after=9)
+
+    def charged(payload, recheck, **more):
+        budget = {"ledger": Spent(), "scopes": SCOPES, "lease_seconds": 60, "charged": True}
+        return CheckedResponse(payload, recheck, **{**more, **budget})
+
+    from api.emission import CheckedResponse
+
+    traffic = Counted()
+    monkeypatch.setattr(site, "CheckedResponse", charged)
+    client = TestClient(
+        site.create_site_app(record_page_local.build_store(tmp_path), tmp_path, traffic=traffic)
+    )
+    refused = client.get(f"/sources/{record_page_local.LAW_ID}/text")
+    assert refused.status_code == status and refused.headers["Retry-After"] == "9"
+    assert refused.headers["content-type"].startswith("application/problem+json")
+    body = refused.json()
+    assert body["code"] == code and body["retryable"] is True and body["title"] != "Request refused"
+    assert "canonical_text" not in refused.text and traffic.read == []
