@@ -70,6 +70,12 @@ TITLES = {
 }
 
 
+def text_payload(answer: dict) -> bytes:
+    """A ``reader-1`` answer as the text route sends it: the bytes MAX_TEXT_BYTES bounds. Publishing
+    measures a text with this too (operations.record_page), so what it reports is what is sent here."""
+    return json.dumps(answer, ensure_ascii=False, separators=(",", ":")).encode()
+
+
 class SiteProblem(Exception):
     def __init__(self, status: int, code: str, detail: str, retry_after: int | None = None):
         super().__init__(detail)
@@ -389,7 +395,7 @@ def create_site_app(
                 raise SiteProblem(400, "invalid_input", f"{name} is not a valid value")
         with catalogue() as service:
             answer = service.reading(source_id, version_id=asked["version"], language=asked["language"])
-        payload = json.dumps(answer, ensure_ascii=False, separators=(",", ":")).encode()
+        payload = text_payload(answer)
         shown = answer["text"]
         return _text(request, source_id, payload, (shown["id"], shown["content_hash"]) if shown else None)
 
