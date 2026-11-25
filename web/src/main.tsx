@@ -45,6 +45,7 @@ import {
   type Source,
 } from "./site";
 import { RootBoundary } from "./safe";
+import { PublishedText, TextContents, TextLanguages, useReading, type PublishedVersions } from "./published";
 import { LiveStatsBlock } from "./livestats";
 
 // The documentation loads only when a /docs page is opened.
@@ -765,20 +766,14 @@ function RecordTitle({ source: s }: { source: Source }) {
 }
 function Reader({ id }: { id: string }) {
   const source = useData<Source>("/sources/" + encodeURIComponent(id));
-  const versions = useData<{
-    items: {
-      id: string;
-      canonical_text: string;
-      content_hash: string;
-      retrieved_at: string;
-    }[];
-    notice: string;
-  }>("/sources/" + encodeURIComponent(id) + "/versions");
+  const versions = useData<PublishedVersions>("/sources/" + encodeURIComponent(id) + "/versions");
   const rights = useData<{
     record: RightsRecord;
     decision: { reasons: string[] };
   }>("/rights/" + encodeURIComponent(id));
   const history = useData<History>("/sources/" + encodeURIComponent(id) + "/relationships");
+  // The text being read: one language at a time, laid out from its structure.
+  const reading = useReading(versions.data, source.data?.language);
   // Until the record is shown, the tab does not keep the previous page's title.
   useEffect(() => {
     if (!source.data && source.status !== 404)
@@ -815,12 +810,14 @@ function Reader({ id }: { id: string }) {
       <CurrentLaw history={history.data} />
       <RecordCards source={s} history={history.data} />
       <RecordActions source={s} />
-      <div className="reader-grid record-body">
+      <div className={"reader-grid record-body" + (reading?.laid?.contents.length ? " has-contents" : "")}>
+        {reading ? <TextContents reading={reading} /> : null}
         <div className="record-main">
-          {versions.data && versions.data.items.length ? (
-            <article className="reader">
+          {reading ? (
+            <article className="reader pub-reader" aria-labelledby="source-text">
               <div className="reader-bar">
-                <FileText size={18} /> Source text <span className="badge green">Open full text</span>
+                <FileText size={18} aria-hidden="true" /> <h2 id="source-text">Source text</h2>{" "}
+                <span className="badge green">Open full text</span>
               </div>
               <p className="copy-note">
                 A copy of the official text, checked against the official copy. Open Alvary is not its
@@ -830,13 +827,9 @@ function Reader({ id }: { id: string }) {
                 </a>{" "}
                 prevails where the two differ.
               </p>
-              {versions.data.items.map((v) => (
-                <section key={v.id}>
-                  <h3>{v.id}</h3>
-                  <pre className="legal-text">{v.canonical_text}</pre>
-                  <p className="hash">SHA-256 {v.content_hash}</p>
-                </section>
-              ))}
+              <TextLanguages reading={reading} />
+              <PublishedText reading={reading} />
+              <p className="hash">SHA-256 {reading.version.content_hash}</p>
             </article>
           ) : versions.data ? (
             <TextStatus source={s} />

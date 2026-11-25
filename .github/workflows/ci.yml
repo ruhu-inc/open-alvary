@@ -51,7 +51,9 @@ jobs:
       - run: npm --prefix web ci && npm --prefix web run build
       - name: Law check page, receipt verifier and demo gate (files and pure functions)
         run: node --test tests/test_agents_ui.mjs clients/receipt/receipt.test.mjs demo/law-check-peer/tests/demo.test.mjs
-      - name: Law check in Chromium, Firefox and WebKit, on a local server with a scripted model and no outside call
+      - name: Record page text layout (pure functions)
+        run: node --test tests/test_published_text.mjs
+      - name: Law check and the record page in Chromium, Firefox and WebKit, on local servers with a scripted model and no outside call
         run: |
           npm --prefix tests/browser ci
           cd tests/browser

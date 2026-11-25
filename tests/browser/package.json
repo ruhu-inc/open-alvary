@@ -2,7 +2,7 @@
   "name": "open-alvary-browser-tests",
   "private": true,
   "type": "module",
-  "description": "Browser tests for the Law check page (/agents/). They start scripts/law_check_local.py and need no key and no outside call.",
+  "description": "Browser tests for the Law check page (/agents/) and the record page's text. They start scripts/law_check_local.py and scripts/record_page_local.py (which serves web/dist: build it first) and need no key and no outside call.",
   "scripts": {
     "test": "playwright test",
     "test:chromium": "playwright test --project=chromium"

@@ -3238,6 +3238,153 @@ a.record-card:hover {
     font-size: 24px;
   }
 }
+/* The record page's text (published.tsx): one language at a time, laid out from its structure in
+   the workbench reader's styles (.doc-text, .doc-heading, .doc-contents, .doc-languages), with the
+   Contents beside it. About this record keeps its place at the top of the side column; the Contents
+   sits under it and stays in view while the text is read. */
+.record-body.has-contents {
+  grid-template-areas:
+    "main about"
+    "main contents";
+  grid-template-rows: auto 1fr;
+  row-gap: 20px;
+}
+.record-body.has-contents > .record-main {
+  grid-area: main;
+}
+.record-body.has-contents > aside {
+  grid-area: about;
+}
+.record-body > .pub-contents {
+  grid-area: contents;
+  display: block;
+  position: sticky;
+  top: 16px;
+  align-self: start;
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  margin: 0;
+  min-width: 0;
+  background: #fff;
+  border-radius: 14px;
+  overflow-wrap: break-word;
+}
+.pub-contents .panel-title {
+  margin: 0;
+}
+.pub-contents .panel-title button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+}
+.pub-contents .panel-title button[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+.pub-contents ol {
+  margin-top: 14px;
+}
+.pub-contents a {
+  display: block;
+  padding: 2px 0;
+}
+/* "Source text" is the text's heading, and looks as the bar's label always has. */
+.pub-reader .reader-bar h2 {
+  margin: 0;
+  font: inherit;
+  letter-spacing: 0;
+}
+.pub-reader .pub-languages {
+  margin: 0;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--line);
+}
+.pub-languages a[aria-current] {
+  box-shadow: none;
+}
+.pub-languages a:hover {
+  border-color: currentColor;
+}
+/* The site's paragraphs are small and grey; the text is read in its own size and colour. */
+.pub-text {
+  padding-top: 12px;
+}
+.pub-text p,
+.pub-text td {
+  font-size: inherit;
+  line-height: inherit;
+  color: inherit;
+}
+.pub-text .doc-heading:first-child {
+  margin-top: 18px;
+}
+/* A section's heading is its margin note, printed above "1. This Act …". */
+.pub-section-heading {
+  font: 600 17px/1.45 "DM Sans", sans-serif;
+  margin: 26px 0 8px;
+  padding-left: var(--num);
+}
+.pub-text [tabindex="-1"]:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 4px;
+  border-radius: 2px;
+}
+/* The law's own table of contents, where it is printed: set quieter, and not listed a second time. */
+.pub-printed-contents {
+  margin: 18px 0 26px;
+  padding: 2px 0 2px 16px;
+  border-left: 3px solid var(--line);
+  font-size: 15px;
+  line-height: 1.55;
+  color: #4a4a4a;
+}
+.pub-printed-contents .doc-heading {
+  margin: 8px 0 10px;
+  text-align: start;
+  color: inherit;
+}
+.pub-printed-contents .doc-p {
+  margin-bottom: 6px;
+  padding-left: 0;
+}
+@media (max-width: 800px) {
+  /* The Contents comes before the text, closed until asked for. */
+  .record-body.has-contents {
+    grid-template-areas:
+      "contents"
+      "main"
+      "about";
+    grid-template-rows: auto;
+    row-gap: 20px;
+  }
+  .record-body.has-contents > aside {
+    margin-top: 16px;
+  }
+  .record-body > .pub-contents {
+    position: static;
+    max-height: none;
+    padding: 6px 20px;
+  }
+  .pub-contents ol {
+    margin: 4px 0 14px;
+  }
+  .pub-contents a {
+    padding: 6px 0;
+  }
+}
+@media print {
+  .pub-contents,
+  .pub-languages {
+    display: none !important;
+  }
+}
 /* With "Sign in" and Law check beside six links, the header folds into the menu below 1180px.
    Only the header's links stay on one line: other navigation, such as a document's contents, wraps. */
 header nav a {
