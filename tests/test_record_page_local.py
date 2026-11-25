@@ -108,6 +108,37 @@ def test_a_law_too_large_in_all_its_languages_together_still_opens_in_each(tmp_p
     ]
 
 
+def test_a_text_is_counted_as_read_once_for_each_time_its_record_is_opened(tmp_path):
+    class Counted:
+        def __init__(self):
+            self.read = []
+
+        def text_read(self, scope, source_id):
+            self.read.append(source_id)
+
+        def record_opened(self, *args):
+            pass
+
+    traffic = Counted()
+    store = record_page_local.build_store(tmp_path)
+    client = TestClient(site.create_site_app(store, tmp_path, traffic=traffic))
+    law = f"/sources/{record_page_local.LAW_ID}"
+    french = client.get(law + "/text?language=fr").json()["items"][0]["id"]
+    assert traffic.read == [record_page_local.LAW_ID]  # opened from a link that names a language
+    # The switch asks for another text of the record on screen, and says so: not read again.
+    switched = client.get(f"{law}/text?version={french}", headers={"X-Text-Switch": "1"})
+    assert switched.status_code == 200 and switched.json()["items"][0]["language"] == "fr"
+    assert traffic.read == [record_page_local.LAW_ID]
+    # Opened again, or all its texts asked for at once: read again.
+    assert client.get(law + "/text").status_code == 200
+    assert client.get(law + "/versions").status_code == 200
+    assert traffic.read == [record_page_local.LAW_ID] * 3
+    # A record with no public text has none to read.
+    closed = client.get("/sources?access=metadata").json()["items"][0]["id"]
+    assert client.get(f"/sources/{closed}/text").json()["items"] == []
+    assert len(traffic.read) == 3
+
+
 def test_a_record_with_no_public_text_has_an_empty_reading(tmp_path):
     client = _client(tmp_path, tmp_path / "no-build")
     records = client.get("/site/v1/sources?access=metadata").json()["items"]

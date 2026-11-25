@@ -323,3 +323,50 @@ describe("a version's structure", () => {
     assert.equal(nodesFor(version, with_({ source_hash: "h" })).length, nodes.length);
   });
 });
+
+describe("a paragraph a reading took for a heading", () => {
+  // As a machine reading left a treaty: each numbered paragraph read as a heading, so the structure
+  // rules took its whole sentence for the heading of a division or an article.
+  const sentence =
+    "The United Nations, its property and assets wherever located and by whomsoever held, shall enjoy " +
+    "immunity from every form of legal process except insofar as in any particular case it has expressly " +
+    "waived its immunity. It is, however, understood that no waiver of immunity shall extend to any " +
+    "measure of execution.";
+  const long = "É".repeat(190);
+  const { text, nodes } = fixture(
+    [
+      "CONVENTION ON AN INVENTED MATTER",
+      "ARTICLE II: PROPERTY, FUNDS AND ASSETS",
+      "SECTION 2. " + sentence,
+      "Article 3 " + sentence.slice(0, 215),
+      "Article 4 " + long,
+      "Its words.",
+    ],
+    [
+      ["document", "document", 0, 5],
+      ["chapter", "chap_ii", 1, 5, { parent: "document", label: "ARTICLE II:", heading: "PROPERTY, FUNDS AND ASSETS" }],
+      ["division", "chap_ii__dvs_2", 2, 2, { parent: "chap_ii", label: "SECTION 2.", heading: sentence }],
+      ["article", "art_3", 3, 3, { parent: "chap_ii", label: "Article 3", heading: sentence.slice(0, 215) }],
+      ["article", "art_4", 4, 5, { parent: "chap_ii", label: "Article 4", heading: long }],
+    ],
+  );
+  const laid = layoutText(text, nodes);
+
+  it("is set as text, keeps its anchor and is listed by its number alone", () => {
+    assert.equal(joined(laid), text);
+    const [, chapter, division, article, real] = blocksOf(laid);
+    assert.equal(chapter.type, "heading");
+    // Over 300 characters for a part, over 200 for a provision: not a heading.
+    assert.deepEqual([division.type, division.id], ["paragraph", "chapter-ii-division-2"]);
+    assert.deepEqual([article.type, article.id, article.lead], ["paragraph", "article-3", 0]);
+    assert.deepEqual(
+      laid.contents.map((entry) => entry.label),
+      ["ARTICLE II: PROPERTY, FUNDS AND ASSETS", "SECTION 2.", "Article 3", "Article 4 " + long],
+    );
+  });
+
+  it("leaves a long heading that is one: the longest real ones run to 199 characters", () => {
+    const real = blocksOf(laid)[4];
+    assert.deepEqual([real.type, real.id, real.text.length], ["heading", "article-4", 200]);
+  });
+});

@@ -235,6 +235,15 @@ export function foldsAway(printedBlocks: number, entries: number): boolean {
   return printedBlocks > 12 && entries > 0 && printedBlocks <= 2 * entries + 10;
 }
 
+// A heading is short. The longest real ones among the local Rwandan and Nigerian readings run to 199
+// characters for an article or section and 253 for a chapter; past these limits the "heading" is a
+// whole paragraph that a reading took for one ("SECTION 2. The United Nations, its property and
+// assets wherever located …"), and capitals across ten lines are harder to read than the text.
+function headingLimit(kind: string): number {
+  if (PROVISIONS.has(kind)) return 200;
+  return PARTS.has(kind) ? 300 : Infinity;
+}
+
 // The text's pieces in reading order and its contents. `nodes` are one version's (nodesFor).
 export function layoutText(text: string, nodes: TextNode[]): Laid {
   const { parts, blocks } = cut(text);
@@ -317,10 +326,16 @@ export function layoutText(text: string, nodes: TextNode[]): Laid {
     // The heading: the first node opening at this block's first byte whose heading it is.
     let headed: { node: TextNode; how: "both" | "label" | "heading" } | null =
       null;
+    // A paragraph a reading took for a heading: set as the text it is, listed by its number.
+    const overlong = new Set<TextNode>();
     for (const { node, exact } of starts) {
       if (!exact || NEVER_HEADED.has(node.kind)) continue;
       if (node.kind !== "contents" && printed(node)) continue;
       const how = headingOf(block.text, node);
+      if (how && squeeze(block.text).length > headingLimit(node.kind)) {
+        overlong.add(node);
+        continue;
+      }
       if (how) {
         headed = { node, how };
         break;
@@ -333,7 +348,10 @@ export function layoutText(text: string, nodes: TextNode[]): Laid {
     for (const node of linked) {
       const entry = {
         id: id!,
-        label: [squeeze(node.label), squeeze(node.heading)]
+        label: (overlong.has(node)
+          ? [squeeze(node.label)]
+          : [squeeze(node.label), squeeze(node.heading)]
+        )
           .filter(Boolean)
           .join(" "),
         part: PARTS.has(node.kind),

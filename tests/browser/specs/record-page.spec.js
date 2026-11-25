@@ -70,9 +70,13 @@ test.describe("a published law in three languages", () => {
   test("is fetched one text at a time: the switch fetches the next, once @smoke", async ({ page }) => {
     const versions = await served(page, LAW);
     const fetched = [];
+    const switches = [];
     page.on("request", (request) => {
       const url = new URL(request.url());
-      if (/\/site\/v1\/sources\/[^/]+\/(text|versions)$/.test(url.pathname)) fetched.push(url.pathname + url.search);
+      if (!/\/site\/v1\/sources\/[^/]+\/(text|versions)$/.test(url.pathname)) return;
+      fetched.push(url.pathname + url.search);
+      // The page says when it asks for another text of the record on screen: counted as read once.
+      if (request.headers()["x-text-switch"] === "1") switches.push(url.search);
     });
     const data = "/site/v1" + LAW + "/text";
     await page.goto(LAW);
@@ -101,6 +105,7 @@ test.describe("a published law in three languages", () => {
     await page.goto(LAW + "?lang=fr");
     await expect(text(page)).toHaveAttribute("lang", "fr");
     expect(fetched.slice(2)).toEqual([data + "?language=fr"]);
+    expect(switches).toEqual([`?version=${versions.fr.id}`]);
     // A language the record does not have, or something that is no language, opens the record's own.
     for (const odd of ["pt", "a%20b"]) {
       await page.goto(LAW + "?lang=" + odd);

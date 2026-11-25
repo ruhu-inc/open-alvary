@@ -132,7 +132,11 @@ export function useReading(source: string): {
         encodeURIComponent(source) +
         "/text" +
         (query.size ? "?" + query.toString() : ""),
-      { signal: controller.signal },
+      {
+        signal: controller.signal,
+        // Another text of the record being shown: the record's text is counted as read once.
+        headers: version ? { "X-Text-Switch": "1" } : undefined,
+      },
     )
       .then((answer) => {
         if (!answer.ok) throw new Error(`Request failed (${answer.status})`);

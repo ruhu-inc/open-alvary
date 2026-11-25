@@ -314,7 +314,10 @@ def test_a_search_through_the_service_counts_and_its_words_reach_no_table(
             client.get(f"/site/v1/sources/{WORK}", headers={**BROWSER, "x-search-result": "1"}).status_code
             == 200
         )
-        assert client.get(f"/site/v1/sources/{WORK}/versions", headers=BROWSER).status_code == 200
+        text = f"/site/v1/sources/{WORK}/text"
+        assert client.get(text, headers=BROWSER).status_code == 200
+        # Another language of the record being shown: its text was read once, not twice.
+        assert client.get(text + "?language=en", headers={**BROWSER, "x-text-switch": "1"}).status_code == 200
         assert client.get("/site/v1/sources/no-such-record", headers=BROWSER).status_code == 404
         document = {"user-agent": CHROME, "sec-fetch-dest": "document", "x-client-country": "RW"}
         page = {**document, "referer": f"https://open.example.test/browse?q={MARKER}"}
