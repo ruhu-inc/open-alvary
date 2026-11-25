@@ -297,6 +297,13 @@ NodeKind = Literal[
 ]
 
 
+def between_characters(raw: bytes, offset: int) -> bool:
+    """Whether an offset into UTF-8 text falls between two characters: at the end of the text, or not on
+    a continuation byte. The same answer as decoding the text up to the offset, without decoding: a text
+    of thousands of nodes was decoded thousands of times to learn it."""
+    return offset == len(raw) or raw[offset] & 0xC0 != 0x80
+
+
 CellKey = Annotated[str, StringConstraints(pattern=r"^(0|[1-9][0-9]*),(0|[1-9][0-9]*)$")]
 
 
@@ -438,8 +445,8 @@ class Corpus(Model):
             raw = encoded.setdefault(v.id, v.canonical_text.encode())
             if n.end_byte > len(raw):
                 raise ValueError("offset outside canonical text")
-            raw[: n.start_byte].decode("utf-8")
-            raw[: n.end_byte].decode("utf-8")
+            if not (between_characters(raw, n.start_byte) and between_characters(raw, n.end_byte)):
+                raise ValueError("offset inside a character")
             if n.span_hash and sha256(raw[n.start_byte : n.end_byte]).hexdigest() != n.span_hash:
                 raise ValueError("span hash mismatch")
             if n.target_node_id and require("structure", n.target_node_id).version_id != n.version_id:

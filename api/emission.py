@@ -39,6 +39,8 @@ class CheckedResponse(Response):
         lease_seconds: float | None = None,
         charged: bool = False,
         refusal: Callable[[int, str], Response] | None = None,
+        limited: Callable[[int, str, int], Response] | None = None,
+        on_emit: Callable[[], None] | None = None,
     ):
         if len(payload) > MAX_SINGLE_RESPONSE_BYTES:
             raise ValueError("Response exceeds the bounded single-response profile")
@@ -50,6 +52,10 @@ class CheckedResponse(Response):
         self.lease_seconds = lease_seconds
         self.charged = charged
         self.refusal = refusal  # the interface's own refusal shape (REST v1: a problem document)
+        # The interface's own shape for a byte budget that is used up: status, detail, seconds to wait.
+        self.limited = limited
+        # Called once the answer is allowed out and is about to be sent: what counts a text as read.
+        self.on_emit = on_emit
 
     async def _refuse(self, scope, receive, send, status, detail):
         if self.refusal is not None:
@@ -82,6 +88,9 @@ class CheckedResponse(Response):
             if not result.reserved:
                 global_only = all(key.startswith("global:") for key in result.blocked)
                 status, detail = (503, "capacity_exhausted") if global_only else (429, "Byte limit exceeded")
+                if self.limited is not None:
+                    answer = self.limited(status, detail, result.retry_after)
+                    return await answer(scope, receive, send)
                 body = json.dumps({"detail": detail, "retry_after_seconds": result.retry_after}).encode()
                 await send(
                     {
@@ -115,6 +124,12 @@ class CheckedResponse(Response):
                 started = False
             if not started:
                 return await self._refuse(scope, receive, send, 503, "Delivery lease unavailable")
+        if self.on_emit is not None:
+            try:
+                # Off the event loop: a count may write to the database.
+                await to_thread.run_sync(self.on_emit)
+            except Exception:
+                pass  # a count that fails never costs the reader the answer
         await super().__call__(scope, receive, send)
         if reservation is not None:
             # Receipt: the full uncompressed payload was accepted by the upstream transport.

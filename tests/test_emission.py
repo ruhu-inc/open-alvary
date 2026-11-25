@@ -167,3 +167,60 @@ def test_lost_delivery_lease_sends_nothing():
 def test_oversized_buffer_is_refused_at_construction():
     with pytest.raises(ValueError):
         CheckedResponse(b"x" * (10 * 1024 * 1024 + 1), lambda: True)
+
+
+def test_the_hook_runs_once_the_answer_is_allowed_out_and_never_for_a_refusal():
+    def answer(ledger, recheck, **more):
+        calls = []
+        response = CheckedResponse(
+            b'{"text":"x"}',
+            lambda: calls.append("recheck") or recheck,
+            ledger=ledger,
+            scopes=SCOPES,
+            lease_seconds=60,
+            charged=True,
+            on_emit=lambda: calls.append("emit"),
+            **more,
+        )
+        return app_for(response).get("/t"), calls, ledger
+
+    sent, calls, ledger = answer(FakeLedger(), True)
+    assert sent.status_code == 200 and calls == ["recheck", "emit"]
+    assert [c[0] for c in ledger.calls] == ["reserve", "begin", "settle"]  # after the lease, before the bytes
+    for ledger, recheck, status in (
+        (FakeLedger(reserve=False), True, 429),  # the byte budget is used up
+        (FakeLedger(), False, 409),  # the record changed while the answer was prepared
+        (FakeLedger(emit=False), True, 503),  # no delivery lease
+    ):
+        refused, calls, _ = answer(ledger, recheck)
+        assert refused.status_code == status and "emit" not in calls, status
+
+
+def test_a_hook_that_fails_does_not_cost_the_reader_the_answer():
+    def broken():
+        raise RuntimeError("the count could not be written")
+
+    response = CheckedResponse(b'{"text":"x"}', lambda: True, on_emit=broken)
+    assert app_for(response).get("/t").json() == {"text": "x"}
+
+
+def test_an_interface_gives_the_byte_budgets_refusal_its_own_shape():
+    from starlette.responses import JSONResponse
+
+    def limited(status, detail, retry_after):
+        return JSONResponse(
+            {"code": "rate_limited", "was": detail}, status, {"Retry-After": str(retry_after)}
+        )
+
+    response = CheckedResponse(
+        b'{"text":"x"}',
+        lambda: True,
+        ledger=FakeLedger(reserve=False),
+        scopes=SCOPES,
+        lease_seconds=60,
+        charged=True,
+        limited=limited,
+    )
+    result = app_for(response).get("/t")
+    assert result.status_code == 429 and result.headers["Retry-After"] == "9"
+    assert result.json() == {"code": "rate_limited", "was": "Byte limit exceeded"}

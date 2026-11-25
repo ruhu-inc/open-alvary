@@ -346,7 +346,7 @@ def test_it_reads_every_file_of_a_corpus_and_keeps_each_rule_of_corpus_integrity
     exports.integrity must say the same, and then this records the new code."""
     assert set(integrity.KEPT) == set(Corpus.model_fields) == set(integrity.MODELS)
     code = inspect.getsource(Corpus.integrity)
-    assert digest(code) == "68b9d23576a84c55bd7593eea9fbf49f943c4d99590abfe03881d9f911a1f307", (
+    assert digest(code) == "54237ee068e772e204e124f5991b8fa12bdc392c1e4e5625d5f29e1eeebbee4d", (
         "Corpus.integrity changed: make exports.integrity say the same"
     )
 
@@ -375,3 +375,18 @@ def test_a_scratch_space_that_fails_is_no_answer_and_never_a_withdrawal(
     monkeypatch.undo()
     monkeypatch.setattr(verify, "_validated", {})
     assert release_available(path, store)
+
+
+def test_an_offset_is_between_characters_exactly_where_the_text_decodes_up_to_it():
+    from schema.models import between_characters
+
+    # One, two, three and four bytes a character, and a combining mark.
+    for text in ("", "plain", "é — “quoted” 🙂 e\u0301 ⴰ", "\U0001f642" * 3):
+        raw = text.encode()
+        for offset in range(len(raw) + 1):
+            try:
+                raw[:offset].decode("utf-8")
+                decodes = True
+            except UnicodeDecodeError:
+                decodes = False
+            assert between_characters(raw, offset) is decodes, (text, offset)
