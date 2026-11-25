@@ -2,9 +2,11 @@
 public view and what the next run will do; an administrator asks for a run now, after a passkey check;
 the workbench only asks for the run and starts the publish job, never writing the public catalogue."""
 
+import json
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from test_multi_agent_ui import NODE, _harness_preamble, _run_node
 from test_passkeys import ORIGIN
 from test_workbench_operators import browser, with_passkey
 
@@ -148,3 +150,81 @@ def test_where_a_document_stands_is_said_in_words():
     assert publishing.short("approved", None, DECIDED) == "next_run"
     assert publishing.short("out_of_date", row(), DECIDED) == "taken_down_next"
     assert publishing.short(None, None, DECIDED) is None
+
+
+def test_a_public_text_too_large_for_the_record_page_is_said_beside_its_document():
+    from operations import record_page
+
+    act = {"id": "ng-rules-2013", "jurisdiction": "ng"}
+    texts = {**DECIDED, "text": {"until": "2027-10-19", "by": "Owner", "types": ["act"]}}
+    measured = "its answer is up to 2,150,000 bytes; the page reads at most 2,097,152"
+    large = row(text="public", text_since=NOW, reason=f"{record_page.TOO_LARGE}: {measured}")
+    found = publishing.standing(act, state(), large, texts)
+    # Published like any other: only the text's line says the page cannot show it.
+    assert found["state"] == "public" and found["words"] == "Public since 2026-10-26."
+    assert found["text"] == (
+        f"Text public since 2026-10-26. Too large to show on the record page ({measured}): "
+        "the page links the official copy instead."
+    )
+    assert publishing.short("approved", large, texts) == "public"
+    # It is said too where the text decision has since lapsed, and of no text that fits the page.
+    lapsed = publishing.standing(act, state(), large, DECIDED)["text"]
+    assert lapsed.startswith("Text public since 2026-10-26. Too large to show on the record page (")
+    assert lapsed.endswith("No other text goes public: No text decision for rw.")
+    fits = publishing.standing(act, state(), row(text="public", text_since=NOW, reason=""), texts)
+    assert fits["text"] == "Text public since 2026-10-26."
+
+
+@pytest.mark.skipif(NODE is None, reason="node not installed")
+def test_the_runs_table_names_public_texts_too_large_for_the_record_page():
+    why = "its answer is up to 2,150,000 bytes; the page reads at most 2,097,152"
+    nodes = "its structure has 20,001 nodes; one answer holds at most 20,000"
+    runs = {
+        "one": {
+            "ng": {
+                "records": {"published": 2, "updated": 0},
+                "texts": {"published": 1, "too_large_for_record_page": 1},
+                "texts_too_large": {"ng-rules-2013 (en)": why},
+            }
+        },
+        "two": {
+            "ng": {
+                "records": {"published": 0, "updated": 2},
+                "texts": {"published": 0, "too_large_for_record_page": 2},
+                "texts_too_large": {"ng-rules-2013 (en)": why, "ng-code (en)": nodes},
+            }
+        },
+        "blocked": {
+            "ng": {
+                "blocked": "No catalogue decision.",
+                "records": {"taken_down": 0},
+                "texts": {"withdrawn": 0, "superseded": 0, "too_large_for_record_page": 1},
+                "texts_too_large": {"ng-rules-2013 (en)": why},
+            }
+        },
+        "none": {
+            "ng": {
+                "records": {"published": 2, "updated": 0},
+                "texts": {"published": 1, "too_large_for_record_page": 0},
+                "texts_too_large": {},
+            }
+        },
+    }
+    said = _run_node(
+        _harness_preamble()
+        + f"""
+const runs = {json.dumps(runs)};
+const out = {{}};
+for (const [name, countries] of Object.entries(runs)) out[name] = sandbox.runWords({{ summary: {{ countries }} }});
+console.log(JSON.stringify(out));
+"""
+    )
+    links = "too large to show on the record page, which links the official copy instead"
+    assert said["one"] == (
+        f"NG: 2 documents' details public, 1 text published, 1 public text {links}: ng-rules-2013 (en) ({why})"
+    )
+    assert said["two"].endswith(f"2 public texts {links}: ng-rules-2013 (en) ({why}); ng-code (en) ({nodes})")
+    assert said["blocked"] == (
+        f"NG: nothing new published (no country decision); 1 public text {links}: ng-rules-2013 (en) ({why})"
+    )
+    assert said["none"] == "NG: 2 documents' details public, 1 text published"

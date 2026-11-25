@@ -3603,12 +3603,16 @@ function runWords(run) {
     if (r.taken_down) down.push(`${n(r.taken_down, "document", "documents")} taken down`);
     if (t.withdrawn) down.push(`${n(t.withdrawn, "text", "texts")} withdrawn`);
     if (t.superseded) down.push(`${n(t.superseded, "text", "texts")} replaced by a correction`);
-    if (country.blocked) { parts.push(`${code.toUpperCase()}: nothing new published (no country decision)${down.length ? `; ${down.join(", ")}` : ""}`); continue; }
+    // Public texts the website's record page cannot show (operations.record_page): published, and named here.
+    const large = Object.entries(country.texts_too_large || {});
+    const tooLarge = large.length ? [`${n(t.too_large_for_record_page || large.length, "public text", "public texts")} too large to show on the record page, which links the official copy instead: ${large.map(([text, why]) => `${text} (${why})`).join("; ")}`] : [];
+    if (country.blocked) { parts.push(`${code.toUpperCase()}: nothing new published (no country decision)${down.length + tooLarge.length ? `; ${[...down, ...tooLarge].join(", ")}` : ""}`); continue; }
     const bits = [`${n((r.published || 0) + (r.updated || 0), "document's details", "documents' details")} public`, ...down];
     const skipped = Object.entries(country.records_skipped || {});
     if (skipped.length) bits.push(`not published: ${skipped.map(([work, why]) => `${work} (${why})`).join("; ")}`);
     if (t.published) bits.push(`${n(t.published, "text", "texts")} published`);
     if (t.blocked) bits.push("no text decision");
+    bits.push(...tooLarge);
     parts.push(`${code.toUpperCase()}: ${bits.join(", ")}`);
   }
   if (run.summary && run.summary.covered_by) parts.push(`included in run ${run.summary.covered_by}`);

@@ -62,7 +62,7 @@ def test_a_text_is_named_from_the_first_byte_over_the_bound_and_the_site_refuses
         largest.id,
         size,
     )
-    assert found.why == f"its answer is {size:,} bytes; the page reads at most {size - 1:,}"
+    assert found.why == f"its answer is up to {size:,} bytes; the page reads at most {size - 1:,}"
     refused = [client.get(f"/sources/{work}/text", params=asked) for asked in _asks(largest)]
     assert 413 in {answer.status_code for answer in refused}
     # Every other text still opens, and is not named.

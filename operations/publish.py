@@ -27,6 +27,11 @@ Names withheld in a sensitive case take down every text of the work, for a reaso
 its record too while what is public still names someone withheld, its official link and what the change log
 still tells of it included; what else changed waits for a later run.
 
+What the record page cannot show. A text whose answer on the website's record page would be over that
+page's bounds is published all the same (owner, 2026-11-25): the page links the official copy, and the
+keyed API serves the words. Every run, and every dry run, names each such public text with its size
+(too_large_texts, measured by the site's own code in operations.record_page).
+
 When it holds back. A run reads every approval before it writes anything: if it cannot read them it
 publishes nothing, takes nothing down and fails. It does the same on an empty read of the approvals beside
 public records or texts, and on a collection holding none of the approved documents. More take-downs
@@ -54,6 +59,7 @@ import os
 import re
 import unicodedata
 import uuid
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -66,6 +72,7 @@ from api.catalogue import NAME_WITHHELD
 from api.search import normalize_citation
 from api.store import Store, engine_for
 from ingestion import settings
+from operations import record_page
 from rights.policy import PRIVACY_CLEARED
 from rights.policy import decide as rights_decision
 from schema.jurisdictions import catalogue_entry, registry
@@ -1496,11 +1503,37 @@ def refused_take_downs(
     )
 
 
+def too_large_texts(corpus: Corpus, jurisdiction: str, texts: Texts) -> list[dict]:
+    """Each public text of the jurisdiction that the website's record page cannot show
+    (operations.record_page), as the run's report names it: the text, why, and the document whose
+    current approval binds it, where one does. A text read from an earlier official file has none."""
+    documents = {
+        (work, sha): bound.document
+        for (work, _), bounds in texts.binding().items()
+        for bound in bounds
+        for sha in bound.hashes
+    }
+    found = record_page.unshown(corpus, jurisdiction)
+    shared = Counter((unshown.work, unshown.language) for unshown in found)
+    return [
+        {
+            # A record's language names one text, unless an earlier file's text is too large as well.
+            "text": f"{u.work} ({u.language})"
+            + (f", text {u.version}" if shared[u.work, u.language] > 1 else ""),
+            "document": documents.get((u.work, u.content_hash)),
+            "version": u.version,
+            "why": u.why,
+        }
+        for u in found
+    ]
+
+
 def publish_texts(store, jurisdiction: str, texts: Texts, decision: dict, dry_run=False) -> dict:
     """Write each approved text not yet published, with its structure and rights, and take down the
     texts no current approval binds, in one write (the change log records what changed), so a correction
     replaces what it corrects. A text already published with the same bytes and structure is left as it
-    is. Returns what was done."""
+    is. Returns what was done, and which public texts the record page cannot show (too_large_texts):
+    those are published like any other."""
     corpus = store.load()
     sources = {s.id: s for s in corpus.sources}
     rights = {r.source_id: r for r in corpus.rights}
@@ -1563,6 +1596,7 @@ def publish_texts(store, jurisdiction: str, texts: Texts, decision: dict, dry_ru
         version = next(v for v in corpus.versions if v.id == entry["version"])
         if not rights_decision(rights[version.source_id], version).full_text:
             raise Refused(f"{entry['document']}: the rights record would not serve this text")
+    report["too_large_for_record_page"] = too_large_texts(corpus, jurisdiction, texts)
     if not dry_run:
         store.save(corpus, confidential=texts.withheld)
     return report
@@ -1761,7 +1795,8 @@ def publish_country(
     """One country's run, after its take-downs (`taken`): its details, then its texts, each under its
     decision; and where each of its documents stands afterwards, in words a reviewer reads. A record taken
     down, or with a text withdrawn in confidence, in this run is not touched again until a later one, so
-    nothing names it beside a withdrawal that names nothing."""
+    nothing names it beside a withdrawal that names nothing. Whatever the decisions allow, the summary
+    names each public text the record page cannot show (too_large_texts)."""
     jurisdiction = reading.jurisdiction
     rows = {
         i: {
@@ -1810,6 +1845,19 @@ def publish_country(
             for document, work in reading.left.items()
         ]
 
+    def name_too_large(summary: dict, found: list[dict] | None = None) -> dict:
+        """Say on the run, and beside each one's document, which public texts the record page cannot
+        show: found by publishing the texts, or read from the catalogue where no text could be published."""
+        if found is None:
+            found = too_large_texts(public_store.load(), jurisdiction, reading.texts)
+        summary["texts"]["too_large_for_record_page"] = len(found)
+        summary["texts_too_large"] = _reasons({entry["text"]: entry["why"] for entry in found}, most=cap)
+        for entry in found:
+            row = rows.get(entry["document"])
+            if row is not None and not row["reason"]:
+                row["reason"] = f"{record_page.TOO_LARGE}: {entry['why']}"
+        return summary
+
     done = {"taken_down": len(taken["taken_down"])}
     undone = {"withdrawn": len(taken["withdrawn"]), "superseded": len(taken["superseded"])}
     try:
@@ -1822,7 +1870,7 @@ def publish_country(
             row.update(details="public" if still else "blocked", reason=str(refused))
             if row["text"] == "waiting" and not still:
                 row["text"] = "blocked"
-        return {"blocked": str(refused), "records": done, "texts": undone}, settled()
+        return name_too_large({"blocked": str(refused), "records": done, "texts": undone}), settled()
     held_back = set(taken["taken_down"]) | set(taken["in_confidence"])
     approved = [item for item in reading.approved if item.work not in held_back]
     records = publish_records(public_store, jurisdiction, approved, set(), decision)
@@ -1853,7 +1901,7 @@ def publish_country(
             elif reading.texts.of(i).hashes:
                 row.update(text="no_decision", reason=str(refused))
         summary["texts"] = {"blocked": str(refused)} | undone
-        return summary, settled()
+        return name_too_large(summary), settled()
     # A country's texts are built here, and let go with it: they are the bulk of what a run could hold.
     texts = texts_from_workbench(review, library, review_store, jurisdiction, only=set(reading.documents))
     report = publish_texts(public_store, jurisdiction, texts, text_decision)
@@ -1877,7 +1925,7 @@ def publish_country(
     for key, count in undone.items():
         summary["texts"][key] += count
     summary["texts_skipped"] = _reasons(report["skipped"], most=cap)
-    return summary, settled()
+    return name_too_large(summary, report["too_large_for_record_page"]), settled()
 
 
 class _DryRunStore:

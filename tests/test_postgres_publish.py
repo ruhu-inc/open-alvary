@@ -579,3 +579,49 @@ def test_a_name_withheld_since_it_was_announced_is_told_again_by_no_channel(
         and (e["legal_effect"].get("by") or {}).get("title") == NEUTRAL
         for e in shown
     )
+
+
+def test_a_text_too_large_for_the_record_page_is_named_with_the_bytes_the_site_sends(
+    store,
+    both_decisions,  # noqa: F811
+    tmp_path,
+    monkeypatch,
+):
+    """In PostgreSQL the site chooses a text from the gate columns (PRD-06): what a run measures from the
+    catalogue it is about to save is still what the site sends, and the text is published and named."""
+    from test_publish import Collection
+    from test_record_page_bound import _asks
+
+    from api import site
+    from operations import record_page
+
+    collection = Collection(tmp_path)
+    collection.add("rw-law-en", "rw-law", "en")
+    collection.add("rw-law-fr", "rw-law", "fr", words="Le Fonds prête aux étudiants. " * 20, raw="9" * 64)
+    first = collection.run(store)["countries"]["rw"]
+    assert first["texts"]["published"] == 2 and first["texts_too_large"] == {}
+    client = TestClient(site.create_site_app(store, tmp_path))
+    texts = {v.id: v for v in store.load().versions if v.source_id == "rw-law"}
+    with monkeypatch.context() as bound:
+        bound.setattr(site, "MAX_TEXT_BYTES", 0)
+        measured = {u.version: u.size for u in record_page.unshown(store.load(), "rw")}
+    assert set(measured) == set(texts)
+    for version, held in texts.items():
+        answers = [client.get("/sources/rw-law/text", params=asked) for asked in _asks(held)]
+        assert {answer.status_code for answer in answers} == {200}
+        sent = [len(a.content) for a in answers if a.json()["text"]["id"] == version]
+        assert measured[version] == max(sent), held.language
+    largest = max(measured, key=measured.get)
+    assert texts[largest].language == "fr"
+    monkeypatch.setattr(site, "MAX_TEXT_BYTES", measured[largest] - 1)
+    why = f"its answer is up to {measured[largest]:,} bytes; the page reads at most {measured[largest] - 1:,}"
+    for dry_run in (True, False):
+        rw = collection.run(store, dry_run=dry_run)["countries"]["rw"]
+        assert rw["texts_too_large"] == {"rw-law (fr)": why} and rw["texts"]["unchanged"] == 2
+    assert collection.statuses()["rw-law-fr"]["reason"] == f"{record_page.TOO_LARGE}: {why}"
+    assert collection.statuses()["rw-law-en"]["reason"] == ""
+    # Published all the same: the page is refused the French text and opens the English one.
+    assert sorted(v.language for v in public_corpus(store.load()).versions) == ["en", "fr"]
+    refused = client.get("/sources/rw-law/text", params={"version": "ver-replaced", "language": "fr"})
+    assert refused.status_code == 413 and refused.json()["code"] == "result_too_large"
+    assert client.get("/sources/rw-law/text", params={"language": "en"}).status_code == 200

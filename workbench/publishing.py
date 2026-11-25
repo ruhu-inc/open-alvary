@@ -145,18 +145,30 @@ def _text_words(act: dict, kind: str, status: dict | None, decided: dict, pendin
     if "refused" in decided["text"]:
         if public:
             return (
-                f"Text public since {_day(status.get('text_since'))}. No other text goes public: "
-                f"{decided['text']['refused']}"
+                f"Text public since {_day(status.get('text_since'))}.{_too_large(status)} No other text goes "
+                f"public: {decided['text']['refused']}"
             )
         return f"Text not published: {decided['text']['refused']}"
     if kind not in decided["text"]["types"]:
         covered = ", ".join(decided["text"]["types"])
         return f"Text not published: the text decision covers {covered} only."
     if public:
-        return f"Text public since {_day(status.get('text_since'))}."
+        return f"Text public since {_day(status.get('text_since'))}.{_too_large(status)}"
     if status and status["text"] in ("blocked", "not_covered") and status.get("reason") and not pending:
         return f"Text not published: {status['reason']}"
     return "Text goes public at the next run."
+
+
+def _too_large(status: dict) -> str:
+    """What to add of a public text the website's record page cannot show, as the latest run found it
+    (operations.record_page): it is published, and the page links the official copy."""
+    from operations import record_page
+
+    reason = status.get("reason") or ""
+    if not reason.startswith(record_page.TOO_LARGE):
+        return ""
+    measured = reason.removeprefix(record_page.TOO_LARGE).lstrip(": ")
+    return f" Too large to show on the record page ({measured}): the page links the official copy instead."
 
 
 def short(row_approval: str | None, status: dict | None, decided: dict) -> str | None:

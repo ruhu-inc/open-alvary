@@ -1752,3 +1752,181 @@ def test_dry_run_simulates_records_into_texts_without_writing_and_returns_all_sk
     assert "rw-good" not in rw["texts_skipped"]
     assert public_records(store) == [] and public_texts(store) == []
     assert collection.runs() == [] and collection.statuses() == {}
+
+
+# ---------- texts the record page cannot show: published, and named (operations.record_page) ----------
+def _largest_answers(store) -> dict[str, int]:
+    """Each public text's largest answer on the record page, by its record, as the site would send it."""
+    from operations import record_page
+
+    held = store.load()
+    languages = {s.id: s.language for s in held.sources}
+    sizes = {}
+    for text in held.versions:
+        nodes = [n for n in held.structure if n.version_id == text.id]
+        sizes[text.source_id] = record_page.largest_answer(text, [text], nodes, languages[text.source_id])
+    return sizes
+
+
+def _scratch_store():
+    from sqlalchemy import create_engine
+    from sqlalchemy.pool import StaticPool
+
+    from api.store import Store, metadata
+
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    metadata.create_all(engine)
+    return Store(engine)
+
+
+def test_a_text_too_large_for_the_record_page_is_published_and_named_by_the_dry_run_and_the_run(
+    decisions, store, tmp_path, monkeypatch
+):
+    from fastapi.testclient import TestClient
+
+    from api import site
+
+    work = "ng-example-act-2023"
+    decision = publish.decide_text("ng", "Ada Reviewer", 12, EVIDENCE, **TEXT_DECISION)
+    # What its answer will weigh, from the same text published elsewhere: an ID is as long anywhere.
+    elsewhere = _scratch_store()
+    catalogue_with_record(elsewhere)
+    expected = publish.publish_texts(elsewhere, "ng", publish.Texts(approved=[approved_text()]), decision)
+    assert expected["too_large_for_record_page"] == []  # under the bound nothing is named
+    size = _largest_answers(elsewhere)[work]
+    assert 0 < size < site.MAX_TEXT_BYTES
+
+    def publishing(dry_run):
+        return publish.publish_texts(
+            store, "ng", publish.Texts(approved=[approved_text()]), decision, dry_run=dry_run
+        )
+
+    def named(version, bound):
+        return {
+            "text": f"{work} (en)",
+            "document": work,
+            "version": version,
+            "why": f"its answer is up to {size:,} bytes; the page reads at most {bound:,}",
+        }
+
+    catalogue_with_record(store)
+    client = TestClient(site.create_site_app(store, tmp_path))
+    # The largest answer is the one to a link that names a text and a language the record does not have.
+    stale = {"version": "ver-replaced", "language": "zz"}
+    # Just under, an answer of exactly the bound: the dry run names nothing and reports what it did before.
+    monkeypatch.setattr(site, "MAX_TEXT_BYTES", size)
+    dry = publishing(dry_run=True)
+    assert dry["too_large_for_record_page"] == [] and store.load().versions == []
+    assert {key: len(value) for key, value in dry.items()} == {key: len(v) for key, v in expected.items()}
+    # Just over: the dry run names the text it would publish, and writes nothing.
+    monkeypatch.setattr(site, "MAX_TEXT_BYTES", size - 1)
+    dry = publishing(dry_run=True)
+    assert dry["too_large_for_record_page"] == [named(dry["published"][0]["version"], size - 1)]
+    assert store.load().versions == []
+    # The run publishes it all the same, and names it; the page is refused it, as the report said.
+    done = publishing(dry_run=False)
+    (version,) = store.load().versions
+    assert [entry["document"] for entry in done["published"]] == [work] and done["skipped"] == {}
+    assert done["too_large_for_record_page"] == [named(version.id, size - 1)]
+    assert public_texts(store) == [(work, "en")]
+    assert client.get(f"/sources/{work}/text", params=stale).status_code == 413
+    # It is named for as long as it is public and too large: by a run that has nothing new to publish,
+    again = publishing(dry_run=False)
+    assert again["unchanged"] == [work] and again["too_large_for_record_page"] == [
+        named(version.id, size - 1)
+    ]
+    # and no longer once the page can take it.
+    monkeypatch.setattr(site, "MAX_TEXT_BYTES", size)
+    assert publishing(dry_run=True)["too_large_for_record_page"] == []
+    assert client.get(f"/sources/{work}/text", params=stale).status_code == 200
+
+
+def test_a_text_with_more_nodes_than_one_answer_holds_is_published_and_named(
+    decisions, store, tmp_path, monkeypatch
+):
+    from fastapi.testclient import TestClient
+
+    from api import catalogue, site
+
+    work = "ng-example-act-2023"
+    decision = publish.decide_text("ng", "Ada Reviewer", 12, EVIDENCE, **TEXT_DECISION)
+    catalogue_with_record(store)
+    nodes = len(approved_text().text.structure.nodes)
+
+    def publishing(dry_run):
+        return publish.publish_texts(
+            store, "ng", publish.Texts(approved=[approved_text()]), decision, dry_run=dry_run
+        )
+
+    monkeypatch.setattr(catalogue, "MAX_STRUCTURE_ROWS", nodes)  # just under: as many as one answer holds
+    assert publishing(dry_run=True)["too_large_for_record_page"] == []
+    monkeypatch.setattr(catalogue, "MAX_STRUCTURE_ROWS", nodes - 1)  # just over
+    why = f"its structure has {nodes:,} nodes; one answer holds at most {nodes - 1:,}"
+    (dry,) = publishing(dry_run=True)["too_large_for_record_page"]
+    assert (dry["text"], dry["document"], dry["why"]) == (f"{work} (en)", work, why)
+    assert store.load().versions == []
+    (done,) = publishing(dry_run=False)["too_large_for_record_page"]
+    (version,) = store.load().versions
+    assert done == {"text": f"{work} (en)", "document": work, "version": version.id, "why": why}
+    assert public_texts(store) == [(work, "en")]
+    client = TestClient(site.create_site_app(store, tmp_path))
+    assert client.get(f"/sources/{work}/text").status_code == 413
+
+
+def test_a_run_names_each_public_text_too_large_for_the_record_page_and_says_so_on_its_document(
+    both_decisions, store, tmp_path, monkeypatch
+):
+    from api import site
+    from operations import record_page
+
+    collection = Collection(tmp_path)
+    collection.add("rw-short", "rw-short", raw="1" * 64)
+    collection.add("rw-long", "rw-long", words="The Fund shall lend to students. " * 40, raw="2" * 64)
+    first = collection.run(store)["countries"]["rw"]
+    # Under the bound a run says there is none, and no document's standing says anything of it.
+    assert first["texts"]["too_large_for_record_page"] == 0 and first["texts_too_large"] == {}
+    assert {status["reason"] for status in collection.statuses().values()} == {""}
+    sizes = _largest_answers(store)
+    assert sizes["rw-long"] > sizes["rw-short"]
+    monkeypatch.setattr(site, "MAX_TEXT_BYTES", sizes["rw-long"] - 1)
+    why = f"its answer is up to {sizes['rw-long']:,} bytes; the page reads at most {sizes['rw-long'] - 1:,}"
+    before = snapshot(store)
+    for dry_run in (True, False):
+        rw = collection.run(store, dry_run=dry_run)["countries"]["rw"]
+        assert rw["texts"]["too_large_for_record_page"] == 1 and rw["texts"]["unchanged"] == 2
+        assert rw["texts_too_large"] == {"rw-long (en)": why}
+        assert rw["texts_skipped"] == {} and snapshot(store) == before  # still public, both of them
+    statuses = collection.statuses()
+    assert statuses["rw-long"]["text"] == "public"
+    assert statuses["rw-long"]["reason"] == f"{record_page.TOO_LARGE}: {why}"
+    assert (statuses["rw-short"]["text"], statuses["rw-short"]["reason"]) == ("public", "")
+    # With no text decision, or no decision at all, nothing new is published: what is public is still named.
+    publish.text_decision_path("rw").unlink()
+    rw = collection.run(store)["countries"]["rw"]
+    assert "blocked" in rw["texts"] and rw["texts_too_large"] == {"rw-long (en)": why}
+    publish.decision_path("rw").unlink()
+    rw = collection.run(store)["countries"]["rw"]
+    assert "blocked" in rw and rw["texts_too_large"] == {"rw-long (en)": why}
+    assert public_texts(store) == [("rw-long", "en"), ("rw-short", "en")]
+
+
+def test_an_earlier_files_text_too_large_as_well_is_named_apart_from_the_current_one(
+    both_decisions, store, tmp_path, monkeypatch
+):
+    from api import site
+
+    collection = Collection(tmp_path)
+    collection.add("rw-law", "rw-law", raw="1" * 64)
+    collection.run(store)
+    (earlier,) = store.load().versions
+    collection.approve("rw-law", "The Fund lends from a new official file.", raw="2" * 64)
+    collection.run(store)
+    current = next(v for v in store.load().versions if v.id != earlier.id)
+    assert public_texts(store) == [("rw-law", "en"), ("rw-law", "en")]  # the earlier file's text is history
+    monkeypatch.setattr(site, "MAX_TEXT_BYTES", 10)
+    rw = collection.run(store, dry_run=True)["countries"]["rw"]
+    assert set(rw["texts_too_large"]) == {
+        f"rw-law (en), text {earlier.id}",
+        f"rw-law (en), text {current.id}",
+    }
+    assert rw["texts"]["too_large_for_record_page"] == 2
