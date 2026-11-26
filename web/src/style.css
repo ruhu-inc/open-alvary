@@ -3504,3 +3504,239 @@ header nav a {
     margin-right: -10px;
   }
 }
+
+/* Public /connect AI tool onboarding page */
+.connect-page {
+  overflow-x: clip;
+}
+.connect-page .info-panel h2 {
+  font-family: var(--serif);
+  font-size: 28px;
+  font-weight: 400;
+  margin: 0 0 10px;
+}
+.connect-page .info-panel p {
+  font-size: 15px;
+  line-height: 1.7;
+  color: #3a3a3a;
+  margin-bottom: 12px;
+}
+.connect-page .info-panel p:last-child {
+  margin-bottom: 0;
+}
+.connect-inline-link {
+  color: var(--primary);
+  text-decoration: underline;
+  text-decoration-color: #c8b29b;
+  text-underline-offset: 3px;
+}
+.connect-inline-link:hover {
+  text-decoration-color: var(--accent);
+}
+.connect-scope {
+  margin: 0 0 40px;
+  background: #ffffff;
+}
+.connect-picker {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #ffffff;
+  margin: 0 0 44px;
+  min-width: 0;
+}
+.connect-picker-head {
+  padding: 26px 28px 18px;
+}
+.connect-picker-head h2 {
+  font-family: var(--serif);
+  font-size: 32px;
+  font-weight: 400;
+  margin: 0 0 8px;
+}
+.connect-picker-head p {
+  font-size: 15px;
+  line-height: 1.7;
+  color: #3a3a3a;
+  margin: 0;
+  max-width: 66ch;
+}
+.connect-tabs {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 4px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: inline proximity;
+  scrollbar-width: none;
+  padding: 0 28px;
+  border-bottom: 1px solid var(--line);
+}
+.connect-tabs::-webkit-scrollbar {
+  display: none;
+}
+.connect-tab {
+  position: relative;
+  flex: none;
+  scroll-snap-align: start;
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.connect-tab:hover {
+  color: var(--primary);
+}
+.connect-tab[aria-selected="true"] {
+  color: var(--primary);
+}
+.connect-tab[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  border-block-end: 3px solid var(--accent);
+}
+.connect-tab:focus-visible,
+.connect-copy-btn:focus-visible {
+  outline: 3px solid #737373;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.connect-panel {
+  padding: 24px 28px 28px;
+  min-width: 0;
+}
+.connect-panel-summary {
+  font-size: 15px;
+  color: #3a3a3a;
+  margin: 0 0 18px;
+}
+.connect-steps {
+  margin: 0 0 18px;
+  padding-left: 22px;
+  display: grid;
+  gap: 14px;
+  font-size: 15px;
+  line-height: 1.6;
+  color: #1a1a1a;
+}
+.connect-steps li {
+  min-width: 0;
+}
+.connect-cmd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: #f5f5f4;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  min-width: 0;
+}
+.connect-cmd code {
+  font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #1a1a1a;
+  overflow-wrap: anywhere;
+  min-width: 0;
+  flex: 1;
+}
+.connect-inline-cmd {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 2px 6px;
+  background: #f0f0f0;
+  border-radius: 4px;
+  font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow-wrap: anywhere;
+}
+.connect-copy-wrap {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+}
+.connect-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  min-width: 82px;
+  padding: 6px 12px;
+  border: 1px solid #d4d4d4;
+  border-radius: 4px;
+  background: #ffffff;
+  color: var(--primary);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+.connect-copy-btn:hover {
+  background: #f0f0f0;
+}
+.connect-copy-btn[data-copied] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.connect-consent-note {
+  margin: 0 0 12px;
+  font-size: 13.5px;
+  color: var(--muted);
+}
+.connect-plugin-link {
+  margin: 0;
+}
+.connect-boundaries {
+  margin: 0 0 44px;
+}
+.connect-list {
+  margin: 0 0 18px;
+  padding-left: 20px;
+  display: grid;
+  gap: 10px;
+  font-size: 15px;
+  line-height: 1.65;
+  color: #3a3a3a;
+}
+.connect-manage {
+  margin: 0 0 48px;
+  background: #ffffff;
+}
+@media (max-width: 800px) {
+  .connect-picker-head {
+    padding: 20px 18px 14px;
+  }
+  .connect-tabs {
+    padding: 0 14px;
+  }
+  .connect-panel {
+    padding: 18px 18px 22px;
+  }
+  .connect-boundaries {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+}
+@media (max-width: 480px) {
+  .connect-tabs {
+    padding: 0 10px;
+    gap: 2px;
+  }
+  .connect-tab {
+    padding: 10px 9px;
+    font-size: 14px;
+  }
+  .connect-cmd {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .connect-copy-wrap {
+    justify-content: flex-start;
+  }
+  .connect-copy-btn {
+    min-height: 44px;
+  }
+}

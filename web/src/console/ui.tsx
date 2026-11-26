@@ -156,10 +156,10 @@ export function CopyField({ value, label, onCopied }: { value: string; label: st
       <code className="code" ref={ref} aria-label={label} dir="ltr">
         {value}
       </code>
-      <button className="btn secondary" type="button" onClick={copy}>
+      <button className="btn secondary" type="button" aria-label={`Copy ${label}`} onClick={copy}>
         {state === "copied" ? "Copied" : "Copy"}
       </button>
-      <span className="sr-status" aria-live="polite">
+      <span className="sr-status" role="status" aria-live="polite">
         {state === "copied" ? "Copied to the clipboard." : state === "select" ? "Selected. Press Ctrl+C or ⌘C to copy." : ""}
       </span>
     </div>
