@@ -40,6 +40,8 @@ from fastapi.responses import JSONResponse
 
 from accounts import keys
 from api.admission import AdmissionStore, AdmissionUnavailable, client_address, network_group, pseudonym
+from api.bodylimit import TooLarge as BodyTooLarge
+from api.bodylimit import mcp_too_large_response
 from api.emission import MAX_SINGLE_RESPONSE_BYTES
 from api.reach import OutsidePlanLimited, Reach, starter_only
 from rights.bytes import ByteLedger, LedgerConflict, LedgerUnavailable, Scope
@@ -107,7 +109,7 @@ NOT_INCLUDED_DEFAULT = "Your organisation's plan does not include this. See the 
 
 # MCP carries the same codes as a JSON-RPC error (agent-access application numbers), at the same
 # HTTP status, so a host starts sign-in on the 401 exactly as for REST.
-MCP_NUMBERS = {400: -32600, 401: 10001, 403: 10002, 429: 10003, 503: 10004}
+MCP_NUMBERS = {400: -32600, 401: 10001, 403: 10002, 413: 10005, 429: 10003, 503: 10004}
 DAY_MINUTES = 24 * 60
 
 
@@ -148,9 +150,16 @@ def jsonrpc_problem(
     detail: str | None = None,
     challenge: str | None = None,
     retry_after: int | None = None,
+    rpc_id: str | int | None = None,
 ) -> JSONResponse:
     status = STATUS[code]
-    data = {"code": code, "request_id": request_id}
+    safe_id = rpc_id if isinstance(rpc_id, (str, int)) and not isinstance(rpc_id, bool) else None
+    data = {
+        "code": code,
+        "retryable": status in (429, 503),
+        "request_id": request_id,
+        "schema_version": "1",
+    }
     headers = {"Cache-Control": "no-store", "X-Request-ID": request_id}
     if challenge:
         headers["WWW-Authenticate"] = challenge
@@ -158,9 +167,16 @@ def jsonrpc_problem(
         headers["Retry-After"] = str(retry_after)
         data["retry_after_seconds"] = retry_after
     message = detail or DETAIL.get(code, "Request refused.")
+    if code == "rate_limited":
+        if retry_after is not None:
+            unit = "second" if retry_after == 1 else "seconds"
+            retry_clause = f"Retry after {retry_after} {unit}."
+        else:
+            retry_clause = "Retry shortly."
+        message = f"{message} {retry_clause} Usage help: https://open.alvary.ai/docs/errors#rate_limited"
     body = {
         "jsonrpc": "2.0",
-        "id": None,
+        "id": safe_id,
         "error": {"code": MCP_NUMBERS[status], "message": message, "data": data},
     }
     return JSONResponse(body, status_code=status, headers=headers)
@@ -303,6 +319,18 @@ class FailedKeys:
 
 
 @dataclass(frozen=True)
+class DiscoverControl:
+    capacity: int = 30
+    refill_per_minute: int = 60
+    concurrency: int = 4
+    lease_seconds: int = 10
+    shared_capacity: int = 300
+    shared_refill_per_minute: int = 600
+    shared_concurrency: int = 20
+    hmac_secret: bytes | None = None
+
+
+@dataclass(frozen=True)
 class GateConfig:
     resource: str  # exact resource URL, the token audience
     resource_class: str  # "rest" or "mcp": the tier must include it; usage is counted under it
@@ -315,10 +343,11 @@ class GateConfig:
     global_concurrency: int = 512
     lease_seconds: int = 60
     jsonrpc: bool = False  # MCP: refusals as JSON-RPC errors
-    # Requests outside a plan's countries also draw on this, the Starter rate (api.reach).
+    # Requests outside a plan's jurisdictions also draw on this, the Starter rate (api.reach).
     outside_per_minute: int = 60
     outside_burst: int = 30
     trusted_proxies: int = 0  # as the admission class has it: which X-Forwarded-For entry is the caller
+    discover_control: DiscoverControl | None = None
 
 
 class CredentialGate:
@@ -346,8 +375,15 @@ class CredentialGate:
         self.ledger = ledger
         self.pepper = key_pepper
         self.challenge = f'Bearer resource_metadata="{config.metadata_url}", scope="{SCOPE}"'
+        self._discover_secret = (
+            config.discover_control.hmac_secret or secrets.token_bytes(32)
+            if config.discover_control is not None
+            else None
+        )
 
-    def _refuse(self, code: str, request_id: str, **kwargs) -> JSONResponse:
+    def _refuse(
+        self, code: str, request_id: str, *, rpc_id: str | int | None = None, **kwargs
+    ) -> JSONResponse:
         if code == "credential_required":
             kwargs["challenge"] = self.challenge
         elif code == "invalid_credentials":
@@ -356,7 +392,9 @@ class CredentialGate:
             kwargs["challenge"] = (
                 f'Bearer error="insufficient_scope", scope="{SCOPE}", resource_metadata="{self.config.metadata_url}"'
             )
-        return (jsonrpc_problem if self.config.jsonrpc else problem)(code, request_id, **kwargs)
+        if self.config.jsonrpc:
+            return jsonrpc_problem(code, request_id, rpc_id=rpc_id, **kwargs)
+        return problem(code, request_id, **kwargs)
 
     def credential_request(self, token: str) -> dict:
         """What to ask the accounts check for this bearer value; raises ValueError/PermissionError."""
@@ -391,6 +429,20 @@ class CredentialGate:
         except ValueError:
             return None
 
+    def _discover_group(self, scope) -> tuple[str, str | None]:
+        """Classify peer address for unauthenticated server/discover control-reserve admission."""
+        peer = scope["client"][0] if scope.get("client") else None
+        address = client_address(scope.get("headers", []), peer, self.config.trusted_proxies)
+        if address is None:
+            return ("unknown", None)
+        try:
+            parsed = ipaddress.ip_address(address)
+        except ValueError:
+            return ("unknown", None)
+        if any(parsed in net for net in NEVER_HELD_BACK):
+            return ("shared", None)
+        return ("group", network_group(address))
+
     async def __call__(self, scope, receive, send):
         path = scope.get("path", "")
         root = scope.get("root_path", "")
@@ -409,6 +461,100 @@ class CredentialGate:
         names = {name.lower() for name, _ in query} - {"resume_token"}
         if any(name.endswith(("key", "token")) for name in names):
             return await self._refuse("credential_not_accepted", request_id)(scope, receive, send)
+        if (
+            scope.get("method") == "POST"
+            and (path == "/mcp" or scope.get("path") == "/mcp")
+            and self.config.jsonrpc
+            and self.config.discover_control is not None
+            and any(
+                k.lower() == b"mcp-method" and v.decode("latin-1").strip() == "server/discover"
+                for k, v in scope.get("headers", [])
+            )
+        ):
+            chunks: list[bytes] = []
+            try:
+                while True:
+                    message = await receive()
+                    if message["type"] == "http.request":
+                        chunks.append(message.get("body", b""))
+                        if not message.get("more_body", False):
+                            break
+                    elif message["type"] == "http.disconnect":
+                        break
+            except BodyTooLarge as exc:
+                return await mcp_too_large_response(request_id, exc.limit)(scope, receive, send)
+            raw_body = b"".join(chunks)
+            replayed = False
+
+            async def replay_receive():
+                nonlocal replayed
+                if not replayed:
+                    replayed = True
+                    return {"type": "http.request", "body": raw_body, "more_body": False}
+                return {"type": "http.request", "body": b"", "more_body": False}
+
+            try:
+                parsed_body = json.loads(raw_body)
+            except ValueError:
+                parsed_body = None
+
+            if isinstance(parsed_body, dict) and parsed_body.get("method") == "server/discover":
+                raw_rpc_id = parsed_body.get("id")
+                rpc_id = (
+                    raw_rpc_id
+                    if isinstance(raw_rpc_id, (str, int)) and not isinstance(raw_rpc_id, bool)
+                    else None
+                )
+                stamped_send = _stamped(send, [(b"x-request-id", request_id.encode())])
+                if self.admission is None:
+                    return await self.app(scope, replay_receive, stamped_send)
+                control = self.config.discover_control
+                kind, group = self._discover_group(scope)
+                if kind == "group":
+                    assert group is not None and self._discover_secret is not None
+                    discover_key = f"discover:{pseudonym(self._discover_secret, group).replace(':', '-')}"
+                    capacity, refill, conc = control.capacity, control.refill_per_minute, control.concurrency
+                elif kind == "shared":
+                    discover_key = "discover:shared"
+                    capacity, refill, conc = (
+                        control.shared_capacity,
+                        control.shared_refill_per_minute,
+                        control.shared_concurrency,
+                    )
+                else:
+                    discover_key = "discover:unknown"
+                    capacity, refill, conc = control.capacity, control.refill_per_minute, control.concurrency
+                admit_request = {
+                    "buckets": [{"key": discover_key, "capacity": capacity, "refill_per_minute": refill}],
+                    "concurrency": [
+                        {"key": discover_key, "limit": conc},
+                        {"key": "global:api", "limit": self.config.global_concurrency},
+                    ],
+                    "lease_seconds": control.lease_seconds,
+                }
+                try:
+                    decision = await to_thread.run_sync(self.admission.admit, admit_request)
+                except AdmissionUnavailable:
+                    return await self._refuse("temporarily_unavailable", request_id, rpc_id=rpc_id)(
+                        scope, replay_receive, send
+                    )
+                if not decision["admitted"]:
+                    return await self._refuse(
+                        "rate_limited",
+                        request_id,
+                        retry_after=int(decision["retry_after"]),
+                        rpc_id=rpc_id,
+                    )(scope, replay_receive, send)
+                discover_lease = decision["lease_id"]
+                try:
+                    await self.app(scope, replay_receive, stamped_send)
+                finally:
+                    try:
+                        await to_thread.run_sync(self.admission.release, discover_lease)
+                    except AdmissionUnavailable:
+                        pass
+                return
+            receive = replay_receive
         authorization = [
             v.decode("latin-1") for k, v in scope.get("headers", []) if k.lower() == b"authorization"
         ]
@@ -516,7 +662,12 @@ class CredentialGate:
 
         async def refuse_inside(code: str, **kwargs):
             sent["refused"] = code
-            await self._refuse(code, request_id, **kwargs)(scope, receive, send)
+            await self._refuse(
+                code,
+                request_id,
+                rpc_id=scope["state"].get("jsonrpc_id"),
+                **kwargs,
+            )(scope, receive, send)
 
         async def reserve(message) -> bool:
             """Reserve the response's bytes before its first byte; False when it was refused instead."""

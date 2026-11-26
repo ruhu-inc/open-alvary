@@ -11,6 +11,7 @@ import json
 import uuid
 
 from starlette.exceptions import HTTPException
+from starlette.responses import JSONResponse
 
 # The largest body any route accepts, by path prefix, longest first; DEFAULT for the rest. A JSON-RPC
 # call or a currentness check of 100 items is well under the default.
@@ -18,6 +19,7 @@ DEFAULT = 1024 * 1024
 LIMITS = (
     ("/console/mail-events", 64 * 1024),
     ("/console/oauth/api/decision", 16 * 1024),
+    ("/mcp", 32 * 1024),
 )
 
 
@@ -54,6 +56,51 @@ def _problem(request_id: str, limit: int) -> tuple[dict, bytes]:
     return start, body
 
 
+def _mcp_too_large_payload(request_id: str, limit: int = 32 * 1024) -> dict:
+    return {
+        "jsonrpc": "2.0",
+        "id": None,
+        "error": {
+            "code": 10005,
+            "message": f"Request body exceeds {limit:,} bytes.",
+            "data": {
+                "code": "request_too_large",
+                "retryable": False,
+                "request_id": request_id,
+                "schema_version": "1",
+            },
+        },
+    }
+
+
+def _mcp_problem(request_id: str, limit: int = 32 * 1024) -> tuple[dict, bytes]:
+    body = json.dumps(_mcp_too_large_payload(request_id, limit)).encode()
+    start = {
+        "type": "http.response.start",
+        "status": 413,
+        "headers": [
+            (b"content-type", b"application/json"),
+            (b"content-length", str(len(body)).encode()),
+            (b"cache-control", b"no-store"),
+            (b"x-request-id", request_id.encode()),
+            (b"connection", b"close"),
+        ],
+    }
+    return start, body
+
+
+def mcp_too_large_response(request_id: str, limit: int = 32 * 1024) -> JSONResponse:
+    return JSONResponse(
+        _mcp_too_large_payload(request_id, limit),
+        status_code=413,
+        headers={
+            "Cache-Control": "no-store",
+            "X-Request-ID": request_id,
+            "Connection": "close",
+        },
+    )
+
+
 class TooLarge(HTTPException):
     def __init__(self, limit: int):
         super().__init__(413, f"The request body is larger than this address accepts ({limit:,} bytes).")
@@ -67,7 +114,8 @@ class BodyLimit:
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
             return await self.app(scope, receive, send)
-        limit = self.limit(scope.get("path", ""))
+        path = scope.get("path", "")
+        limit = self.limit(path)
         declared = [v for k, v in scope.get("headers", []) if k.lower() == b"content-length"]
         if declared:
             try:
@@ -75,7 +123,8 @@ class BodyLimit:
             except ValueError:
                 size = limit + 1
             if size > limit or len(declared) > 1:
-                return await self._refuse(send, limit)
+                request_id = (scope.get("state") or {}).get("request_id") or uuid.uuid4().hex[:16]
+                return await self._refuse(send, limit, path, request_id)
         received = 0
         started = False
 
@@ -99,10 +148,12 @@ class BodyLimit:
             # Raised where the app did not turn it into an answer itself (a route reading the body
             # outside its own exception handling).
             if not started:
-                await self._refuse(send, limit)
+                request_id = (scope.get("state") or {}).get("request_id") or uuid.uuid4().hex[:16]
+                await self._refuse(send, limit, path, request_id)
 
     @staticmethod
-    async def _refuse(send, limit: int):
-        start, body = _problem(uuid.uuid4().hex[:16], limit)
+    async def _refuse(send, limit: int, path: str = "", request_id: str | None = None):
+        rid = request_id or uuid.uuid4().hex[:16]
+        start, body = _mcp_problem(rid, limit) if path == "/mcp" else _problem(rid, limit)
         await send(start)
         await send({"type": "http.response.body", "body": body})

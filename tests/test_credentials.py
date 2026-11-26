@@ -14,7 +14,18 @@ from fastapi import FastAPI, Request, Response
 from fastapi.testclient import TestClient
 
 from accounts import keys
-from api.credentials import GRANT_CLAIM, CredentialGate, FailedKeys, GateConfig, TokenVerifier, problem
+from api.admission import AdmissionUnavailable
+from api.bodylimit import BodyLimit
+from api.credentials import (
+    GRANT_CLAIM,
+    CredentialGate,
+    DiscoverControl,
+    FailedKeys,
+    GateConfig,
+    TokenVerifier,
+    jsonrpc_problem,
+    problem,
+)
 from rights.bytes import LedgerUnavailable, Reservation
 
 ISSUER = "https://login.example.test/"
@@ -462,3 +473,296 @@ def test_access_tokens_are_verified_bound_to_the_resource_and_need_the_scope(sig
     other = Signer()
     forged = client.get("/api/v1/sources", headers={"Authorization": f"Bearer {other.token()}"})
     assert forged.json()["code"] == "invalid_credentials"
+
+
+def _mcp_gate_app(
+    check,
+    *,
+    usage=None,
+    admission=None,
+    ledger=None,
+    failed_keys=None,
+    discover_control=None,
+    trusted_proxies=0,
+    inner_raises=False,
+):
+    inner = FastAPI()
+
+    @inner.post("/mcp")
+    async def mcp_route(request: Request):
+        raw = await request.body()
+        try:
+            body = json.loads(raw)
+        except ValueError:
+            body = {}
+        request.state.jsonrpc_id = body.get("id") if isinstance(body, dict) else None
+        if inner_raises:
+            raise RuntimeError("boom")
+        return {
+            "jsonrpc": "2.0",
+            "id": request.state.jsonrpc_id,
+            "result": {"ok": True, "method": body.get("method"), "raw_len": len(raw)},
+        }
+
+    from starlette.routing import Route
+
+    gate_app = CredentialGate(
+        inner,
+        config=GateConfig(
+            "https://api.example.test/mcp",
+            "mcp",
+            "mcp",
+            "https://api.example.test/.well-known/oauth-protected-resource/mcp",
+            jsonrpc=True,
+            trusted_proxies=trusted_proxies,
+            discover_control=discover_control,
+        ),
+        check=check,
+        record_usage=(usage.append if usage is not None else lambda e: None),
+        admission=admission,
+        verifier=None,
+        key_pepper=PEPPER,
+        ledger=ledger,
+        failed_keys=failed_keys,
+    )
+    parent = FastAPI()
+    parent.router.routes.append(Route("/mcp", gate_app, methods=["POST"]))
+    parent.add_middleware(BodyLimit)
+    return parent
+
+
+def test_discover_control_admission_shared_bucket_exhaustion_outage_and_lease_release():
+    import re
+
+    checked = []
+    usage = []
+    admission = Admission(remaining=10)
+    app_inst = _mcp_gate_app(
+        lambda asked: (checked.append(asked), OK)[1],
+        usage=usage,
+        admission=admission,
+        discover_control=DiscoverControl(),
+        trusted_proxies=2,
+    )
+    client = TestClient(app_inst)
+    discover_body = {"jsonrpc": "2.0", "id": "d-1", "method": "server/discover"}
+    headers = {
+        "MCP-Protocol-Version": "2026-07-28",
+        "Mcp-Method": "server/discover",
+        "X-Forwarded-For": f"198.51.100.7,{PROXY}",
+    }
+    resp = client.post("/mcp", json=discover_body, headers=headers)
+    assert resp.status_code == 200
+    assert resp.headers["x-request-id"]
+    assert "ratelimit" not in resp.headers
+    assert resp.json()["result"]["method"] == "server/discover"
+    assert checked == [] and usage == []  # zero auth check and zero org quota usage
+    req = admission.requests[0]
+    key = req["buckets"][0]["key"]
+    assert key.startswith("discover:") and re.fullmatch(r"^[a-z]+:[A-Za-z0-9_-]{1,128}$", key)
+    assert req["concurrency"] == [{"key": key, "limit": 4}, {"key": "global:api", "limit": 512}]
+    assert admission.released == ["lease-1"]
+
+    # NEVER_HELD_BACK (160.79.104.0/21) routes to discover:shared with shared limits.
+    shared_resp = client.post(
+        "/mcp",
+        json=discover_body,
+        headers={**headers, "X-Forwarded-For": f"160.79.104.9,{PROXY}"},
+    )
+    assert shared_resp.status_code == 200
+    shared_req = admission.requests[1]
+    assert shared_req["buckets"] == [{"key": "discover:shared", "capacity": 300, "refill_per_minute": 600}]
+    assert shared_req["concurrency"][0] == {"key": "discover:shared", "limit": 20}
+    assert admission.released == ["lease-1", "lease-1"]
+
+    # Exhausted -> 429 with Retry-After, retry seconds + help URL, echoing rpc_id.
+    exhausted_client = TestClient(
+        _mcp_gate_app(lambda a: OK, admission=Admission(remaining=None), discover_control=DiscoverControl())
+    )
+    limited = exhausted_client.post(
+        "/mcp",
+        json={"jsonrpc": "2.0", "id": 42, "method": "server/discover"},
+        headers={"Mcp-Method": "server/discover"},
+    )
+    assert limited.status_code == 429 and limited.headers["retry-after"] == "7"
+    body = limited.json()
+    assert body["id"] == 42 and body["error"]["code"] == 10003
+    assert "Retry after 7 seconds." in body["error"]["message"]
+    assert "https://open.alvary.ai/docs/errors#rate_limited" in body["error"]["message"]
+    assert body["error"]["data"]["retryable"] is True and body["error"]["data"]["schema_version"] == "1"
+
+    # Admission store outage -> fail closed 503, echoing rpc_id.
+    class DownAdmission:
+        def admit(self, req):
+            raise AdmissionUnavailable("down")
+
+        def release(self, lease):
+            pass
+
+    down_client = TestClient(
+        _mcp_gate_app(lambda a: OK, admission=DownAdmission(), discover_control=DiscoverControl())
+    )
+    outage = down_client.post(
+        "/mcp",
+        json={"jsonrpc": "2.0", "id": "out-1", "method": "server/discover"},
+        headers={"Mcp-Method": "server/discover"},
+    )
+    assert outage.status_code == 503 and outage.json()["id"] == "out-1"
+    assert outage.json()["error"]["code"] == 10004
+    assert outage.json()["error"]["data"]["retryable"] is True
+
+    # Lease is still released in finally: when inner app raises.
+    failing_admission = Admission(remaining=5)
+    failing_client = TestClient(
+        _mcp_gate_app(
+            lambda a: OK,
+            admission=failing_admission,
+            discover_control=DiscoverControl(),
+            inner_raises=True,
+        ),
+        raise_server_exceptions=False,
+    )
+    assert (
+        failing_client.post(
+            "/mcp",
+            json={"jsonrpc": "2.0", "id": 1, "method": "server/discover"},
+            headers={"Mcp-Method": "server/discover"},
+        ).status_code
+        == 500
+    )
+    assert failing_admission.released == ["lease-1"]
+
+
+def test_discover_spoofed_header_query_cred_and_chunked_413():
+    import asyncio
+
+    mcp_ok = {**OK, "tier": {**OK["tier"], "includes": ["mcp"]}}
+    usage = []
+    app_inst = _mcp_gate_app(
+        lambda a: mcp_ok,
+        usage=usage,
+        admission=Admission(remaining=10),
+        discover_control=DiscoverControl(),
+    )
+    client = TestClient(app_inst)
+
+    # Query-string credential refusal runs BEFORE server/discover bypass.
+    qcred = client.post(
+        "/mcp?api_key=oa_live_x",
+        json={"jsonrpc": "2.0", "id": 1, "method": "server/discover"},
+        headers={"Mcp-Method": "server/discover"},
+    )
+    assert qcred.status_code == 400 and qcred.json()["error"]["data"]["code"] == "credential_not_accepted"
+
+    # Spoofed Mcp-Method: server/discover with method != server/discover falls through to auth.
+    spoof_unauth = client.post(
+        "/mcp",
+        json={"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "get_coverage"}},
+        headers={"Mcp-Method": "server/discover"},
+    )
+    assert (
+        spoof_unauth.status_code == 401
+        and spoof_unauth.json()["error"]["data"]["code"] == "credential_required"
+    )
+
+    # Authenticated spoofed header replays buffered bytes intact to the inner app.
+    secret = keys.generate().secret
+    payload = {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "get_coverage"}}
+    spoof_auth = client.post(
+        "/mcp",
+        json=payload,
+        headers={"Mcp-Method": "server/discover", "Authorization": f"Bearer {secret}"},
+    )
+    assert spoof_auth.status_code == 200
+    assert spoof_auth.json()["result"]["method"] == "tools/call"
+    assert spoof_auth.json()["result"]["raw_len"] > 0
+    assert len(usage) == 1
+
+    # Invalid JSON with Mcp-Method: server/discover also falls through to auth.
+    bad_json = client.post(
+        "/mcp",
+        content=b"{not-json",
+        headers={"Mcp-Method": "server/discover", "Content-Type": "application/json"},
+    )
+    assert bad_json.status_code == 401
+
+    # Chunked > 32 KiB body with Mcp-Method: server/discover returns JSON-RPC 413 10005.
+    sent = []
+    pulled = {"n": 0}
+
+    async def chunked_receive():
+        pulled["n"] += 1
+        return {"type": "http.request", "body": b"a" * (16 * 1024), "more_body": pulled["n"] < 4}
+
+    async def collect(msg):
+        sent.append(msg)
+
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/mcp",
+        "headers": [(b"mcp-method", b"server/discover")],
+        "query_string": b"",
+    }
+    asyncio.run(app_inst(scope, chunked_receive, collect))
+    assert sent[0]["status"] == 413
+    hdrs = {k.decode().lower(): v.decode() for k, v in sent[0]["headers"]}
+    assert hdrs["content-type"] == "application/json" and hdrs["connection"] == "close"
+    body = json.loads(b"".join(m.get("body", b"") for m in sent[1:]))
+    assert body["error"]["code"] == 10005 and body["error"]["data"]["code"] == "request_too_large"
+    assert body["error"]["data"]["schema_version"] == "1"
+
+
+def test_jsonrpc_429_messages_and_rpc_id_echoing_across_all_rate_limit_paths():
+    # 1. FailedKeys 429 path
+    failed = FailedKeys(limit=1)
+    mcp_ok = {**OK, "tier": {**OK["tier"], "includes": ["mcp"]}}
+    app_fk = _mcp_gate_app(lambda a: WRONG, failed_keys=failed, trusted_proxies=2)
+    c_fk = TestClient(app_fk)
+    hdrs = {"Authorization": f"Bearer {keys.generate().secret}", "X-Forwarded-For": f"198.51.100.7,{PROXY}"}
+    assert (
+        c_fk.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "ping"}, headers=hdrs).status_code == 401
+    )
+    fk_429 = c_fk.post("/mcp", json={"jsonrpc": "2.0", "id": 2, "method": "ping"}, headers=hdrs)
+    assert fk_429.status_code == 429
+    fk_err = fk_429.json()["error"]
+    assert "Retry after " in fk_err["message"]
+    assert "https://open.alvary.ai/docs/errors#rate_limited" in fk_err["message"]
+    assert fk_err["data"]["retryable"] is True and fk_err["data"]["schema_version"] == "1"
+
+    # 2. AdmissionStore 429 path
+    app_adm = _mcp_gate_app(lambda a: mcp_ok, admission=Admission(remaining=None))
+    adm_429 = TestClient(app_adm).post(
+        "/mcp",
+        json={"jsonrpc": "2.0", "id": 9, "method": "ping"},
+        headers={"Authorization": f"Bearer {keys.generate().secret}"},
+    )
+    assert adm_429.status_code == 429
+    adm_err = adm_429.json()["error"]
+    assert "Retry after 7 seconds." in adm_err["message"]
+    assert "https://open.alvary.ai/docs/errors#rate_limited" in adm_err["message"]
+
+    # 3. ByteLedger bytes_per_day 429 path + rpc_id echoing via request.state.jsonrpc_id
+    tiny_bytes = {
+        **mcp_ok,
+        "tier": {**mcp_ok["tier"], "allowance": {"requests_per_minute": 60, "bytes_per_day": 10}},
+    }
+    app_bytes = _mcp_gate_app(lambda a: tiny_bytes, ledger=Ledger())
+    bytes_429 = TestClient(app_bytes).post(
+        "/mcp",
+        json={"jsonrpc": "2.0", "id": "req-77", "method": "ping"},
+        headers={"Authorization": f"Bearer {keys.generate().secret}"},
+    )
+    assert bytes_429.status_code == 429
+    b_body = bytes_429.json()
+    assert b_body["id"] == "req-77"  # echoed from request.state.jsonrpc_id
+    assert "data a day" in b_body["error"]["message"]
+    assert "Retry after " in b_body["error"]["message"]
+    assert "https://open.alvary.ai/docs/errors#rate_limited" in b_body["error"]["message"]
+    assert b_body["error"]["data"]["retryable"] is True and b_body["error"]["data"]["schema_version"] == "1"
+
+    # Boolean rpc_id is filtered to None; singular retry_after=1 uses "second."
+    singular = jsonrpc_problem("rate_limited", "rid-1", retry_after=1, rpc_id=True)
+    s_body = json.loads(singular.body)
+    assert s_body["id"] is None
+    assert "Retry after 1 second." in s_body["error"]["message"]

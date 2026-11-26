@@ -813,3 +813,29 @@ def test_a_citation_of_repeated_annexes_is_read_at_once_and_the_rest_api_bounds_
     assert pinpoint.read("Annex 2, article 4") == ("annex:2", "art:4")
     assert client.get("/api/citations/" + quote("annex " * 60)).status_code == 422
     assert client.get("/site/v1/search", params={"page": "²"}).status_code == 400
+
+
+def test_connect_page_serves_200_and_docs_mcp_redirects_308_to_ai_tools(
+    catalogue, store, tmp_path, monkeypatch
+):
+    store.save(catalogue)
+    (tmp_path / "web").mkdir()
+    (tmp_path / "web" / "index.html").write_text("<h1>Open Alvary</h1>")
+    monkeypatch.delenv("PUBLIC_DOMAIN", raising=False)
+    monkeypatch.delenv("ALVARY_SITE_ORIGIN", raising=False)
+    client = TestClient(create_service(store, tmp_path, frontend=tmp_path / "web"))
+    connect = client.get("/connect")
+    assert connect.status_code == 200 and connect.text == "<h1>Open Alvary</h1>"
+    assert "/connect</loc>" in client.get("/sitemap.xml").text
+    for path in ("/docs/mcp", "/docs/mcp/"):
+        moved = client.get(path, follow_redirects=False)
+        assert moved.status_code == 308 and moved.headers["location"] == "http://testserver/docs/ai-tools"
+
+    # With PUBLIC_DOMAIN set, even requests arriving on the API host go straight to the site origin (no double-hop).
+    monkeypatch.setenv("PUBLIC_DOMAIN", "open.alvary.ai")
+    monkeypatch.setenv("ALVARY_API_ORIGIN", "https://api.open.alvary.ai")
+    prod_client = TestClient(create_service(store, tmp_path, frontend=tmp_path / "web"))
+    for path in ("/docs/mcp", "/docs/mcp/"):
+        moved = prod_client.get(path, headers={"host": "api.open.alvary.ai"}, follow_redirects=False)
+        assert moved.status_code == 308
+        assert moved.headers["location"] == "https://open.alvary.ai/docs/ai-tools"

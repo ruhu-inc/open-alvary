@@ -38,6 +38,8 @@ setting, one login serves everything.
 import json
 import mimetypes
 import os
+import secrets
+import uuid
 from contextlib import asynccontextmanager, contextmanager
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -54,13 +56,14 @@ from starlette.routing import Route
 
 from accounts.store import TIERS, Accounts
 from api.admission import AdmissionConfig, AdmissionStore, AdmissionUnavailable
-from api.bodylimit import BodyLimit
+from api.bodylimit import BodyLimit, TooLarge, mcp_too_large_response
 from api.catalogue import LegacyCatalogue
 from api.console import ConsoleConfig, Provider, create_console_app
-from api.credentials import CredentialGate, FailedKeys, GateConfig, TokenVerifier
+from api.credentials import CredentialGate, DiscoverControl, FailedKeys, GateConfig, TokenVerifier
 from api.law_check import LawCheckMCP
 from api.main import create_app
 from api.mcp import create_router as create_mcp_router
+from api.mcp import normalize_host
 from api.repositories import LegacyRepository, PublicUnavailable
 from api.security_txt import security_txt
 from api.site import create_downloads_app, create_site_app, create_sitemap_app
@@ -206,7 +209,11 @@ def create_service(
     service.mount("/site/v1", create_site_app(catalogue, release_root, site_admission, traffic))
     service.mount("/downloads", create_downloads_app(catalogue, release_root, site_admission, traffic))
     accounts_on = store.engine.dialect.name == "postgresql" and os.getenv("ALVARY_ACCOUNTS") == "1"
+    domain = os.getenv("PUBLIC_DOMAIN")
     api_origin = os.getenv("ALVARY_API_ORIGIN", "https://api.open.alvary.ai").rstrip("/")
+    site_origin = (os.getenv("ALVARY_SITE_ORIGIN") or (f"https://{domain}" if domain else "")).rstrip(
+        "/"
+    ) or None
     mcp_gate = None
     if accounts_on:
         # Activation B (MAC-15): accounts, the console, REST v1 and MCP go live together, only when
@@ -259,20 +266,52 @@ def create_service(
         mcp_metadata = api_origin + "/.well-known/oauth-protected-resource/mcp"
         mcp = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
+        @mcp.exception_handler(TooLarge)
+        async def mcp_too_large(request: Request, exc: TooLarge):
+            request_id = getattr(request.state, "request_id", None) or uuid.uuid4().hex[:16]
+            return mcp_too_large_response(request_id, exc.limit)
+
         @contextmanager
         def catalogue_session():
             with catalogue.engine.begin() as connection:
+                if connection.dialect.name == "postgresql":
+                    connection.execute(text("SET LOCAL statement_timeout = '10s'"))
                 check_legacy_authority(connection, write=False)
                 yield LegacyCatalogue(LegacyRepository(connection))
 
         def reach(request: Request):
             return request.state.access["reach"]
 
+        raw_allowed_origins = os.getenv("ALVARY_MCP_ALLOWED_ORIGINS")
+        raw_allowed_hosts = os.getenv("ALVARY_MCP_ALLOWED_HOSTS")
+        origins_configured = "PUBLIC_DOMAIN" in os.environ or "ALVARY_API_ORIGIN" in os.environ
+        if raw_allowed_origins:
+            allowed_origins: frozenset[str] | None = frozenset(
+                v.strip().lower().rstrip("/") for v in raw_allowed_origins.split(",") if v.strip()
+            )
+        elif origins_configured:
+            allowed_origins = frozenset(o.lower() for o in (api_origin, site_origin) if o)
+        else:
+            allowed_origins = None
+        if raw_allowed_hosts:
+            allowed_hosts: frozenset[str] | None = frozenset(
+                normalize_host(v) for v in raw_allowed_hosts.split(",") if v.strip()
+            )
+        elif origins_configured:
+            allowed_hosts = frozenset(
+                normalize_host(urlsplit(o).netloc) for o in (api_origin, site_origin) if o
+            )
+        else:
+            allowed_hosts = None
+
         mcp.include_router(
             create_mcp_router(
                 catalogue_session,
                 (SQLAlchemyError, ValidationError, PublicUnavailable, AdmissionUnavailable),
                 reach,
+                allowed_origins=allowed_origins,
+                allowed_hosts=allowed_hosts,
+                front_door_id=edge,
             )
         )
         mcp_gate = CredentialGate(
@@ -284,6 +323,9 @@ def create_service(
                 mcp_metadata,
                 jsonrpc=True,
                 trusted_proxies=trusted_proxies,
+                discover_control=DiscoverControl(
+                    hmac_secret=(site_admission.hmac_secret if site_admission else secrets.token_bytes(32))
+                ),
                 **outside,
             ),
             check=accounts.check_credential,
@@ -293,11 +335,22 @@ def create_service(
             verifier=TokenVerifier(config.issuer) if config else None,
             failed_keys=failed_keys,
         )
+
+        async def mcp_method_not_allowed(request: Request):
+            return PlainTextResponse("Method Not Allowed", status_code=405, headers={"Allow": "POST"})
+
         service.router.routes.append(
             Route(
                 "/mcp",
                 mcp_gate,
-                methods=["GET", "POST", "DELETE"],
+                methods=["POST"],
+            )
+        )
+        service.router.routes.append(
+            Route(
+                "/mcp",
+                mcp_method_not_allowed,
+                methods=["GET", "DELETE", "PUT", "PATCH"],
             )
         )
 
@@ -305,14 +358,14 @@ def create_service(
             with catalogue_session() as service:
                 return service.countries()
 
-        def resource_metadata(resource_url: str) -> JSONResponse:
+        def resource_metadata(resource_url: str, documentation: str) -> JSONResponse:
             # RFC 9728: which authorisation server issues tokens for this resource, and for what.
             body = {
                 "resource": resource_url,
                 "authorization_servers": [config.issuer.rstrip("/")] if config else [],
                 "scopes_supported": ["corpus:read"],
                 "bearer_methods_supported": ["header"],
-                "resource_documentation": "https://open.alvary.ai/docs",
+                "resource_documentation": documentation,
             }
             return JSONResponse(
                 body, headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "max-age=300"}
@@ -320,12 +373,16 @@ def create_service(
 
         service.add_api_route(
             "/.well-known/oauth-protected-resource/api/v1",
-            lambda: resource_metadata(resource),
+            lambda: resource_metadata(resource, "https://open.alvary.ai/docs"),
             include_in_schema=False,
         )
         for path in ("/.well-known/oauth-protected-resource/mcp", "/.well-known/oauth-protected-resource"):
             # The bare path too: some MCP hosts look there first.
-            service.add_api_route(path, lambda: resource_metadata(mcp_resource), include_in_schema=False)
+            service.add_api_route(
+                path,
+                lambda: resource_metadata(mcp_resource, "https://open.alvary.ai/docs/ai-tools"),
+                include_in_schema=False,
+            )
 
         service.add_api_route(
             "/console", lambda: RedirectResponse("/console/", status_code=308), include_in_schema=False
@@ -397,9 +454,14 @@ def create_service(
         Route(path, sitemaps, methods=["GET"]) for path in ("/sitemap.xml", "/sitemap-{number}.xml")
     ]
 
+    def docs_mcp_redirect(request: Request):
+        return RedirectResponse(f"{site_origin or _origin(request)}/docs/ai-tools", status_code=308)
+
+    for path in ("/docs/mcp", "/docs/mcp/"):
+        service.add_api_route(path, docs_mcp_redirect, methods=["GET"], include_in_schema=False)
+
     if frontend is not None:
         # The API's own host serves the API: a website address asked of it goes to the website's host.
-        domain = os.getenv("PUBLIC_DOMAIN")
         api_host = urlsplit(api_origin).hostname
         elsewhere = (api_host, f"https://{domain}") if api_host and domain and api_host != domain else None
         website = WebsiteFiles(
@@ -448,6 +510,7 @@ STATIC_PAGES = (
     "/governance",
     "/releases",
     "/developers",
+    "/connect",
     "/agents/",
     "/about",
     "/privacy",

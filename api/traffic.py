@@ -87,6 +87,7 @@ PAGES = {
     "governance": "governance",
     "releases": "releases",
     "developers": "developers",
+    "connect": "connect",
     "about": "about",
     "privacy": "privacy",
     "security": "security",

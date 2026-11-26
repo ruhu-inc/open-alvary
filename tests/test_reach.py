@@ -2,7 +2,15 @@
 
 import pytest
 
-from api.reach import EVERYWHERE, OutsidePlan, OutsidePlanLimited, Reach, country, starter_only
+from api.reach import (
+    EVERYWHERE,
+    OutsidePlan,
+    OutsidePlanLimited,
+    Reach,
+    country,
+    format_jurisdictions,
+    starter_only,
+)
 
 
 def test_a_country_includes_what_is_under_it_and_regional_law_belongs_to_none():
@@ -52,3 +60,46 @@ def test_starter_before_its_country_is_chosen_reads_regional_law_only_and_says_w
         with pytest.raises(OutsidePlan) as refused:
             ask()
         assert "none is chosen yet" in str(refused.value)
+        assert "https://open.alvary.ai/console/access" in str(refused.value)
+
+
+def test_format_jurisdictions_and_dynamic_starter_messages_and_active_jurisdictions(
+    catalogue, store, tmp_path
+):
+    from fastapi import Request
+    from fastapi.testclient import TestClient
+
+    from api.v1 import create_v1_app
+
+    assert format_jurisdictions(["ng"]) == "Nigeria, ng"
+    assert format_jurisdictions(["RW", "ng", "rw"]) == "Nigeria, ng; Rwanda, rw"
+    assert format_jurisdictions(["xx", "ng"]) == "Nigeria, ng; XX"
+
+    scope = {"jurisdictions": ["NG"]}
+    plan = Reach.of(scope, starter_only(scope))
+    assert plan.active_jurisdictions() == ("ng",)
+    assert EVERYWHERE.active_jurisdictions() is None
+    assert Reach.of({"all": True}).active_jurisdictions() is None
+    assert Reach.of({"jurisdictions": ["rw", "ng"]}).active_jurisdictions() == ("ng", "rw")
+
+    with pytest.raises(OutsidePlan) as refused:
+        plan.admit("rw")
+    msg = str(refused.value)
+    assert "currently Nigeria, ng" in msg
+    assert "(aa-*)" in msg
+    assert "about another jurisdiction" in msg
+    assert "https://open.alvary.ai/console/access" in msg
+
+    # REST /api/v1 refusal parity: inherits the same dynamic Starter message.
+    store.save(catalogue)
+    v1 = create_v1_app(store, tmp_path, lambda: [])
+
+    @v1.middleware("http")
+    async def attach_starter(request: Request, call_next):
+        request.state.access = {"reach": plan}
+        return await call_next(request)
+
+    rest_refused = TestClient(v1).get("/search", params={"q": "act", "jurisdiction": "rw"})
+    assert rest_refused.status_code == 403
+    assert rest_refused.json()["code"] == "jurisdiction_not_included"
+    assert rest_refused.json()["detail"] == msg

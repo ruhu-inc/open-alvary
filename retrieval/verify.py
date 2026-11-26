@@ -5,6 +5,7 @@ import os
 import re
 import time
 import unicodedata
+from collections.abc import Callable
 from datetime import UTC, date, datetime
 
 from api.catalogue import LegacyCatalogue, SourceUnavailable, _in_force, _speaks
@@ -627,6 +628,7 @@ def verify_claim(
     signer: ReceiptSigner | None = None,
     allowed_source_ids: set[str] | None = None,
     today: date | None = None,
+    check_jurisdiction: Callable[[str], None] | None = None,
 ) -> dict:
     """Deterministically verify a legal claim against the public catalogue and return a signed receipt."""
     today_utc = today or datetime.now(UTC).date()
@@ -641,6 +643,9 @@ def verify_claim(
     as_of: date | None = parsed["as_of"]
     jurisdiction: str | None = parsed["jurisdiction"]
     language: str | None = parsed["language"]
+
+    if check_jurisdiction is not None and jurisdiction is not None:
+        check_jurisdiction(jurisdiction)
 
     assessed_at = as_of or today_utc
     date_sent = as_of is not None
@@ -682,8 +687,12 @@ def verify_claim(
             owner_source_id = node_row.get("source_id") or catalogue.repository.version_owner(
                 node_row["version_id"]
             )
-            if owner_source_id and catalogue._public({owner_source_id}):
-                _enforce_allowed_source(owner_source_id, allowed_source_ids)
+            if owner_source_id:
+                public_owner = catalogue._public({owner_source_id})
+                if public_owner:
+                    _enforce_allowed_source(owner_source_id, allowed_source_ids)
+                    if check_jurisdiction is not None:
+                        check_jurisdiction(public_owner[owner_source_id][0].jurisdiction_id)
 
         checker = Checker(catalogue, today=today_utc, withdrawn=None)
         check_page = checker.check(
@@ -736,6 +745,10 @@ def verify_claim(
                 from api.mcp import _filter_citation_view
 
                 res = _filter_citation_view(res, frozenset(allowed_source_ids))
+
+        if check_jurisdiction is not None:
+            for match in res.matches:
+                check_jurisdiction(match.jurisdiction_id)
 
         # Row 1: no public record named
         if not res.matches:
@@ -857,6 +870,8 @@ def verify_claim(
         return finish("text_not_available")
 
     _enforce_allowed_source(source.id, allowed_source_ids)
+    if check_jurisdiction is not None:
+        check_jurisdiction(source.jurisdiction_id)
 
     # Row 4 when anchor_id was sent alongside a non-matching language
     if language is not None and not _speaks(version, language):

@@ -149,6 +149,11 @@ def test_every_page_of_the_website_counts_as_one():
     assert T.page_kind("sources/ng-act-1") == "record"
     assert T.page_kind("docs/api/mcp") == T.page_kind("docs") == "docs"
     assert T.page_kind("/about/") == "about"
+    assert T.page_kind("connect") == "connect"
+    assert T.page_kind("/connect/") == "connect"
+    traffic = counter()
+    traffic.arrival(scope(x_client_country="NG"), "connect")
+    assert held(traffic)[("arrivals", "connect")] == 1
 
 
 def test_a_country_header_that_is_not_a_country_is_not_written():

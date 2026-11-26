@@ -1,14 +1,18 @@
-"""Read-only, anonymous MCP endpoint over the public catalogue (JSON-RPC 2.0, Streamable HTTP).
+"""Read-only MCP endpoint over the public catalogue (JSON-RPC 2.0, Streamable HTTP).
 
 Tools return exactly what the public REST API returns for the same request, under the same
 current-policy checks and admission limits; no tool can reach private staging, unapproved text
 or account data. Responses are single JSON bodies (no server-initiated streams).
 """
 
+import asyncio
+import base64
 import dataclasses
+import hashlib
 import json
 import os
 import re
+import uuid
 from collections.abc import Callable
 from datetime import date
 from urllib.parse import urlsplit
@@ -19,7 +23,8 @@ from fastapi.responses import JSONResponse, Response
 
 from api import text_index
 from api.catalogue import NO_WORDS
-from api.reach import EVERYWHERE, OutsidePlan, OutsidePlanLimited, Reach
+from api.mcp_schemas import OUTPUT_SCHEMAS
+from api.reach import EVERYWHERE, OutsidePlan, OutsidePlanLimited, Reach, format_jurisdictions
 from api.repositories import EDGE_ORDER, ResultTooLarge
 from api.search import normalize_citation
 from api.search import words as search_words
@@ -31,72 +36,211 @@ from retrieval.pack import Retriever
 from schema.public import CheckRequest, SearchPage
 
 PROTOCOL_VERSIONS = ("2025-06-18", "2025-03-26")
+SUPPORTED_PROTOCOL_VERSIONS = ["2026-07-28", "2025-06-18"]
+ACCEPTED_HEADER_VERSIONS = frozenset({"2026-07-28", "2025-06-18", "2025-03-26"})
 # Tool answers stay inside the MCP payload budget (BUD-01: 64 KiB), never shortened.
 MAX_TOOL_BYTES = 60 * 1024
+MAX_SUMMARY_BYTES = 2048
+MANAGE_URL = "https://open.alvary.ai/console/access"
+_B64URL_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
 class TooLarge(Exception):
     pass
 
 
+class _CursorError(Exception):
+    def __init__(self, code: str, message: str):
+        super().__init__(message)
+        self.code = code
+        self.message = message
+
+
 SERVER_INFO = {"name": "open-alvary", "title": "Open Alvary public legal catalogue", "version": "0.1.0"}
+
+INSTRUCTIONS = (
+    "Read-only public legal catalogue for African jurisdictions. "
+    "The official gazetted or court copy always prevails over any reproduced text. "
+    "Check get_relationships and check_currentness before relying on a provision. "
+    "Distinguish records without a published text from cleared full text: a catalogue record does not "
+    "grant reuse rights; check each source's rights status. "
+    "Zero results or unavailable means Open Alvary does not hold or publish the text, never that a law "
+    "does not exist. "
+    "Do not give legal advice, and do not harvest a whole Act part-by-part. "
+    "Usage guide: https://open.alvary.ai/docs/ai-tools"
+)
+
+
+def _annotations() -> dict[str, bool]:
+    return {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    }
+
 
 TOOLS = [
     {
-        "name": "search_catalogue",
-        "title": "Search the catalogue",
-        "description": "Search catalogued legal sources by words in their title, citation or summary, or in "
-        "one part of their cleared full text. Every word must match a whole word, in any order. Returns "
-        "metadata, rights status and official links.",
+        "name": "check_claim",
+        "title": "Check a legal claim and issue a signed receipt",
+        "description": "Preview (may change): deterministically checks exact quoted words only against a named "
+        "part of a text Open Alvary publishes and what Open Alvary's record lists about its status on a date "
+        "(and whether it is recorded as binding in a jurisdiction), returning a publisher-signed oa-receipt-1 "
+        "receipt beside the claim. Does not judge paraphrases and gives no legal advice.",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "query": {
+                "citation": {
                     "type": "string",
                     "minLength": 1,
-                    "maxLength": 200,
-                    "description": "Words to find, such as a title or a citation. Every word must appear; case "
-                    "and punctuation don't matter.",
+                    "maxLength": 300,
+                    "description": "A citation such as 'Freedom of Information Act 2011, s. 1(1)'. One of "
+                    "citation or anchor_id is required.",
                 },
-                "limit": {
-                    "type": "integer",
-                    "minimum": 1,
-                    "maximum": 25,
-                    "description": "How many sources to return, 1 to 25.",
+                "anchor_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 160,
+                    "description": "The part's anchor_id when already held. One of citation or anchor_id is "
+                    "required.",
+                },
+                "quote": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000,
+                    "description": "Optional exact words the claim says the law uses; at least 40 characters "
+                    "after normalisation unless the quote is the whole of the part's words.",
+                },
+                "as_of": {
+                    "type": "string",
+                    "format": "date",
+                    "description": "Optional assessment date YYYY-MM-DD, not after today in UTC. Left out, "
+                    "checks status today.",
                 },
                 "jurisdiction": {
                     "type": "string",
                     "minLength": 2,
                     "maxLength": 40,
-                    "description": "One jurisdiction to search, such as rw (Rwanda) or ng (Nigeria). "
-                    "Without it, the search covers every jurisdiction available to you.",
+                    "description": "Optional jurisdiction such as ng; asks whether the record is recorded as "
+                    "binding there.",
+                },
+                "language": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 35,
+                    "description": "Optional language such as en.",
+                },
+                "reading": {
+                    "type": "string",
+                    "maxLength": 600,
+                    "description": "Optional sentence this check is meant to support. Echoed beside the "
+                    "receipt; not checked, not signed, not in the claim digest, never logged.",
                 },
             },
-            "required": ["query"],
             "additionalProperties": False,
         },
-        "annotations": {"readOnlyHint": True, "openWorldHint": False},
+        "annotations": _annotations(),
+        "outputSchema": OUTPUT_SCHEMAS["check_claim"],
     },
     {
-        "name": "get_source",
-        "title": "Get one source",
-        "description": "Get one catalogued source by its ID, including rights status and access mode. With a key, a "
-        "record that was public and was withdrawn for a reason that may be told answers withdrawn, not "
-        "unavailable: stop serving it and its texts.",
+        "name": "check_currentness",
+        "title": "Check cited parts",
+        "description": "Before showing an answer that cites the corpus: for each cited part, whether it is "
+        "still published with the same words (unchanged), whether a newer text of the same edition exists "
+        "(newer_version, with the same part's anchor_id there and whether its words changed), whether the "
+        "span_hash sent is wrong (span_mismatch) or the part is not public (unavailable; with a key, "
+        "withdrawn instead when its text was public and was withdrawn for a reason that may be told); whether it "
+        "was in force on a date; and, given a jurisdiction, whether the record binds there on that date "
+        "(applicability: bound, not_bound or unknown, with the memberships, legal effect or treaty party "
+        "entry it rests on). Absence of a recorded link or treatment does not prove none exists.",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "source_id": {
+                "items": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 100,
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "anchor_id": {"type": "string", "minLength": 1, "maxLength": 160},
+                            "version_id": {"type": "string", "minLength": 1, "maxLength": 160},
+                            "locator": {"type": "string", "minLength": 1, "maxLength": 1000},
+                            "span_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                            "as_of": {"type": "string", "format": "date"},
+                            "jurisdiction": {
+                                "type": "string",
+                                "pattern": "^[a-z]{2}(?:-[a-z0-9]{1,12})?$",
+                            },
+                        },
+                        "additionalProperties": False,
+                    },
+                    "description": "The parts: each an anchor_id, or a version_id with a locator, with the "
+                    "span_hash you hold, an optional as_of date and, to ask whether the record binds in a "
+                    "jurisdiction on that date, its jurisdiction, such as sn.",
+                },
+            },
+            "required": ["items"],
+            "additionalProperties": False,
+        },
+        "annotations": _annotations(),
+        "outputSchema": OUTPUT_SCHEMAS["check_currentness"],
+    },
+    {
+        "name": "get_anchor",
+        "title": "Get one part of a text exactly",
+        "description": "One part of a published text, such as a section or article, exactly: its words, its "
+        "span as UTF-8 byte offsets, the hash of its bytes for checking a quotation, a citation such as "
+        "s. 23(1)(a), the official file and the attribution its rights record asks for. Never shortened: a "
+        "part too large for one answer is refused; read it from the REST text route with its offsets. With a key, "
+        "a part whose text was public and was withdrawn for a reason that may be told answers withdrawn, not "
+        "unavailable. The official published copy always prevails; do not harvest a whole Act part-by-part.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "anchor_id": {
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 160,
-                    "description": "The source's ID, such as ng-foi-act-2011, from a search.",
+                    "description": "The part's ID, from a text's structure.",
                 }
             },
-            "required": ["source_id"],
+            "required": ["anchor_id"],
             "additionalProperties": False,
         },
-        "annotations": {"readOnlyHint": True, "openWorldHint": False},
+        "annotations": _annotations(),
+        "outputSchema": OUTPUT_SCHEMAS["get_anchor"],
+    },
+    {
+        "name": "get_change",
+        "title": "Get one change",
+        "description": "One catalogue change by its event_id, as list_changes gives it. Reflects catalogue "
+        "commits only, not every change in a jurisdiction's law.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "event_id": {
+                    "type": "string",
+                    "minLength": 36,
+                    "maxLength": 36,
+                    "description": "The change's event_id, from list_changes.",
+                }
+            },
+            "required": ["event_id"],
+            "additionalProperties": False,
+        },
+        "annotations": _annotations(),
+        "outputSchema": OUTPUT_SCHEMAS["get_change"],
+    },
+    {
+        "name": "get_coverage",
+        "title": "Catalogue coverage",
+        "description": "Counts of catalogued sources and of sources with openly redistributable full text. "
+        "Call before making scope claims about what Open Alvary covers.",
+        "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+        "annotations": _annotations(),
+        "outputSchema": OUTPUT_SCHEMAS["get_coverage"],
     },
     {
         "name": "get_relationships",
@@ -108,8 +252,8 @@ TOOLS = [
         "source in force in its place now when it has been repealed. For case law: each judgment paragraph "
         "that cites a provision or another judgment, with the paragraph's words, and how a judgment follows, "
         "applies, distinguishes, doubts or overrules another, or was so treated, where a legally qualified "
-        "reviewer recorded it (no treatment recorded means none is known, not that there is none). Only "
-        "links a reviewer has checked against the official text. A page at a time.",
+        "reviewer recorded it. Only links a reviewer has checked against the official text; absence of a "
+        "recorded link or treatment does not prove none exists. A page at a time.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -148,17 +292,15 @@ TOOLS = [
             "required": ["source_id"],
             "additionalProperties": False,
         },
-        "annotations": {"readOnlyHint": True, "openWorldHint": False},
+        "annotations": _annotations(),
+        "outputSchema": OUTPUT_SCHEMAS["get_relationships"],
     },
     {
-        "name": "list_expressions",
-        "title": "List a source's language editions",
-        "description": "A source's language editions with a published text: for each, its texts, the one to read "
-        "when no date is given, and what the edition is worth as law as its record states it (authoritative, "
-        "equally_authentic, official_translation, unofficial_translation or machine_translation, with where "
-        "that is stated; unknown when nothing is recorded); and the instrument's own rule for which version "
-        "prevails where its language versions differ (language_rule), or unknown. A preferred text is a "
-        "reading default, never a claim that its edition is authoritative.",
+        "name": "get_source",
+        "title": "Get one source",
+        "description": "Get one catalogued source by its ID, including rights status and access mode. Inspect "
+        "rights and withdrawal status: with a key, a record that was public and was withdrawn for a reason "
+        "that may be told answers withdrawn, not unavailable — stop serving it and its texts.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -172,95 +314,143 @@ TOOLS = [
             "required": ["source_id"],
             "additionalProperties": False,
         },
-        "annotations": {"readOnlyHint": True, "openWorldHint": False},
+        "annotations": _annotations(),
+        "outputSchema": OUTPUT_SCHEMAS["get_source"],
     },
     {
-        "name": "get_anchor",
-        "title": "Get one part of a text exactly",
-        "description": "One part of a published text, such as a section or article, exactly: its words, its "
-        "span as UTF-8 byte offsets, the hash of its bytes for checking a quotation, a citation such as "
-        "s. 23(1)(a), the official file and the attribution its rights record asks for. Never shortened: a "
-        "part too large for one answer is refused; read it from the REST text route with its offsets. With a key, "
-        "a part whose text was public and was withdrawn for a reason that may be told answers withdrawn, not "
-        "unavailable.",
+        "name": "list_changes",
+        "title": "List catalogue changes",
+        "description": "Changes to the catalogue in commit order: records added, corrected or withdrawn, text "
+        "published, legal effects (repeals, amendments, commencements, transpositions and others a "
+        "reviewer checked) recorded or withdrawn, reviewed memberships of the African Union and the "
+        "regional bodies recorded, ended or corrected, and members' suspensions from participation recorded "
+        "or lifted (a suspended member remains one). Filter by jurisdiction, work, type, document class, "
+        "language or keyword. Pass the returned resume_token next time to get only newer changes. With a "
+        "key, a record withdrawn because its rights record changed is named by its IDs only; other "
+        "withdrawals of records no longer public, and a text withdrawn for privacy, name nothing. Reflects "
+        "catalogue commits only, not every change in a jurisdiction's law.",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "anchor_id": {
+                "jurisdiction": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "maxItems": 50,
+                    "description": "Jurisdiction IDs, such as ng or rw; a jurisdiction includes its "
+                    "subdivisions, and a body such as aa-ecowas includes changes to its membership and its "
+                    "members' suspensions.",
+                },
+                "work": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "maxItems": 50,
+                    "description": "Source IDs, to follow particular laws.",
+                },
+                "type": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "maxItems": 10,
+                    "description": "Kinds of change: catalogue_added, metadata_corrected, rights_changed, "
+                    "text_version_published, legal_effect_recorded, treatment_recorded, withdrawal, "
+                    "coverage_changed, membership_recorded, suspension_recorded.",
+                },
+                "class": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "maxItems": 50,
+                    "description": "Document types, such as act or regulation.",
+                },
+                "language": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "maxItems": 50,
+                    "description": "Languages of the affected text, such as en.",
+                },
+                "q": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "description": "Whole words in the title, citation or summary.",
+                },
+                "resume_token": {
+                    "type": "string",
+                    "maxLength": 2000,
+                    "description": "The resume_token of an earlier answer, for only newer changes.",
+                },
+                "cursor": {
+                    "type": "string",
+                    "maxLength": 2000,
+                    "description": "The next_cursor of the previous page, to continue it.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 25,
+                    "description": "Changes per page, 1 to 25.",
+                },
+            },
+            "additionalProperties": False,
+        },
+        "annotations": _annotations(),
+        "outputSchema": OUTPUT_SCHEMAS["list_changes"],
+    },
+    {
+        "name": "list_expressions",
+        "title": "List a source's language editions",
+        "description": "A source's language editions with a published text: for each, its texts, the one to read "
+        "when no date is given, and what the edition is worth as law as its record states it (authoritative, "
+        "equally_authentic, official_translation, unofficial_translation or machine_translation, with where "
+        "that is stated; unknown when nothing is recorded); and the instrument's own rule for which version "
+        "prevails where its language versions differ (language_rule), or unknown. Inspect language authority: "
+        "unofficial translations are not authoritative, and a preferred text is a reading default only.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "source_id": {
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 160,
-                    "description": "The part's ID, from a text's structure.",
+                    "description": "The source's ID, such as ng-foi-act-2011, from a search.",
                 }
             },
-            "required": ["anchor_id"],
+            "required": ["source_id"],
             "additionalProperties": False,
         },
-        "annotations": {"readOnlyHint": True, "openWorldHint": False},
+        "annotations": _annotations(),
+        "outputSchema": OUTPUT_SCHEMAS["list_expressions"],
     },
     {
-        "name": "search_text",
-        "title": "Search published texts",
-        "description": "Search the words of published legal texts. Returns matching passages (sections, articles, "
-        "schedule paragraphs), best first, each with an exact snippet, a citation such as s. 23(1)(a), the "
-        "part's anchor_id for get_anchor and the record's legal status. Only published texts are searched: "
-        "coverage says how many records in scope have one, and status tells no_result apart from a scope "
-        "with no published text (unsupported_scope) and a search that could not run (degraded).",
+        "name": "resolve_citation",
+        "title": "Resolve a citation",
+        "description": "The records a citation names and, for a citation of a part such as NDPA s. 23(1)(a), "
+        "art. 12 or First Schedule, para. 3, the part in the record's public text: its anchor_id for "
+        "get_anchor and its exact span. Alternatives (two languages, two texts, two records) are listed with "
+        "the reason, never chosen between. Unresolved does not mean no such law exists.",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "query": {
+                "citation": {
                     "type": "string",
                     "minLength": 1,
-                    "maxLength": 2000,
-                    "description": 'Words to find. "exact phrase" in quotes, -word to leave out, OR between '
-                    "alternatives. A citation of a part, such as NDPA s. 23(1)(a), puts that part first.",
+                    "maxLength": 300,
+                    "description": "The citation, such as FOI Act 2011, s. 1(1).",
                 },
-                "jurisdiction": {
+                "as_of": {
                     "type": "string",
-                    "minLength": 2,
-                    "maxLength": 40,
-                    "description": "One jurisdiction to search, such as ng (Nigeria). Without it, every "
-                    "jurisdiction available to you.",
+                    "format": "date",
+                    "description": "Look for the part only in texts in force on this date, YYYY-MM-DD.",
                 },
                 "language": {
                     "type": "string",
                     "minLength": 2,
                     "maxLength": 35,
-                    "description": "Only texts in this language, such as en or fr.",
-                },
-                "as_of": {
-                    "type": "string",
-                    "format": "date",
-                    "description": "Only texts in force on this date, YYYY-MM-DD. Texts with no effective "
-                    "date are left out.",
-                },
-                "limit": {
-                    "type": "integer",
-                    "minimum": 1,
-                    "maximum": 10,
-                    "description": "How many passages, 1 to 10. The default is 5.",
-                },
-                "cursor": {
-                    "type": "string",
-                    "maxLength": 200,
-                    "description": "The next_cursor of the previous answer, for more passages.",
-                },
-                "scope": {
-                    "type": "string",
-                    "enum": ["applicable"],
-                    "description": "applicable: also the law that binds in the one jurisdiction given on as_of "
-                    "(today without it): instruments of the African Union and regional bodies it belonged to "
-                    "(reviewed memberships only) and treaties it ratified or acceded to. Each passage then "
-                    "says how it relates to that jurisdiction (applicability), and the answer states what "
-                    "was added and left out. For a place within a country (ng-la), the country's own law "
-                    "too, and the country's memberships and treaties.",
+                    "description": "Look for the part only in texts in this language, such as en.",
                 },
             },
-            "required": ["query"],
+            "required": ["citation"],
             "additionalProperties": False,
         },
-        "annotations": {"readOnlyHint": True, "openWorldHint": False},
+        "annotations": _annotations(),
+        "outputSchema": OUTPUT_SCHEMAS["resolve_citation"],
     },
     {
         "name": "retrieve_evidence",
@@ -273,7 +463,8 @@ TOOLS = [
         "ranks there. A question that cites a part (NDPA s. 24(1)(a), section 24 of the Nigeria Data "
         "Protection Act, Part V of the NDPA), names a page of a law (page 18 of the NDPA), is an Open Alvary "
         "or official address, names a law or asks what a term means is routed to that first. Quote only the "
-        "words given; check cited parts with check_currentness before showing an answer.",
+        "words given; check cited parts with check_currentness before showing an answer. The official "
+        "published copy always prevails; do not harvest a whole Act part-by-part.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -329,253 +520,257 @@ TOOLS = [
                     "belonged to (reviewed memberships only) and treaties it ratified or acceded to. Each unit "
                     "then says how it relates to that jurisdiction (applicability: national, regional_direct, "
                     "treaty_in_force_for_state, unknown and others, with what that rests on), and the answer "
-                    "states what was added and left out. For a place within a country (ng-la), the country's "
-                    "own law too, and the country's memberships and treaties.",
+                    "states what was added and left out. For a place within a national jurisdiction (ng-la), "
+                    "the national law too, and its memberships and treaties.",
                 },
             },
             "required": ["query"],
             "additionalProperties": False,
         },
-        "annotations": {"readOnlyHint": True, "openWorldHint": False},
+        "annotations": _annotations(),
+        "outputSchema": OUTPUT_SCHEMAS["retrieve_evidence"],
     },
     {
-        "name": "check_currentness",
-        "title": "Check cited parts",
-        "description": "Before showing an answer that cites the corpus: for each cited part, whether it is "
-        "still published with the same words (unchanged), whether a newer text of the same edition exists "
-        "(newer_version, with the same part's anchor_id there and whether its words changed), whether the "
-        "span_hash sent is wrong (span_mismatch) or the part is not public (unavailable; with a key, "
-        "withdrawn instead when its text was public and was withdrawn for a reason that may be told); whether it "
-        "was in force on a date; and, given a jurisdiction, whether the record binds there on that date "
-        "(applicability: bound, not_bound or unknown, with the memberships, legal effect or treaty party "
-        "entry it rests on).",
+        "name": "search_catalogue",
+        "title": "Search the catalogue",
+        "description": "Search catalogued legal sources by words in their title, citation or summary, or in "
+        "one part of their cleared full text. Every word must match a whole word, in any order. Returns "
+        "metadata, rights status and official links. Records without a published text do not grant reuse "
+        "rights. Verify currentness and relationships with get_relationships and check_currentness before "
+        "relying on a law.",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "items": {
-                    "type": "array",
-                    "minItems": 1,
-                    "maxItems": 100,
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "anchor_id": {"type": "string", "minLength": 1, "maxLength": 160},
-                            "version_id": {"type": "string", "minLength": 1, "maxLength": 160},
-                            "locator": {"type": "string", "minLength": 1, "maxLength": 1000},
-                            "span_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-                            "as_of": {"type": "string", "format": "date"},
-                            "jurisdiction": {
-                                "type": "string",
-                                "pattern": "^[a-z]{2}(?:-[a-z0-9]{1,12})?$",
-                            },
-                        },
-                        "additionalProperties": False,
-                    },
-                    "description": "The parts: each an anchor_id, or a version_id with a locator, with the "
-                    "span_hash you hold, an optional as_of date and, to ask whether the record binds in a "
-                    "country on that date, its jurisdiction, such as sn.",
-                },
-            },
-            "required": ["items"],
-            "additionalProperties": False,
-        },
-        "annotations": {"readOnlyHint": True, "openWorldHint": False},
-    },
-    {
-        "name": "resolve_citation",
-        "title": "Resolve a citation",
-        "description": "The records a citation names and, for a citation of a part such as NDPA s. 23(1)(a), "
-        "art. 12 or First Schedule, para. 3, the part in the record's public text: its anchor_id for "
-        "get_anchor and its exact span. Alternatives (two languages, two texts, two records) are listed with "
-        "the reason, never chosen between.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "citation": {
+                "query": {
                     "type": "string",
                     "minLength": 1,
-                    "maxLength": 300,
-                    "description": "The citation, such as FOI Act 2011, s. 1(1).",
-                },
-                "as_of": {
-                    "type": "string",
-                    "format": "date",
-                    "description": "Look for the part only in texts in force on this date, YYYY-MM-DD.",
-                },
-                "language": {
-                    "type": "string",
-                    "minLength": 2,
-                    "maxLength": 35,
-                    "description": "Look for the part only in texts in this language, such as en.",
-                },
-            },
-            "required": ["citation"],
-            "additionalProperties": False,
-        },
-        "annotations": {"readOnlyHint": True, "openWorldHint": False},
-    },
-    {
-        "name": "list_changes",
-        "title": "List catalogue changes",
-        "description": "Changes to the catalogue in commit order: records added, corrected or withdrawn, text "
-        "published, legal effects (repeals, amendments, commencements, transpositions and others a "
-        "reviewer checked) recorded or withdrawn, reviewed memberships of the African Union and the "
-        "regional bodies recorded, ended or corrected, and members' suspensions from participation recorded "
-        "or lifted (a suspended member remains one). Filter by jurisdiction, work, type, document class, "
-        "language or keyword. Pass the returned resume_token next time to get only newer changes. With a "
-        "key, a record withdrawn because its rights record changed is named by its IDs only; other "
-        "withdrawals of records no longer public, and a text withdrawn for privacy, name nothing. Changes "
-        "to what Open Alvary holds, not every change in a country's law.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "jurisdiction": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "maxItems": 50,
-                    "description": "Jurisdiction IDs, such as ng or rw; a country includes its states, and a "
-                    "body such as aa-ecowas includes changes to its membership and its members' suspensions.",
-                },
-                "work": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "maxItems": 50,
-                    "description": "Source IDs, to follow particular laws.",
-                },
-                "type": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "maxItems": 10,
-                    "description": "Kinds of change: catalogue_added, metadata_corrected, rights_changed, "
-                    "text_version_published, legal_effect_recorded, treatment_recorded, withdrawal, "
-                    "coverage_changed, membership_recorded, suspension_recorded.",
-                },
-                "class": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "maxItems": 50,
-                    "description": "Document types, such as act or regulation.",
-                },
-                "language": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "maxItems": 50,
-                    "description": "Languages of the affected text, such as en.",
-                },
-                "q": {
-                    "type": "string",
                     "maxLength": 200,
-                    "description": "Whole words in the title, citation or summary.",
-                },
-                "resume_token": {
-                    "type": "string",
-                    "maxLength": 2000,
-                    "description": "The resume_token of an earlier answer, for only newer changes.",
-                },
-                "cursor": {
-                    "type": "string",
-                    "maxLength": 2000,
-                    "description": "The next_cursor of the previous page, to continue it.",
+                    "description": "Words to find, such as a title or a citation. Every word must appear; case "
+                    "and punctuation don't matter.",
                 },
                 "limit": {
                     "type": "integer",
                     "minimum": 1,
                     "maximum": 25,
-                    "description": "Changes per page, 1 to 25.",
-                },
-            },
-            "additionalProperties": False,
-        },
-        "annotations": {"readOnlyHint": True, "openWorldHint": False},
-    },
-    {
-        "name": "get_change",
-        "title": "Get one change",
-        "description": "One catalogue change by its event_id, as list_changes gives it.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "event_id": {
-                    "type": "string",
-                    "minLength": 36,
-                    "maxLength": 36,
-                    "description": "The change's event_id, from list_changes.",
-                }
-            },
-            "required": ["event_id"],
-            "additionalProperties": False,
-        },
-        "annotations": {"readOnlyHint": True, "openWorldHint": False},
-    },
-    {
-        "name": "get_coverage",
-        "title": "Catalogue coverage",
-        "description": "Counts of catalogued sources and of sources with openly redistributable full text.",
-        "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
-        "annotations": {"readOnlyHint": True, "openWorldHint": False},
-    },
-    {
-        "name": "check_claim",
-        "title": "Check a legal claim and issue a signed receipt",
-        "description": "Preview (may change): deterministically checks whether quoted words appear in a named "
-        "part of a text Open Alvary publishes and what Open Alvary's record lists about its status on a date "
-        "(and whether it is recorded as binding in a jurisdiction), returning a publisher-signed oa-receipt-1 "
-        "receipt beside the claim. Does not give legal advice or judge whether a section supports a paraphrase.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "citation": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 300,
-                    "description": "A citation such as 'Freedom of Information Act 2011, s. 1(1)'. One of "
-                    "citation or anchor_id is required.",
-                },
-                "anchor_id": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 160,
-                    "description": "The part's anchor_id when already held. One of citation or anchor_id is "
-                    "required.",
-                },
-                "quote": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 2000,
-                    "description": "Optional exact words the claim says the law uses; at least 40 characters "
-                    "after normalisation unless the quote is the whole of the part's words.",
-                },
-                "as_of": {
-                    "type": "string",
-                    "format": "date",
-                    "description": "Optional assessment date YYYY-MM-DD, not after today in UTC. Left out, "
-                    "checks status today.",
+                    "description": "How many sources to return, 1 to 25.",
                 },
                 "jurisdiction": {
                     "type": "string",
                     "minLength": 2,
                     "maxLength": 40,
-                    "description": "Optional jurisdiction such as ng; asks whether the record is recorded as "
-                    "binding there.",
+                    "description": "One jurisdiction to search, such as rw (Rwanda) or ng (Nigeria). "
+                    "Without it, the search covers every jurisdiction available to you.",
+                },
+            },
+            "required": ["query"],
+            "additionalProperties": False,
+        },
+        "annotations": _annotations(),
+        "outputSchema": OUTPUT_SCHEMAS["search_catalogue"],
+    },
+    {
+        "name": "search_text",
+        "title": "Search published texts",
+        "description": "Search the words of published legal texts. Returns matching passages (sections, articles, "
+        "schedule paragraphs), best first, each with an exact snippet, a citation such as s. 23(1)(a), the "
+        "part's anchor_id for get_anchor and the record's legal status. Only published texts are searched "
+        "(records without a published text do not grant reuse rights): coverage says how many records in scope "
+        "have one, and status tells no_result apart from a scope with no published text (unsupported_scope) "
+        "and a search that could not run (degraded). Verify currentness and relationships with "
+        "get_relationships and check_currentness before relying on a law.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000,
+                    "description": 'Words to find. "exact phrase" in quotes, -word to leave out, OR between '
+                    "alternatives. A citation of a part, such as NDPA s. 23(1)(a), puts that part first.",
+                },
+                "jurisdiction": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 40,
+                    "description": "One jurisdiction to search, such as ng (Nigeria). Without it, every "
+                    "jurisdiction available to you.",
                 },
                 "language": {
                     "type": "string",
                     "minLength": 2,
                     "maxLength": 35,
-                    "description": "Optional language such as en.",
+                    "description": "Only texts in this language, such as en or fr.",
                 },
-                "reading": {
+                "as_of": {
                     "type": "string",
-                    "maxLength": 600,
-                    "description": "Optional sentence this check is meant to support. Echoed beside the "
-                    "receipt; not checked, not signed, not in the claim digest, never logged.",
+                    "format": "date",
+                    "description": "Only texts in force on this date, YYYY-MM-DD. Texts with no effective "
+                    "date are left out.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10,
+                    "description": "How many passages, 1 to 10. The default is 5.",
+                },
+                "cursor": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "description": "The next_cursor of the previous answer, for more passages.",
+                },
+                "scope": {
+                    "type": "string",
+                    "enum": ["applicable"],
+                    "description": "applicable: also the law that binds in the one jurisdiction given on as_of "
+                    "(today without it): instruments of the African Union and regional bodies it belonged to "
+                    "(reviewed memberships only) and treaties it ratified or acceded to. Each passage then "
+                    "says how it relates to that jurisdiction (applicability), and the answer states what "
+                    "was added and left out. For a place within a national jurisdiction (ng-la), the national "
+                    "law too, and its memberships and treaties.",
                 },
             },
+            "required": ["query"],
             "additionalProperties": False,
         },
-        "annotations": {"readOnlyHint": True, "openWorldHint": False},
+        "annotations": _annotations(),
+        "outputSchema": OUTPUT_SCHEMAS["search_text"],
     },
 ]
+
+TOOLS_2026 = TOOLS
+TOOLS_2025 = [{k: v for k, v in t.items() if k != "outputSchema"} for t in TOOLS]
+TOOL_SCHEMA_REVISION = hashlib.sha256(
+    json.dumps(TOOLS_2026, sort_keys=True, separators=(",", ":")).encode()
+).hexdigest()[:16]
+
+
+def normalize_host(value: str) -> str:
+    """Lowercase a Host header and strip standard :80/:443 ports while keeping non-standard ports."""
+    host = value.strip().lower()
+    if host.startswith("["):
+        if host.endswith("]:443"):
+            return host[:-4]
+        if host.endswith("]:80"):
+            return host[:-3]
+        return host
+    if host.count(":") == 1:
+        name, port = host.rsplit(":", 1)
+        if port in ("80", "443"):
+            return name
+    return host
+
+
+def _encode_cursor(offset: int) -> str:
+    raw = json.dumps({"rev": TOOL_SCHEMA_REVISION, "offset": offset}, separators=(",", ":")).encode()
+    return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
+
+
+def _decode_cursor(cursor) -> int:
+    if cursor is None:
+        return 0
+    if not isinstance(cursor, str) or not (1 <= len(cursor) <= 256) or not _B64URL_RE.fullmatch(cursor):
+        raise _CursorError("invalid_cursor", "Invalid tools/list cursor.")
+    try:
+        padded = cursor + "=" * (-len(cursor) % 4)
+        parsed = json.loads(base64.urlsafe_b64decode(padded).decode("utf-8"))
+    except (ValueError, UnicodeDecodeError):
+        raise _CursorError("invalid_cursor", "Invalid tools/list cursor.") from None
+    if not isinstance(parsed, dict) or set(parsed.keys()) != {"rev", "offset"}:
+        raise _CursorError("invalid_cursor", "Invalid tools/list cursor.")
+    rev, offset = parsed["rev"], parsed["offset"]
+    if not isinstance(rev, str) or not isinstance(offset, int) or isinstance(offset, bool):
+        raise _CursorError("invalid_cursor", "Invalid tools/list cursor.")
+    if rev != TOOL_SCHEMA_REVISION:
+        raise _CursorError("stale_cursor", "Cursor does not match the current tool schema revision.")
+    if offset < 0 or offset >= len(TOOLS_2026):
+        raise _CursorError("invalid_cursor", "Cursor offset is out of range.")
+    return offset
+
+
+def _truncate_utf8(text: str, limit: int = MAX_SUMMARY_BYTES) -> str:
+    raw = text.encode("utf-8")
+    if len(raw) <= limit:
+        return text
+    clipped = raw[: max(0, limit - 3)]
+    return clipped.decode("utf-8", errors="ignore").rstrip() + "..."
+
+
+def _summary_text(name: str, payload: dict) -> str:
+    if name == "search_catalogue":
+        items = payload.get("items") or []
+        parts = [f"Found {payload.get('total', 0)} catalogued source(s) (returned {len(items)})."]
+        for item in items[:5]:
+            parts.append(
+                f"- {item.get('title', '')} ({item.get('id', '')}, {item.get('jurisdiction_id', '')})"
+            )
+        return _truncate_utf8("\n".join(parts))
+    if name == "get_source":
+        return _truncate_utf8(
+            f"{payload.get('title', '')} ({payload.get('id', '')}, {payload.get('jurisdiction_id', '')}, "
+            f"status: {payload.get('legal_status', 'unknown')})."
+        )
+    if name == "get_relationships":
+        return _truncate_utf8(
+            f"{payload.get('source_id', '')}: {payload.get('total', 0)} reviewed relationship(s), "
+            f"legal_status={payload.get('legal_status', 'unknown')}."
+        )
+    if name == "list_expressions":
+        items = payload.get("items") or []
+        return _truncate_utf8(f"{payload.get('source_id', '')}: {len(items)} language edition(s).")
+    if name == "get_anchor":
+        label = payload.get("citation") or payload.get("pinpoint") or payload.get("anchor_id", "")
+        return _truncate_utf8(f"{label} ({payload.get('source_id', '')}, {payload.get('version_id', '')}).")
+    if name == "search_text":
+        items = payload.get("items") or []
+        return _truncate_utf8(
+            f"Text search ({payload.get('status', '')}): {payload.get('total', 0)} matching passage(s) "
+            f"(returned {len(items)})."
+        )
+    if name == "retrieve_evidence":
+        units = payload.get("evidence") or []
+        return _truncate_utf8(f"Retrieved {len(units)} evidence unit(s).")
+    if name == "check_currentness":
+        results = payload.get("results") or []
+        return _truncate_utf8(f"Checked {len(results)} cited part(s).")
+    if name == "resolve_citation":
+        matches = payload.get("matches") or []
+        return _truncate_utf8(
+            f"Citation resolution: {payload.get('status', '')} ({len(matches)} matching record(s))."
+        )
+    if name == "list_changes":
+        events = payload.get("events") or []
+        return _truncate_utf8(
+            f"Returned {len(events)} catalogue change(s) (has_more={payload.get('has_more', False)})."
+        )
+    if name == "get_change":
+        summary = payload.get("summary") or ""
+        return _truncate_utf8(
+            f"Change {payload.get('event_id', '')} ({payload.get('event_type', '')}): {summary}".strip()
+        )
+    if name == "get_coverage":
+        return _truncate_utf8(
+            f"Coverage: {payload.get('catalogued_sources', 0)} catalogued sources, "
+            f"{payload.get('open_full_text_sources', 0)} with openly redistributable full text."
+        )
+    if name == "check_claim":
+        receipt = payload.get("receipt") if isinstance(payload.get("receipt"), dict) else {}
+        return _truncate_utf8(
+            f"Claim check ({receipt.get('status', '')}): {receipt.get('statement', '')}".strip()
+        )
+    return _truncate_utf8(f"Tool {name} completed.")
+
+
+def _scoped_search_notice(plan: Reach, allowed_source_ids: frozenset[str] | None) -> str | None:
+    if allowed_source_ids is not None:
+        return None
+    active = plan.active_jurisdictions()
+    if active is None:
+        return None
+    return (
+        f"Search limited to your plan's active jurisdiction(s) ({format_jurisdictions(active)}) "
+        "plus continental and regional instruments (aa-*). An owner can change jurisdictions or plan "
+        f"under Plan and limits at {MANAGE_URL}."
+    )
 
 
 def changes_tool(conn, name, arguments, keyed: bool = False):
@@ -632,8 +827,11 @@ def _bounded(payload: dict, fewer: str = "passages") -> dict:
     return payload
 
 
-def _error(id_, code, message):
-    return {"jsonrpc": "2.0", "id": id_, "error": {"code": code, "message": message}}
+def _error(id_, code, message, data=None):
+    error = {"code": code, "message": message}
+    if data is not None:
+        error["data"] = data
+    return {"jsonrpc": "2.0", "id": id_, "error": error}
 
 
 def _result(id_, result):
@@ -670,16 +868,25 @@ def _tool_result(payload, is_error=False):
     return {"content": [{"type": "text", "text": text}], "isError": is_error}
 
 
-def _tool_error(code: str, message: str, retry_after: int | None = None, extra: dict | None = None) -> dict:
+def _tool_error(
+    code: str,
+    message: str,
+    retry_after: int | None = None,
+    extra: dict | None = None,
+    *,
+    include_result_type: bool = False,
+) -> dict:
     """A tool that ran and failed: the message for the model as text, as before, and the same machine-
-    readable code as the REST refusal's in structuredContent (MCP 2025-06-18), which clients that don't
-    know it ignore."""
+    readable code as the REST refusal's in structuredContent (MCP 2025-06-18 / 2026-07-28)."""
     structured: dict = {"code": code}
     if retry_after is not None:
         structured["retry_after_seconds"] = retry_after
     if extra:
         structured.update(extra)
-    return _tool_result(message, is_error=True) | {"structuredContent": structured}
+    out = _tool_result(message, is_error=True) | {"structuredContent": structured}
+    if include_result_type:
+        out = {"resultType": "complete", **out}
+    return out
 
 
 NOT_COUNTED = (
@@ -771,10 +978,52 @@ def create_router(
     unavailable: tuple[type[Exception], ...],
     reach: Callable[[Request], Reach] = lambda request: EVERYWHERE,
     signer: Callable[[], object] | None = None,
+    allowed_origins: frozenset[str] | None = None,
+    allowed_hosts: frozenset[str] | None = None,
+    front_door_id: str | None = None,
+    tools_page_size: int = 25,
+    tool_timeout: float = 10.0,
 ) -> APIRouter:
-    """``reach`` gives the organisation's plan (api.reach): its countries at the plan's limits, every
+    """``reach`` gives the organisation's plan (api.reach): its jurisdictions at the plan's limits, every
     other jurisdiction at the Starter rate, or refused on Starter."""
     router = APIRouter()
+    norm_allowed_origins = (
+        frozenset(o.strip().lower().rstrip("/") for o in allowed_origins)
+        if allowed_origins is not None
+        else None
+    )
+    norm_allowed_hosts = (
+        frozenset(normalize_host(h) for h in allowed_hosts) if allowed_hosts is not None else None
+    )
+    page_size = max(1, tools_page_size)
+
+    def _effective_host(request: Request) -> str:
+        if front_door_id and request.headers.get("x-azure-fdid") == front_door_id:
+            return request.headers.get("x-forwarded-host", "").split(",", 1)[0].strip()
+        return request.headers.get("host", "").strip()
+
+    def _origin_ok(origin: str, effective_host: str) -> bool:
+        stripped = origin.strip()
+        if not stripped or stripped.lower() == "null":
+            return False
+        parts = urlsplit(stripped)
+        scheme = parts.scheme.lower()
+        if (
+            scheme not in ("http", "https")
+            or not parts.netloc
+            or parts.path
+            or parts.query
+            or parts.fragment
+            or parts.username is not None
+            or parts.password is not None
+        ):
+            return False
+        normalized = f"{scheme}://{parts.netloc.lower()}"
+        if norm_allowed_origins is not None:
+            return normalized in norm_allowed_origins
+        if not effective_host:
+            return False
+        return parts.netloc.lower() == normalize_host(effective_host)
 
     def call_tool(
         name,
@@ -827,6 +1076,7 @@ def create_router(
             if name == "search_catalogue" and set(arguments) <= {"query", "limit", "jurisdiction"}:
                 query, limit = arguments.get("query"), arguments.get("limit", 10)
                 jurisdiction = arguments.get("jurisdiction")
+                unnamed_search = jurisdiction is None
                 if not isinstance(query, str) or not 1 <= len(query) <= 200:
                     return None
                 if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 25:
@@ -858,9 +1108,14 @@ def create_router(
                     return SearchPage(total=total, items=service._views(pairs), notices=notices).model_dump(
                         mode="json"
                     )
-                return service.search(query, jurisdiction=jurisdiction, limit=limit, offset=0).model_dump(
+                payload = service.search(query, jurisdiction=jurisdiction, limit=limit, offset=0).model_dump(
                     mode="json"
                 )
+                if unnamed_search:
+                    notice = _scoped_search_notice(plan, allowed_source_ids)
+                    if notice is not None:
+                        payload["notices"] = [*(payload.get("notices") or ()), notice]
+                return payload
             if name == "get_source" and set(arguments) == {"source_id"}:
                 if not isinstance(arguments["source_id"], str) or not 1 <= len(arguments["source_id"]) <= 160:
                     return None
@@ -934,6 +1189,7 @@ def create_router(
                 query, limit, cursor = arguments["query"], arguments.get("limit", 5), arguments.get("cursor")
                 as_of, language = _date(arguments.get("as_of")), _language(arguments.get("language"))
                 jurisdiction = arguments.get("jurisdiction")
+                unnamed_search = jurisdiction is None
                 if (
                     not isinstance(query, str)
                     or not 1 <= len(query) <= 2000
@@ -960,7 +1216,12 @@ def create_router(
                 widened = applicable(jurisdictions[0], as_of, None) if "scope" in arguments else None
                 filters = text_index.Filters(jurisdictions=jurisdictions, language=language, as_of=as_of)
                 page = service.search_text(query, filters, limit=limit, cursor=cursor, scope=widened)
-                return _bounded(page.model_dump(mode="json"))
+                payload = page.model_dump(mode="json")
+                if unnamed_search:
+                    notice = _scoped_search_notice(plan, allowed_source_ids)
+                    if notice is not None:
+                        payload["notices"] = [*(payload.get("notices") or ()), notice]
+                return _bounded(payload)
             if name == "resolve_citation" and {"citation"} <= set(arguments) <= {
                 "citation",
                 "as_of",
@@ -1083,6 +1344,10 @@ def create_router(
                 payload = pack.model_dump(mode="json")
                 if allowed_source_ids is not None:
                     payload = _listed_pack(payload, allowed_source_ids)
+                elif named is None:
+                    notice = _scoped_search_notice(plan, allowed_source_ids)
+                    if notice is not None and isinstance(payload.get("coverage"), dict):
+                        payload["coverage"]["notices"] = [*(payload["coverage"].get("notices") or ()), notice]
                 return _bounded(payload)
             if name == "check_claim" and set(arguments) <= {
                 "citation",
@@ -1096,6 +1361,14 @@ def create_router(
                 from api.receipts import load_signer_from_env
                 from retrieval.verify import VerifyToolError, verify_claim
 
+                debited = False
+
+                def admit_once(code: str) -> None:
+                    nonlocal debited
+                    if not plan.covers(code) and not debited:
+                        plan.admit(code)
+                        debited = True
+
                 active_signer = signer() if signer is not None else load_signer_from_env()
                 try:
                     result = verify_claim(
@@ -1103,6 +1376,7 @@ def create_router(
                         arguments,
                         signer=active_signer,
                         allowed_source_ids=allowed_source_ids,
+                        check_jurisdiction=admit_once,
                     )
                 except VerifyToolError as error:
                     msg = (
@@ -1111,10 +1385,6 @@ def create_router(
                         else f"{error.code}: {error.message}"
                     )
                     raise _VerifyError(error.code, msg, error.extra) from None
-                receipt = result.get("receipt") if isinstance(result, dict) else None
-                record = receipt.get("record") if isinstance(receipt, dict) else None
-                if isinstance(record, dict) and isinstance(record.get("jurisdiction_id"), str):
-                    plan.admit(record["jurisdiction_id"])
                 return _bounded(result)
             if name == "check_currentness" and set(arguments) == {"items"}:
                 try:
@@ -1135,41 +1405,267 @@ def create_router(
 
     @router.post("/mcp")
     async def mcp(request: Request):
+        request_id = getattr(request.state, "request_id", None) or uuid.uuid4().hex[:16]
+        effective_host = _effective_host(request)
+        if norm_allowed_hosts is not None and not getattr(request.state, "law_check_internal", False):
+            if not effective_host or normalize_host(effective_host) not in norm_allowed_hosts:
+                return JSONResponse(
+                    status_code=403,
+                    content=_error(
+                        None,
+                        10002,
+                        "Host not allowed",
+                        {
+                            "code": "host_not_allowed",
+                            "retryable": False,
+                            "request_id": request_id,
+                            "schema_version": "1",
+                        },
+                    ),
+                    headers={"Cache-Control": "no-store", "X-Request-ID": request_id},
+                )
         origin = request.headers.get("origin")
-        # Refuse cross-origin browser calls: the Origin host must equal the requested Host.
-        # (TLS ends at the edge proxy, so the scheme is not compared.) Non-browser clients send none.
-        if origin is not None and urlsplit(origin).netloc != request.headers.get("host", ""):
-            return JSONResponse(status_code=403, content=_error(None, -32600, "Origin not allowed"))
+        if origin is not None and not _origin_ok(origin, effective_host):
+            return JSONResponse(
+                status_code=403,
+                content=_error(
+                    None,
+                    10002,
+                    "Origin not allowed",
+                    {
+                        "code": "origin_not_allowed",
+                        "retryable": False,
+                        "request_id": request_id,
+                        "schema_version": "1",
+                    },
+                ),
+                headers={"Cache-Control": "no-store", "X-Request-ID": request_id},
+            )
         try:
             message = json.loads(await request.body())
         except ValueError:
             return JSONResponse(status_code=400, content=_error(None, -32700, "Parse error"))
-        if not isinstance(message, dict) or message.get("jsonrpc") != "2.0" or "method" not in message:
+        if (
+            not isinstance(message, dict)
+            or message.get("jsonrpc") != "2.0"
+            or not isinstance(message.get("method"), str)
+        ):
             return JSONResponse(status_code=400, content=_error(None, -32600, "Invalid request"))
-        method, id_ = message["method"], message.get("id")
-        if id_ is None:
-            return Response(status_code=202)  # notifications (for example notifications/initialized)
-        params = message.get("params") or {}
-        if method == "initialize":
-            requested = params.get("protocolVersion") if isinstance(params, dict) else None
-            version = requested if requested in PROTOCOL_VERSIONS else PROTOCOL_VERSIONS[0]
-            return _result(
-                id_,
-                {
-                    "protocolVersion": version,
-                    "capabilities": {"tools": {"listChanged": False}},
-                    "serverInfo": SERVER_INFO,
-                    "instructions": "Read-only public catalogue. Metadata is not permission to reuse linked documents; "
-                    "check each source's rights status.",
-                },
+        method = message["method"]
+        raw_id = message.get("id")
+        if raw_id is not None and (not isinstance(raw_id, (str, int)) or isinstance(raw_id, bool)):
+            return JSONResponse(status_code=400, content=_error(None, -32600, "Invalid request"))
+        id_ = raw_id
+        request.state.jsonrpc_id = id_
+
+        raw_params = message.get("params")
+        params = {} if raw_params is None else raw_params
+        meta = params.get("_meta") if isinstance(params, dict) else None
+        meta_version = meta.get("io.modelcontextprotocol/protocolVersion") if isinstance(meta, dict) else None
+
+        header_version = request.headers.get("mcp-protocol-version")
+        if header_version is not None and header_version not in ACCEPTED_HEADER_VERSIONS:
+            return JSONResponse(
+                status_code=400,
+                content=_error(
+                    id_,
+                    -32600,
+                    f"Unsupported MCP-Protocol-Version: {header_version}",
+                    {
+                        "code": "unsupported_protocol_version",
+                        "supportedVersions": SUPPORTED_PROTOCOL_VERSIONS,
+                    },
+                ),
             )
+
+        is_2026 = (
+            header_version == "2026-07-28" or meta_version == "2026-07-28" or method == "server/discover"
+        )
+
+        if is_2026:
+            if id_ is None:
+                return JSONResponse(
+                    status_code=400,
+                    content=_error(
+                        None,
+                        -32600,
+                        "Notifications are not supported on this stateless endpoint.",
+                        {"code": "notifications_unsupported"},
+                    ),
+                )
+            if method == "initialize":
+                return JSONResponse(
+                    status_code=400,
+                    content=_error(
+                        id_,
+                        -32600,
+                        "initialize is not supported under MCP 2026-07-28; use server/discover.",
+                        {"code": "unsupported_method_for_version"},
+                    ),
+                )
+            mcp_method = request.headers.get("mcp-method")
+            mcp_name = request.headers.get("mcp-name")
+            if header_version != "2026-07-28" or mcp_method != method:
+                return JSONResponse(
+                    status_code=400,
+                    content=_error(
+                        id_,
+                        -32600,
+                        "MCP HTTP headers must match the JSON-RPC envelope.",
+                        {"code": "header_mismatch"},
+                    ),
+                )
+            if method == "tools/call":
+                param_name = params.get("name") if isinstance(params, dict) else None
+                if not isinstance(param_name, str) or mcp_name != param_name:
+                    return JSONResponse(
+                        status_code=400,
+                        content=_error(
+                            id_,
+                            -32600,
+                            "Mcp-Name header must match params.name on tools/call.",
+                            {"code": "header_mismatch"},
+                        ),
+                    )
+            elif mcp_name is not None:
+                return JSONResponse(
+                    status_code=400,
+                    content=_error(
+                        id_,
+                        -32600,
+                        "Mcp-Name header is only allowed on tools/call.",
+                        {"code": "header_mismatch"},
+                    ),
+                )
+            if method == "server/discover":
+                if meta_version is not None and meta_version != "2026-07-28":
+                    return JSONResponse(
+                        status_code=400,
+                        content=_error(
+                            id_,
+                            -32600,
+                            "MCP-Protocol-Version header does not match params._meta protocolVersion.",
+                            {"code": "header_mismatch"},
+                        ),
+                    )
+                return _result(
+                    id_,
+                    {
+                        "resultType": "complete",
+                        "supportedVersions": SUPPORTED_PROTOCOL_VERSIONS,
+                        "capabilities": {"tools": {}},
+                        "_meta": {"io.modelcontextprotocol/serverInfo": SERVER_INFO},
+                        "instructions": INSTRUCTIONS,
+                        "ttlMs": 0,
+                        "cacheScope": "public",
+                    },
+                )
+            if not isinstance(params, dict) or not isinstance(meta, dict):
+                return JSONResponse(
+                    status_code=400,
+                    content=_error(
+                        id_,
+                        -32602,
+                        "params._meta is required under MCP 2026-07-28.",
+                        {"code": "invalid_meta"},
+                    ),
+                )
+            if not isinstance(meta_version, str):
+                return JSONResponse(
+                    status_code=400,
+                    content=_error(
+                        id_,
+                        -32602,
+                        "params._meta must include io.modelcontextprotocol/protocolVersion.",
+                        {"code": "invalid_meta"},
+                    ),
+                )
+            if meta_version != "2026-07-28":
+                return JSONResponse(
+                    status_code=400,
+                    content=_error(
+                        id_,
+                        -32600,
+                        "MCP-Protocol-Version header does not match params._meta protocolVersion.",
+                        {"code": "header_mismatch"},
+                    ),
+                )
+            client_caps = meta.get("io.modelcontextprotocol/clientCapabilities")
+            client_info = meta.get("io.modelcontextprotocol/clientInfo")
+            if not isinstance(client_caps, dict) or (
+                client_info is not None and not isinstance(client_info, dict)
+            ):
+                return JSONResponse(
+                    status_code=400,
+                    content=_error(
+                        id_,
+                        -32602,
+                        "params._meta must include an object io.modelcontextprotocol/clientCapabilities.",
+                        {"code": "invalid_meta"},
+                    ),
+                )
+        else:
+            if id_ is None:
+                return Response(status_code=202)  # notifications (for example notifications/initialized)
+            if method == "initialize":
+                requested = params.get("protocolVersion") if isinstance(params, dict) else None
+                version = requested if requested in PROTOCOL_VERSIONS else PROTOCOL_VERSIONS[0]
+                return _result(
+                    id_,
+                    {
+                        "protocolVersion": version,
+                        "capabilities": {"tools": {"listChanged": False}},
+                        "serverInfo": SERVER_INFO,
+                        "instructions": INSTRUCTIONS,
+                    },
+                )
+
         if method == "ping":
-            return _result(id_, {})
+            return _result(id_, {"resultType": "complete"} if is_2026 else {})
+
         if method == "tools/list":
-            return _result(id_, {"tools": TOOLS})
+            if not isinstance(params, dict):
+                return JSONResponse(
+                    status_code=400 if is_2026 else 200,
+                    content=_error(
+                        id_, -32602, "Invalid params", {"code": "invalid_input"} if is_2026 else None
+                    ),
+                )
+            try:
+                offset = _decode_cursor(params.get("cursor"))
+            except _CursorError as err:
+                return JSONResponse(
+                    status_code=400 if is_2026 else 200,
+                    content=_error(id_, -32602, err.message, {"code": err.code}),
+                )
+            catalog = TOOLS_2026 if is_2026 else TOOLS_2025
+            page = catalog[offset : offset + page_size]
+            next_offset = offset + page_size
+            next_cursor = _encode_cursor(next_offset) if next_offset < len(catalog) else None
+            if is_2026:
+                return _result(
+                    id_,
+                    {
+                        "resultType": "complete",
+                        "tools": page,
+                        "nextCursor": next_cursor,
+                        "ttlMs": 0,
+                        "cacheScope": "public",
+                    },
+                )
+            body: dict = {"tools": page}
+            if next_cursor is not None:
+                body["nextCursor"] = next_cursor
+            return _result(id_, body)
+
         if method == "tools/call":
             if not isinstance(params, dict) or not isinstance(params.get("name"), str):
-                return _error(id_, -32602, "Invalid params")
+                return JSONResponse(
+                    status_code=400 if is_2026 else 200,
+                    content=_error(
+                        id_, -32602, "Invalid params", {"code": "invalid_input"} if is_2026 else None
+                    ),
+                )
             access = getattr(request.state, "access", None)
             tier = (access or {}).get("tier") or {}
             if getattr(request.state, "law_check_internal", False) and tier.get("id") != "law-check":
@@ -1204,42 +1700,136 @@ def create_router(
             )
             try:
                 # Database work runs in a worker thread, never on the event loop.
-                payload = await run_in_threadpool(
-                    call_tool,
-                    params["name"],
-                    params.get("arguments", {}),
-                    reach(request),
-                    keyed,
-                    allowed_source_ids,
-                    anchor_text_bytes,
+                payload = await asyncio.wait_for(
+                    run_in_threadpool(
+                        call_tool,
+                        params["name"],
+                        params.get("arguments", {}),
+                        reach(request),
+                        keyed,
+                        allowed_source_ids,
+                        anchor_text_bytes,
+                    ),
+                    timeout=tool_timeout,
+                )
+            except TimeoutError:
+                return JSONResponse(
+                    status_code=503,
+                    content=_error(
+                        id_,
+                        10004,
+                        "Tool execution timed out. Try again shortly.",
+                        {
+                            "code": "temporarily_unavailable",
+                            "retryable": True,
+                            "request_id": request_id,
+                            "schema_version": "1",
+                        },
+                    ),
+                    headers={"Cache-Control": "no-store", "X-Request-ID": request_id},
                 )
             except _VerifyError as refused:
-                return _result(id_, _tool_error(refused.code, refused.message, extra=refused.extra))
+                return _result(
+                    id_,
+                    _tool_error(
+                        refused.code,
+                        refused.message,
+                        extra=refused.extra,
+                        include_result_type=is_2026,
+                    ),
+                )
             except TooLarge as refused:
-                return _result(id_, _tool_error("result_too_large", str(refused)))
+                return _result(
+                    id_, _tool_error("result_too_large", str(refused), include_result_type=is_2026)
+                )
             except unavailable:
-                return _result(id_, _tool_error("temporarily_unavailable", "Catalogue authority unavailable"))
+                return _result(
+                    id_,
+                    _tool_error(
+                        "temporarily_unavailable",
+                        "Catalogue authority unavailable",
+                        include_result_type=is_2026,
+                    ),
+                )
             except FeedError as refused:
                 return _result(
-                    id_, _tool_error(refused.code, f"{refused.code}: {refused.detail}", refused.retry_after)
+                    id_,
+                    _tool_error(
+                        refused.code,
+                        f"{refused.code}: {refused.detail}",
+                        refused.retry_after,
+                        include_result_type=is_2026,
+                    ),
                 )
             except OutsidePlanLimited as outside:
+                request.state.refusal = "rate_limited"
                 message = f"{outside} Retry after {outside.retry_after} seconds."
-                return _result(id_, _tool_error("rate_limited", message, outside.retry_after))
+                return _result(
+                    id_,
+                    _tool_error(
+                        "rate_limited",
+                        message,
+                        outside.retry_after,
+                        extra={"retryable": True, "manage_url": MANAGE_URL},
+                        include_result_type=is_2026,
+                    ),
+                )
             except OutsidePlan as outside:
-                return _result(id_, _tool_error("jurisdiction_not_included", str(outside)))
+                request.state.refusal = "jurisdiction_not_included"
+                return _result(
+                    id_,
+                    _tool_error(
+                        "jurisdiction_not_included",
+                        str(outside),
+                        extra={"retryable": False, "manage_url": MANAGE_URL},
+                        include_result_type=is_2026,
+                    ),
+                )
             except ToldWithdrawn as told:
-                return _result(id_, _tool_error("withdrawn", WITHDRAWN[told.argument]))
+                return _result(
+                    id_, _tool_error("withdrawn", WITHDRAWN[told.argument], include_result_type=is_2026)
+                )
             except LookupError:
-                return _result(id_, _tool_error("unavailable", "Source not available"))
+                return _result(
+                    id_, _tool_error("unavailable", "Source not available", include_result_type=is_2026)
+                )
             except ResultTooLarge:
                 message = "result_too_large: the answer would be larger than one response may be."
-                return _result(id_, _tool_error("result_too_large", message))
+                return _result(id_, _tool_error("result_too_large", message, include_result_type=is_2026))
             except ValueError:
-                return _error(id_, -32602, "Invalid arguments")
+                return JSONResponse(
+                    status_code=400 if is_2026 else 200,
+                    content=_error(
+                        id_, -32602, "Invalid arguments", {"code": "invalid_input"} if is_2026 else None
+                    ),
+                )
             if payload is None:
-                return _error(id_, -32602, "Unknown tool or invalid arguments")
+                return JSONResponse(
+                    status_code=400 if is_2026 else 200,
+                    content=_error(
+                        id_,
+                        -32602,
+                        "Unknown tool or invalid arguments",
+                        {"code": "invalid_input"} if is_2026 else None,
+                    ),
+                )
+            if is_2026:
+                return _result(
+                    id_,
+                    {
+                        "resultType": "complete",
+                        "content": [{"type": "text", "text": _summary_text(params["name"], payload)}],
+                        "structuredContent": payload,
+                        "isError": False,
+                    },
+                )
             return _result(id_, _tool_result(payload))
+
+        if is_2026:
+            return JSONResponse(
+                status_code=404,
+                content=_error(id_, -32601, "Method not found", {"code": "method_not_found"}),
+            )
         return _error(id_, -32601, "Method not found")
 
     return router

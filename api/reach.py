@@ -17,6 +17,9 @@ no default and none is chosen; the website still shows every country to everyone
 
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
+from functools import lru_cache
+
+from schema.jurisdictions import registry as jurisdictions_registry
 
 OUTSIDE = (
     "Outside your plan's jurisdictions, requests run at the free Starter rate, and that is used up for now. "
@@ -25,13 +28,26 @@ OUTSIDE = (
 
 
 NOT_INCLUDED = (
-    "Starter covers one jurisdiction, and this request is about another. An owner can change the "
-    "jurisdiction, or the plan, in the console under Plan and limits."
+    "Starter covers one jurisdiction (currently {jurisdictions}) plus continental and regional instruments "
+    "(aa-*), and this request is about another jurisdiction. An owner can change the jurisdiction or plan "
+    "under Plan and limits at https://open.alvary.ai/console/access."
 )
 NOT_CHOSEN = (
-    "Starter covers one jurisdiction, and none is chosen yet. An owner chooses it in the console under "
-    "Plan and limits; then this key reads that jurisdiction's law."
+    "Starter covers one jurisdiction, and none is chosen yet. An owner chooses it under Plan and limits at "
+    "https://open.alvary.ai/console/access; then this key reads that jurisdiction's law."
 )
+
+
+@lru_cache(maxsize=1)
+def _jurisdiction_names() -> dict[str, str]:
+    return {code.lower(): profile.name for code, profile in jurisdictions_registry().items()}
+
+
+def format_jurisdictions(codes: Iterable[str]) -> str:
+    """Format jurisdiction codes for user-facing notices and refusals."""
+    names = _jurisdiction_names()
+    unique = sorted({code.lower() for code in codes})
+    return "; ".join(f"{names[code]}, {code}" if code in names else code.upper() for code in unique)
 
 
 class OutsidePlanLimited(Exception):
@@ -43,12 +59,17 @@ class OutsidePlanLimited(Exception):
 
 
 class OutsidePlan(Exception):
-    """A Starter key asked about a country that is not its own, or before one was chosen."""
+    """A Starter key asked about a jurisdiction that is not its own, or before one was chosen."""
 
 
 def starter_only(scope: dict | None) -> Callable[[], None]:
-    """What a Starter key's reach does with a request outside its country: refuse, saying which case."""
-    message = NOT_INCLUDED if (scope or {}).get("jurisdictions") else NOT_CHOSEN
+    """What a Starter key's reach does with a request outside its jurisdiction: refuse, saying which case."""
+    jurisdictions = (scope or {}).get("jurisdictions")
+    message = (
+        NOT_INCLUDED.format(jurisdictions=format_jurisdictions(jurisdictions))
+        if jurisdictions
+        else NOT_CHOSEN
+    )
 
     def refuse() -> None:
         raise OutsidePlan(message)
@@ -89,6 +110,9 @@ class Reach:
         """Draw once on the outside allowance when any of these lies outside the plan."""
         if any(not self.covers(j) for j in jurisdiction_ids):
             self.outside()
+
+    def active_jurisdictions(self) -> tuple[str, ...] | None:
+        return None if self.countries is None else tuple(sorted(self.countries))
 
     def within(self, jurisdiction_ids: Iterable[str]) -> frozenset[str] | None:
         """What a search or listing without a jurisdiction covers: None for every jurisdiction."""
