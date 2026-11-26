@@ -361,8 +361,8 @@ variable "optional_secrets" {
   type        = list(string)
   default     = []
   validation {
-    condition     = alltrue([for name in var.optional_secrets : contains(["resend-webhook-secret", "auth0-deletion-client-id", "auth0-deletion-client-secret", "law-check-key", "receipt-signing-key", "receipt-keys", "agents-admission-config"], name)])
-    error_message = "optional_secrets may name resend-webhook-secret, auth0-deletion-client-id, auth0-deletion-client-secret, law-check-key, receipt-signing-key, receipt-keys and agents-admission-config."
+    condition     = alltrue([for name in var.optional_secrets : contains(["resend-webhook-secret", "auth0-deletion-client-id", "auth0-deletion-client-secret", "stripe-secret-key", "stripe-webhook-secret", "stripe-portal-config-id", "law-check-key", "receipt-signing-key", "receipt-keys", "agents-admission-config"], name)])
+    error_message = "optional_secrets may name resend-webhook-secret, auth0-deletion-client-id, auth0-deletion-client-secret, stripe-secret-key, stripe-webhook-secret, stripe-portal-config-id, law-check-key, receipt-signing-key, receipt-keys and agents-admission-config."
   }
 }
 

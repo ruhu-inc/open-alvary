@@ -49,7 +49,7 @@ export const CODES: [number, string, string][] = [
   [
     403,
     "jurisdiction_not_included",
-    "A bulk release file's country is outside the organisation's plan. Only bulk files are refused for this: any other request outside your plan's countries is answered at the Starter rate.",
+    "On Starter, the request is about a jurisdiction other than your plan's one: an owner changes it in the console, under Plan and limits. On a paid plan, a bulk release file's jurisdiction is outside the plan; any other request outside a paid plan's jurisdictions is answered at the Starter rate.",
   ],
   [403, "account_inactive", "The person's account is suspended or closed."],
   [403, "organisation_suspended", "The organisation is suspended."],
@@ -82,7 +82,7 @@ export const CODES: [number, string, string][] = [
   [
     429,
     "rate_limited",
-    "An allowance is used up for now: requests a minute, requests at once, or data a day. Retry-After says when to try again. Outside your plan's countries, requests run at the Starter rate.",
+    "An allowance is used up for now: requests a minute, requests at once, or data a day. Retry-After says when to try again. Outside a paid plan's jurisdictions, requests run at the Starter rate.",
   ],
   [
     503,

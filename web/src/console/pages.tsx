@@ -52,6 +52,12 @@ export function Heading({ title, description, action }: { title: string; org?: O
   );
 }
 
+// "an owner", "a member": a role as a sentence names it.
+function roleWithArticle(role: string) {
+  const name = (ROLE_NAMES[role] ?? "member").toLowerCase();
+  return `${/^[aeiou]/.test(name) ? "an" : "a"} ${name}`;
+}
+
 function AccessEnded({ org }: { org: Organisation }) {
   if (org.access.state === "active") return null;
   return (
@@ -61,6 +67,31 @@ function AccessEnded({ org }: { org: Organisation }) {
         requests are refused with <code>403 entitlement_lapsed</code> until access is restored. Reply to our email
         or write to hello@ruhu.ai.
       </p>
+    </div>
+  );
+}
+
+// Starter covers one jurisdiction (a country, with its states): the plan's default until an owner changes
+// it. This notice is for a plan with no default, where keys and apps read no country's law until one is
+// chosen. "Jurisdiction", not "country": Settings and billing ask the country you are in.
+function countryNeeded(org: Organisation) {
+  return org.access.state === "active" && Boolean(org.access.starter) && org.access.scope?.jurisdictions?.length === 0;
+}
+
+function CountryNotice({ org, onPlan }: { org: Organisation; onPlan?: () => void }) {
+  if (!countryNeeded(org)) return null;
+  const owner = org.role === "owner";
+  return (
+    <div className="banner warn" role="status">
+      <p>
+        <b>Choose your jurisdiction.</b> Starter reads the law of one jurisdiction, such as Nigeria. Until{" "}
+        {owner ? "you choose it" : "an owner chooses it"}, keys and connected apps cannot read any jurisdiction's law.
+      </p>
+      {owner ? (
+        <button className="btn" type="button" onClick={onPlan ?? (() => go("/console/access?country=1"))}>
+          Choose jurisdiction
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -95,6 +126,8 @@ export function Overview({ me, org }: PageProps) {
         description="Search and read Africa's published law from your own code and AI tools."
       />
       <AccessEnded org={org} />
+      <CountryNotice org={org} />
+      <SeatNotice org={org} seats={org.seats} />
       {me.invitations.map((invitation) => (
         <Invitation key={invitation.id} invitation={invitation} />
       ))}
@@ -207,7 +240,7 @@ function Invitation({ invitation }: { invitation: Me["invitations"][number] }) {
   return (
     <div className="banner warn">
       <p>
-        You're invited to join <b>{invitation.organisation}</b> as {ROLE_NAMES[invitation.role]?.toLowerCase()}.
+        You're invited to join <b>{invitation.organisation}</b> as {roleWithArticle(invitation.role)}.
         The invitation expires on {when(invitation.expires_at)}.
       </p>
       <button className="btn" type="button" onClick={accept}>
@@ -236,6 +269,8 @@ type AccessRequest = {
 };
 type AccessDetails = {
   current: Organisation["access"];
+  source: "payment" | "manual" | "waiver" | null;
+  free_country_change: boolean;
   history: {
     id: string;
     tier_name: string;
@@ -274,10 +309,22 @@ export function AccessPage({ me, org, refresh }: PageProps) {
   const details = useAsync(() => api<AccessDetails>(`/organisations/${org.id}/access`), [org.id]);
   const plans = useAsync(() => api<{ tiers: Plan[] }>("/tiers"), []);
   const countries = useAsync(() => api<{ countries: Country[] }>("/countries"), []);
+  const billing = useAsync(() => api<BillingStatus>(`/organisations/${org.id}/billing`).catch(() => BILLING_OFF), [org.id]);
   const [error, setError] = useState<unknown>(null);
   const [confirmEnd, setConfirmEnd] = useState(false);
   const [asking, setAsking] = useState<Plan | null>(null);
-  const [changing, setChanging] = useState(false);
+  const [paying, setPaying] = useState<Plan | null>(null);
+  const params = new URLSearchParams(location.search);
+  // The notice on other pages opens the country choice here (?country=1).
+  const [changing, setChanging] = useState(params.get("country") === "1");
+  const [cancelling, setCancelling] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const poll = React.useCallback(() => {
+    details.reload();
+    billing.reload();
+    refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [org.id]);
   if ((details.loading && !details.data) || (plans.loading && !plans.data)) return <Loading />;
   if (details.error) return <Problem error={details.error} />;
   const data = details.data!;
@@ -290,6 +337,50 @@ export function AccessPage({ me, org, refresh }: PageProps) {
   const published_countries = countries.data?.countries ?? [];
   const names = Object.fromEntries(published_countries.map((c) => [c.id, c.name]));
   const chosenLimit = data.current.tier?.allowance?.jurisdictions;
+  const chosenNow = data.current.scope?.jurisdictions ?? [];
+  // Starter reads its one country only; a paid plan reads the others at the Starter rate.
+  const starterOnly = Boolean(data.current.starter && chosenLimit);
+  const stripe = billing.data ?? BILLING_OFF;
+  const subscription = stripe.subscription;
+  const paid = data.source === "payment";
+  const pending =
+    subscription && subscription.collection_method === "send_invoice" && !subscription.invoice_paid && !paid
+      ? subscription
+      : null;
+  // A paid plan that ended in the last 30 days, said once Starter applies again.
+  const last = data.history[0];
+  const lapsed =
+    data.current.starter &&
+    last?.source === "payment" &&
+    last.state !== "active" &&
+    last.ends_at &&
+    Date.now() - new Date(last.ends_at).getTime() < 30 * 86400000
+      ? last
+      : null;
+  // Someone who paid before keeps a way to their invoices and receipts after the plan has ended.
+  const pastInvoices =
+    owner && stripe.enabled && stripe.has_customer && !paid && data.history.some((h) => h.source === "payment");
+  async function portal() {
+    setError(null);
+    setBusy(true);
+    try {
+      location.assign((await api<{ url: string }>(`/organisations/${org.id}/billing/portal`, { method: "POST" })).url);
+    } catch (e) {
+      setError(e);
+      setBusy(false);
+    }
+  }
+  async function cancelInvoice() {
+    setError(null);
+    try {
+      await api(`/organisations/${org.id}/billing/invoice/cancel`, { method: "POST" });
+      billing.reload();
+    } catch (e) {
+      setError(e);
+    } finally {
+      setCancelling(false);
+    }
+  }
   async function withdraw(id: string) {
     try {
       await api(`/organisations/${org.id}/access-requests/${id}/withdraw`, {
@@ -316,6 +407,30 @@ export function AccessPage({ me, org, refresh }: PageProps) {
     if (plan.id === currentId) return <span className="fine">Your current plan</span>;
     if (action === "included") return <span className="fine">Included for everyone</span>;
     if (!owner) return <span className="fine">Owners can change plans</span>;
+    if (stripe.enabled && action === "upgrade") {
+      // stripe-billing §7.1: subscribers change plan in the portal; an operator's grant ends first.
+      if (paid) {
+        return (
+          <button className="btn secondary" type="button" disabled={busy} onClick={portal}>
+            Change in billing
+          </button>
+        );
+      }
+      if (data.source === "manual" || data.source === "waiver") {
+        return (
+          <span className="fine">
+            Your current plan was arranged with Open Alvary. To pay for {plan.name} instead, first go back to Starter, or
+            write to hello@ruhu.ai.
+          </span>
+        );
+      }
+      if (pending) return <span className="fine">An invoice is waiting to be paid</span>;
+      return (
+        <button className="btn" type="button" onClick={() => setPaying(plan)}>
+          Upgrade to {plan.name}
+        </button>
+      );
+    }
     if (open) return <span className="fine">A request is open</span>;
     return (
       <button
@@ -334,9 +449,78 @@ export function AccessPage({ me, org, refresh }: PageProps) {
       <Heading
         title="Plan and limits"
         org={org}
-        description="Every plan reads the same published corpus as the website. Plans differ in their limits, shared by every key and app in the organisation."
+        description="Every plan reads the same published corpus as the website. Plans differ in their jurisdictions and limits, shared by every key and app in the organisation."
       />
       <AccessEnded org={org} />
+      <CountryNotice org={org} onPlan={() => setChanging(true)} />
+      <SeatNotice org={org} seats={org.seats} onPlan />
+      <CheckoutReturn state={params.get("checkout")} paid={paid} onPoll={poll} />
+      {lapsed ? (
+        <div className="callout" role="status">
+          <p>
+            <b>
+              Your {lapsed.tier_name} plan ended on {when(lapsed.ends_at)}.
+            </b>{" "}
+            {org.name} is on Starter now, with 1 seat{starterOnly && chosenNow.length ? ` and 1 jurisdiction (${scopeLabel(data.current.scope, names)})` : ""}. Keys and
+            connected apps are kept.{" "}
+            {owner ? "Choose a plan below to subscribe again." : "An owner can subscribe again below."}
+          </p>
+        </div>
+      ) : null}
+      {params.get("new_team") === "1" && data.current.starter ? (
+        <div className="callout" role="status">
+          <p>
+            <b>{org.name} is ready.</b> It's on Starter, with 1 seat. Choose Team below for up to 5 seats, shared
+            monitors and webhooks, or stay on Starter while you set it up.
+          </p>
+        </div>
+      ) : null}
+      <NameYourTeam org={org} refresh={refresh} />
+      {subscription?.past_due_since && paid && ["past_due", "unpaid"].includes(subscription.status) ? (
+        <div className="banner warn" role="alert">
+          <p>
+            {subscription.collection_method === "send_invoice" ? (
+              <>
+                <b>Your invoice is past due.</b> Your plan stays active for now. Pay it from the link Stripe sent, or
+                under Manage billing; if it stays unpaid for 30 days, the plan ends and Starter applies again.
+              </>
+            ) : (
+              <>
+                <b>Your last payment didn't go through.</b> Stripe will try again over the next few weeks, and your plan
+                stays active meanwhile. {owner ? "Update your card under Manage billing so the plan doesn't end." : "An owner can update the card."}
+              </>
+            )}
+          </p>
+          {owner ? (
+            <button className="btn" type="button" disabled={busy} onClick={portal}>
+              Manage billing
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+      {pending ? (
+        <div className="card">
+          <h3>
+            Pending annual invoice <Pill tone="warn">Unpaid</Pill>
+          </h3>
+          <p className="fine">
+            Team, billed annually, payable by bank transfer. The workspace moves to Team as soon as the invoice is paid;
+            until then it stays on Starter.
+          </p>
+          {owner ? (
+            <div className="row">
+              {pending.invoice_url ? (
+                <External className="btn" href={pending.invoice_url}>
+                  View & pay invoice
+                </External>
+              ) : null}
+              <button className="btn secondary" type="button" onClick={() => setCancelling(true)}>
+                Cancel unpaid invoice
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       <Problem error={error} onDismiss={() => setError(null)} />
       {currentId ? (
         <div className="card current-plan">
@@ -351,27 +535,63 @@ export function AccessPage({ me, org, refresh }: PageProps) {
             <p className="fine">
               {number(data.current.tier?.allowance?.requests_per_minute ?? 0)} requests a minute ·{" "}
               {number(data.current.tier?.allowance?.concurrency ?? 0)} at once ·{" "}
+              {chosenNow.length ? (chosenNow.length === 1 ? "Jurisdiction: " : "Jurisdictions: ") : ""}
               {scopeLabel(data.current.scope ?? { all: true }, names)}
               {!data.current.starter && current?.ends_at ? ` · until ${when(current.ends_at)}, then Starter` : ""}
+              {paid && subscription?.cancel_at_period_end && subscription.current_period_end
+                ? ` · cancels on ${when(subscription.current_period_end)}, then Starter`
+                : ""}
+              {paid && subscription && !subscription.cancel_at_period_end && subscription.current_period_end
+                ? ` · renews on ${when(subscription.current_period_end)}`
+                : ""}
             </p>
             {data.current.scope?.jurisdictions ? (
               <p className="fine">
-                Other countries at the Starter rate.
-                {owner && data.country_change_after
-                  ? ` You can change countries again from ${when(data.country_change_after)}.`
-                  : ""}
+                {starterOnly
+                  ? chosenNow.length
+                    ? `Starter reads this jurisdiction's law only, with the regional and continental law that applies in it.${
+                        data.current.chosen === false
+                          ? owner
+                            ? " It is the default: change it to the jurisdiction whose law you need."
+                            : " It is the default: an owner can change it."
+                          : ""
+                      }`
+                    : owner
+                      ? "Choose the jurisdiction whose law your keys and apps read."
+                      : "An owner chooses the jurisdiction whose law your keys and apps read."
+                  : "Other jurisdictions at the Starter rate."}
+                {!chosenNow.length
+                  ? ""
+                  : owner && data.free_country_change && !data.country_change_after
+                    ? " Your plan changed, so you can choose its jurisdictions now, without waiting for the monthly change."
+                    : owner && data.country_change_after
+                      ? ` You can change ${chosenLimit === 1 ? "jurisdiction" : "jurisdictions"} again from ${when(data.country_change_after)}.`
+                      : ""}
               </p>
             ) : null}
           </div>
-          {!data.current.starter && owner ? (
+          {owner && (!data.current.starter || chosenLimit) ? (
             <div className="row">
-              {chosenLimit && !data.country_change_after ? (
+              {chosenLimit && (!chosenNow.length || !data.country_change_after) ? (
                 <button className="btn secondary" type="button" onClick={() => setChanging(true)}>
-                  Change countries
+                  {!chosenNow.length ? "Choose jurisdiction" : chosenLimit === 1 ? "Change jurisdiction" : "Change jurisdictions"}
                 </button>
               ) : null}
-              <button className="btn secondary" type="button" onClick={() => setConfirmEnd(true)}>
-                Go back to Starter
+              {data.current.starter ? null : paid ? (
+                <button className="btn secondary" type="button" disabled={busy} onClick={portal}>
+                  Manage billing & invoices
+                </button>
+              ) : (
+                <button className="btn secondary" type="button" onClick={() => setConfirmEnd(true)}>
+                  Go back to Starter
+                </button>
+              )}
+            </div>
+          ) : null}
+          {pastInvoices ? (
+            <div className="row">
+              <button className="btn secondary" type="button" disabled={busy} onClick={portal}>
+                Past invoices & receipts
               </button>
             </div>
           ) : null}
@@ -405,6 +625,15 @@ export function AccessPage({ me, org, refresh }: PageProps) {
                   <p className="plan-note">{plan.listing.note}</p>
                 </div>
                 <ul className="plan-limits">
+                  {plan.allowance.members ? (
+                    <li>
+                      {plan.listing.action === "contact"
+                        ? `${plan.allowance.members} or more seats`
+                        : plan.allowance.members === 1
+                          ? "1 seat"
+                          : `Up to ${plan.allowance.members} seats`}
+                    </li>
+                  ) : null}
                   {plan.listing.limits ? (
                     <li>{plan.listing.limits}</li>
                   ) : (
@@ -416,13 +645,13 @@ export function AccessPage({ me, org, refresh }: PageProps) {
                   {plan.allowance.jurisdictions ? (
                     <>
                       <li>
-                        {plan.allowance.jurisdictions} {plan.allowance.jurisdictions === 1 ? "country" : "countries"} of
+                        {plan.allowance.jurisdictions} {plan.allowance.jurisdictions === 1 ? "jurisdiction" : "jurisdictions"} of
                         your choice
                       </li>
-                      <li>Others at the Starter rate</li>
+                      {plan.id === "starter" ? null : <li>Others at the Starter rate</li>}
                     </>
                   ) : (
-                    <li>{plan.listing.action === "contact" ? "All countries, including new ones" : "All countries"}</li>
+                    <li>{plan.listing.action === "contact" ? "All jurisdictions, including new ones" : "All jurisdictions"}</li>
                   )}
                   <li>REST API and MCP</li>
                 </ul>
@@ -447,9 +676,13 @@ export function AccessPage({ me, org, refresh }: PageProps) {
             </div>
           ))}
         <p className="fine">
-          A country includes its states, provinces and local law. African Union and regional law, such as the EAC,
-          ECOWAS and OHADA, is in every plan. Prices for paid plans are coming; until then, we confirm each upgrade by
-          email. Need something else? Write to hello@ruhu.ai.
+          A jurisdiction is a country whose law you read, with its states, provinces and local law; it is not where
+          you are based. African Union and regional law, such as the EAC,
+          ECOWAS and OHADA, is in every plan.{" "}
+          {stripe.enabled
+            ? "Paid plans renew until you cancel; you keep the plan to the end of the period you paid for."
+            : "Prices for paid plans are coming; until then, we confirm each upgrade by email."}{" "}
+          Need something else? Write to hello@ruhu.ai.
         </p>
       </section>
       {declined && !open ? (
@@ -496,15 +729,46 @@ export function AccessPage({ me, org, refresh }: PageProps) {
           }}
         />
       ) : null}
-      {changing && chosenLimit ? (
+      {paying ? (
+        <UpgradeDialog
+          org={org}
+          plan={paying}
+          countries={published_countries}
+          current={data.current.scope?.jurisdictions ?? []}
+          onClose={() => setPaying(null)}
+          onInvoiced={() => billing.reload()}
+        />
+      ) : null}
+      {cancelling ? (
+        <Dialog title="Cancel the unpaid invoice?" onClose={() => setCancelling(false)}>
+          <p>
+            The invoice is withdrawn and won't be due. The workspace stays on Starter, and you can choose a plan again,
+            by card or a new invoice.
+          </p>
+          <div className="dialog-actions">
+            <button className="btn secondary" type="button" onClick={() => setCancelling(false)}>
+              Keep it
+            </button>
+            <button className="btn danger" type="button" onClick={cancelInvoice}>
+              Cancel invoice
+            </button>
+          </div>
+        </Dialog>
+      ) : null}
+      {changing && chosenLimit && owner ? (
         <ChangeCountries
           org={org}
           countries={published_countries}
           limit={chosenLimit}
-          current={data.current.scope?.jurisdictions ?? []}
-          onCancel={() => setChanging(false)}
+          only={starterOnly}
+          current={chosenNow}
+          onCancel={() => {
+            setChanging(false);
+            history.replaceState(null, "", location.pathname); // drop ?country=1, so a reload stays closed
+          }}
           onSaved={() => {
             setChanging(false);
+            history.replaceState(null, "", location.pathname);
             details.reload();
             refresh();
           }}
@@ -513,7 +777,8 @@ export function AccessPage({ me, org, refresh }: PageProps) {
       {confirmEnd ? (
         <Dialog title="Go back to the Starter plan?" onClose={() => setConfirmEnd(false)}>
           <p>
-            Your current plan ends now and the free Starter limits apply again. Keys and connected apps keep working.
+            Your current plan ends now and the free Starter limits apply again. Starter reads one jurisdiction: it keeps one
+            of your plan's. Keys and connected apps keep working.
           </p>
           <div className="dialog-actions">
             <button className="btn secondary" type="button" onClick={() => setConfirmEnd(false)}>
@@ -543,21 +808,447 @@ function stateName(state: string) {
 
 function scopeLabel(scope: Scope | undefined, names: Record<string, string> = {}) {
   return scope?.all || !scope?.jurisdictions
-    ? "All countries"
-    : scope.jurisdictions.map((j) => names[j] ?? j.toUpperCase()).join(", ");
+    ? "All jurisdictions"
+    : scope.jurisdictions.length
+      ? scope.jurisdictions.map((j) => names[j] ?? j.toUpperCase()).join(", ")
+      : "No jurisdiction chosen";
+}
+
+// ---------- Seats and paying for a plan (teams-and-seats, stripe-billing §7.1) ----------
+type Seats = NonNullable<Organisation["seats"]>;
+
+// Over the plan's seats: what changes and when, said to everyone, with the fix for those who can make it.
+function SeatNotice({
+  org,
+  seats,
+  onMembers,
+  onPlan,
+}: {
+  org: Organisation;
+  seats?: Seats | null;
+  onMembers?: boolean;
+  onPlan?: boolean;
+}) {
+  if (!seats?.over_limit) return null;
+  const manager = MANAGERS.has(org.role);
+  const seatWord = seats.limit === 1 ? "seat" : "seats";
+  const passed = seats.grace_until ? new Date(seats.grace_until).getTime() <= Date.now() : false;
+  const fix = manager ? (
+    <div className="row">
+      {org.role === "owner" && !onPlan ? (
+        <button className="btn" type="button" onClick={() => go("/console/access")}>
+          Change plan
+        </button>
+      ) : null}
+      {!onMembers ? (
+        <button className={onPlan ? "btn" : "btn secondary"} type="button" onClick={() => go("/console/members")}>
+          Manage members
+        </button>
+      ) : null}
+    </div>
+  ) : null;
+  if (passed) {
+    return (
+      <div className="banner bad" role="alert">
+        <p>
+          {manager ? (
+            <>
+              <b>Members' own keys and connected apps have stopped working.</b> {org.name} has {seats.active} members
+              and its plan includes {seats.limit} {seatWord}. Until you remove members or change the plan, they are
+              refused with <code>403 seat_limit_exceeded</code>. Service keys and the keys of the owner who joined first
+              still work.
+            </>
+          ) : (
+            <>
+              <b>Your keys and connected apps have stopped working in {org.name}.</b> It has more members than its plan
+              allows. Ask an owner to change the plan or free a seat.
+            </>
+          )}
+        </p>
+        {fix}
+      </div>
+    );
+  }
+  return (
+    <div className="banner warn" role="status">
+      <p>
+        <b>
+          {org.name} has {seats.active} members and its plan includes {seats.limit} {seatWord}.
+        </b>{" "}
+        {seats.grace_until ? `Everything keeps working until ${when(seats.grace_until)}. ` : ""}
+        After that, members' own keys and connected apps stop working, except those of the owner who joined first;
+        service keys keep working. Nobody is removed.
+        {manager ? " Remove members or change the plan before then." : " An owner can change the plan or free a seat."}
+      </p>
+      {fix}
+    </div>
+  );
+}
+
+// A personal workspace that reached Team in the billing portal, which asks no team name (stripe-billing §7.1.6).
+function NameYourTeam({ org, refresh }: { org: Organisation; refresh: () => void }) {
+  const [name, setName] = useState("");
+  const [error, setError] = useState<unknown>(null);
+  const [saving, setSaving] = useState(false);
+  if (!org.personal || org.access.tier?.id !== "team" || !MANAGERS.has(org.role)) return null;
+  // Saving a name on Team makes the workspace a team's, so keeping the current name settles it too.
+  async function rename(to: string) {
+    setSaving(true);
+    setError(null);
+    try {
+      const current = await api<{ revision: number }>(`/organisations/${org.id}`);
+      await api(`/organisations/${org.id}`, { method: "PATCH", body: { revision: current.revision, name: to } });
+      refresh();
+    } catch (e) {
+      setError(e);
+    } finally {
+      setSaving(false);
+    }
+  }
+  function save(event: React.FormEvent) {
+    event.preventDefault();
+    void rename(name);
+  }
+  return (
+    <form className="card form" onSubmit={save}>
+      <h2>Name your team</h2>
+      <p className="fine">
+        This workspace is on Team now. Give it your team's or firm's name; members see it when they're invited.
+      </p>
+      <div className="field">
+        <label htmlFor="team-name">Team or firm name</label>
+        <input id="team-name" type="text" required maxLength={120} value={name} onChange={(e) => setName(e.target.value)} />
+      </div>
+      <Problem error={error} />
+      <div className="row">
+        <button className="btn" type="submit" disabled={saving || !name.trim()}>
+          {saving ? "Saving…" : "Save name"}
+        </button>
+        <button className="btn secondary" type="button" disabled={saving} onClick={() => void rename(org.name)}>
+          Keep “{org.name}”
+        </button>
+      </div>
+    </form>
+  );
+}
+
+type BillingStatus = {
+  enabled: boolean;
+  has_customer: boolean;
+  billing_email: string | null;
+  source: "payment" | "manual" | "waiver" | null;
+  subscription: {
+    tier_id: string;
+    interval: "month" | "year";
+    collection_method: "charge_automatically" | "send_invoice";
+    status: string;
+    invoice_paid: boolean;
+    invoice_url: string | null;
+    current_period_end: string | null;
+    cancel_at_period_end: boolean;
+    past_due_since: string | null;
+  } | null;
+};
+const BILLING_OFF: BillingStatus = { enabled: false, has_customer: false, billing_email: null, source: null, subscription: null };
+
+type Prices = Record<string, Record<"month" | "year", { amount: number; currency: string }>>;
+
+function money(price: { amount: number; currency: string }) {
+  return new Intl.NumberFormat("en", { style: "currency", currency: price.currency.toUpperCase() }).format(
+    price.amount / 100,
+  );
+}
+
+function nonce() {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+// The price is agreed here, in so many words, before any payment (terms: "we will tell you its price and ask you
+// to agree to it"). Card goes to Stripe Checkout; Team annually can also be paid by invoice.
+function UpgradeDialog({
+  org,
+  plan,
+  countries,
+  current,
+  onClose,
+  onInvoiced,
+}: {
+  org: Organisation;
+  plan: Plan;
+  countries: Country[];
+  current: string[];
+  onClose: () => void;
+  onInvoiced: () => void;
+}) {
+  const limit = plan.allowance.jurisdictions ?? 0;
+  const [interval, setInterval_] = useState<"monthly" | "annual">("monthly");
+  const [pay, setPay] = useState<"card" | "invoice">("card");
+  const [chosen, setChosen] = useState<string[]>(current.slice(0, limit));
+  const [teamName, setTeamName] = useState("");
+  const [agreed, setAgreed] = useState(false);
+  const missingCountries = limit > 0 && !chosen.length;
+  const [dialog, setDialog] = useState(nonce);
+  const [billing, setBilling] = useState({ legal_name: "", billing_email: "", line1: "", line2: "", city: "", state: "", postal_code: "", country: "" });
+  const [error, setError] = useState<unknown>(null);
+  const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState<{ invoice_url: string | null } | null>(null);
+  const prices = useAsync(() => api<{ prices: Prices }>(`/organisations/${org.id}/billing/prices`), [org.id]);
+  const invoice = plan.id === "team" && interval === "annual" && pay === "invoice";
+  const price = prices.data?.prices[plan.id]?.[interval === "annual" ? "year" : "month"];
+  const naming = org.personal && plan.id === "team";
+  const set = (key: keyof typeof billing) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+    setBilling({ ...billing, [key]: e.target.value });
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    const common = {
+      jurisdictions: chosen,
+      terms_agreed: agreed,
+      dialog_nonce: dialog,
+      ...(naming && teamName.trim() ? { team_name: teamName.trim() } : {}),
+    };
+    try {
+      if (invoice) {
+        const { legal_name, billing_email, ...address } = billing;
+        const made = await api<{ invoice_url: string | null }>(`/organisations/${org.id}/billing/invoice`, {
+          method: "POST",
+          body: { ...common, legal_name, billing_email, billing_address: address },
+        });
+        setSent(made);
+        onInvoiced();
+      } else {
+        const made = await api<{ url: string }>(`/organisations/${org.id}/billing/checkout`, {
+          method: "POST",
+          body: { ...common, tier: plan.id, interval },
+        });
+        location.assign(made.url);
+        return;
+      }
+    } catch (e) {
+      // A closed checkout needs a new dialog: a new nonce, so the next try is a new request.
+      if (e instanceof ApiError && e.code === "checkout_closed") setDialog(nonce());
+      setError(e);
+    }
+    setBusy(false);
+  }
+  if (sent) {
+    return (
+      <Dialog title="Invoice sent" onClose={onClose}>
+        <p>
+          We've sent the invoice for Team, billed annually, to {billing.billing_email}. It's payable within 30 days.
+          Your workspace moves to Team as soon as it's paid; until then it stays on Starter.
+        </p>
+        {sent.invoice_url ? (
+          <p>
+            <External href={sent.invoice_url}>View and pay the invoice</External>
+          </p>
+        ) : null}
+        <div className="dialog-actions">
+          <button className="btn" type="button" onClick={onClose}>
+            Done
+          </button>
+        </div>
+      </Dialog>
+    );
+  }
+  const billed = interval === "annual" ? "annually" : "monthly";
+  return (
+    <Dialog title={`Upgrade to ${plan.name}`} onClose={onClose}>
+      <form className="form" onSubmit={submit}>
+        <fieldset className="field plain">
+          <legend>Billing</legend>
+          <div className="grid2">
+            {(["monthly", "annual"] as const).map((value) => (
+              <label key={value} className={"choice" + (interval === value ? " on" : "")}>
+                <input type="radio" name="interval" checked={interval === value} onChange={() => setInterval_(value)} />
+                <span>{value === "monthly" ? "Monthly" : "Annually"}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        {plan.id === "team" && interval === "annual" ? (
+          <fieldset className="field plain">
+            <legend>Pay by</legend>
+            <div className="grid2">
+              <label className={"choice" + (pay === "card" ? " on" : "")}>
+                <input type="radio" name="pay" checked={pay === "card"} onChange={() => setPay("card")} />
+                <span>
+                  Card
+                  <small>Paid now, at Stripe</small>
+                </span>
+              </label>
+              <label className={"choice" + (pay === "invoice" ? " on" : "")}>
+                <input type="radio" name="pay" checked={pay === "invoice"} onChange={() => setPay("invoice")} />
+                <span>
+                  Invoice
+                  <small>Bank transfer within 30 days</small>
+                </span>
+              </label>
+            </div>
+          </fieldset>
+        ) : null}
+        {limit ? <CountryPicker countries={countries} limit={limit} value={chosen} onChange={setChosen} /> : null}
+        {naming ? (
+          <div className="field">
+            <label htmlFor="upgrade-team-name">Team name (optional)</label>
+            <input id="upgrade-team-name" type="text" maxLength={120} value={teamName} onChange={(e) => setTeamName(e.target.value)} />
+            <small>This workspace takes the name when the plan starts. Keys, apps and monitors stay as they are.</small>
+          </div>
+        ) : null}
+        {invoice ? (
+          <>
+            <div className="field">
+              <label htmlFor="invoice-legal-name">Legal name of the organisation</label>
+              <input id="invoice-legal-name" type="text" required maxLength={200} value={billing.legal_name} onChange={set("legal_name")} />
+            </div>
+            <div className="field">
+              <label htmlFor="invoice-email">Billing email</label>
+              <input id="invoice-email" type="email" required value={billing.billing_email} onChange={set("billing_email")} />
+              <small>The invoice and its receipts go here.</small>
+            </div>
+            <div className="field">
+              <label htmlFor="invoice-line1">Billing address</label>
+              <input id="invoice-line1" type="text" required maxLength={200} placeholder="Street and number" value={billing.line1} onChange={set("line1")} />
+              <input aria-label="Address, second line" type="text" maxLength={200} placeholder="Building, floor (optional)" value={billing.line2} onChange={set("line2")} />
+            </div>
+            <div className="grid2">
+              <div className="field">
+                <label htmlFor="invoice-city">City</label>
+                <input id="invoice-city" type="text" required maxLength={100} value={billing.city} onChange={set("city")} />
+              </div>
+              <div className="field">
+                <label htmlFor="invoice-state">State or region (optional)</label>
+                <input id="invoice-state" type="text" maxLength={100} value={billing.state} onChange={set("state")} />
+              </div>
+              <div className="field">
+                <label htmlFor="invoice-postal">Postal code (optional)</label>
+                <input id="invoice-postal" type="text" maxLength={20} value={billing.postal_code} onChange={set("postal_code")} />
+              </div>
+              <div className="field">
+                <label htmlFor="invoice-country">Country</label>
+                <select id="invoice-country" required value={billing.country} onChange={set("country")}>
+                  <option value="">Choose…</option>
+                  {COUNTRIES.map(([code, name]) => (
+                    <option key={code} value={code}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </>
+        ) : null}
+        {price ? (
+          <p>
+            <b>
+              {plan.name}: {money(price)} {interval === "annual" ? "a year" : "a month"}
+            </b>
+            <span className="fine">
+              {" "}
+              Prices exclude tax; Stripe adds any VAT or sales tax for your billing address
+              {invoice ? " on the invoice" : " and shows the total before you pay"}.
+            </span>
+          </p>
+        ) : prices.error ? (
+          <Problem error={prices.error} />
+        ) : (
+          <p className="fine">Getting the price…</p>
+        )}
+        <label className={"choice" + (agreed ? " on" : "")}>
+          <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />
+          <span>
+            {invoice
+              ? `I'm ordering ${plan.name}, billed annually, at the price above: the invoice is binding and payable within 30 days. `
+              : `I agree to pay the price above for ${plan.name}, billed ${billed} until I cancel. `}
+            I agree to the{" "}
+            <External href="/terms" icon={false}>
+              terms of service
+            </External>
+            .
+          </span>
+        </label>
+        <Problem error={error} />
+        {price && !busy && (missingCountries || !agreed) ? (
+          <p className="fine" id="upgrade-needs" role="status">
+            {missingCountries && !agreed
+              ? `To continue, choose ${limit === 1 ? "a jurisdiction" : "at least one jurisdiction"} and tick the agreement.`
+              : missingCountries
+                ? `To continue, choose ${limit === 1 ? "a jurisdiction" : "at least one jurisdiction"}.`
+                : "To continue, tick the agreement."}
+          </p>
+        ) : null}
+        <div className="dialog-actions">
+          <button className="btn secondary" type="button" onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            className="btn"
+            type="submit"
+            aria-describedby="upgrade-needs"
+            disabled={busy || !agreed || !price || missingCountries}
+          >
+            {busy ? "Working…" : invoice ? "Send the invoice" : "Continue to payment"}
+          </button>
+        </div>
+      </form>
+    </Dialog>
+  );
+}
+
+// Back from Stripe Checkout: only the webhook grants access, so this waits for it and says what it knows.
+function CheckoutReturn({ state, paid, onPoll }: { state: string | null; paid: boolean; onPoll: () => void }) {
+  const [waited, setWaited] = useState(0);
+  useEffect(() => {
+    if (state !== "success" || paid || waited >= 10) return;
+    const timer = window.setTimeout(() => {
+      onPoll();
+      setWaited((w) => w + 2);
+    }, 2000);
+    return () => window.clearTimeout(timer);
+  }, [state, paid, waited, onPoll]);
+  if (state === "cancelled") {
+    return (
+      <div className="callout" role="status">
+        <p>Checkout was cancelled. Nothing was charged.</p>
+      </div>
+    );
+  }
+  if (state !== "success") return null;
+  if (paid) {
+    return (
+      <div className="callout" role="status">
+        <p>Stripe has confirmed your subscription. Your new plan is active.</p>
+      </div>
+    );
+  }
+  return (
+    <div className="callout" role="status">
+      <p>
+        {waited < 10
+          ? "Confirming your subscription with Stripe…"
+          : "Stripe hasn't confirmed the payment yet. Your plan changes as soon as it does; there's no need to pay again. If nothing has changed within an hour, write to hello@ruhu.ai."}
+      </p>
+    </div>
+  );
 }
 
 // Choose up to `limit` countries; ones already chosen stay listed even without published material.
+// `only`: Starter, which reads its one country and no other.
 function CountryPicker({
   countries,
   limit,
   value,
   onChange,
+  only,
 }: {
   countries: Country[];
   limit: number;
   value: string[];
   onChange: (value: string[]) => void;
+  only?: boolean;
 }) {
   const listed = [
     ...countries,
@@ -566,8 +1257,12 @@ function CountryPicker({
   return (
     <fieldset className="field plain">
       <legend>
-        Countries <span className="fine">· choose up to {limit}</span>
+        {limit === 1 ? "Jurisdiction" : "Jurisdictions"}
+        {limit === 1 ? null : <span className="fine"> · choose up to {limit}</span>}
       </legend>
+      <p className="fine">
+        {limit === 1 ? "The country whose law you want to read." : "The countries whose law you want to read."}
+      </p>
       {listed.length ? (
         <div className="country-list">
           {listed.map((c) => {
@@ -577,24 +1272,28 @@ function CountryPicker({
                 <input
                   type="checkbox"
                   checked={on}
-                  disabled={!on && value.length >= limit}
-                  onChange={(e) => onChange(e.target.checked ? [...value, c.id] : value.filter((v) => v !== c.id))}
+                  disabled={!on && limit > 1 && value.length >= limit}
+                  onChange={(e) =>
+                    onChange(
+                      !e.target.checked ? value.filter((v) => v !== c.id) : limit === 1 ? [c.id] : [...value, c.id],
+                    )
+                  }
                 />
                 <span>
                   {c.name}
-                  <small>
-                    {c.full_text ? `${number(c.full_text)} with full text` : c.sources ? "Metadata only" : "Not yet published"}
-                    {c.sources ? ` · ${number(c.sources)} ${c.sources === 1 ? "source" : "sources"}` : ""}
-                  </small>
+                  {c.sources ? null : <small>Not yet published</small>}
                 </span>
               </label>
             );
           })}
         </div>
       ) : (
-        <p className="fine">No countries are published yet.</p>
+        <p className="fine">No jurisdictions are published yet.</p>
       )}
-      <small>Other countries still answer, at the Starter rate. You can change countries once a month.</small>
+      <small>
+        {only ? "" : "Other jurisdictions answer at the Starter rate. "}
+        You can change {limit === 1 ? "it" : "them"} once a month.
+      </small>
     </fieldset>
   );
 }
@@ -604,6 +1303,7 @@ function ChangeCountries({
   countries,
   limit,
   current,
+  only,
   onCancel,
   onSaved,
 }: {
@@ -611,10 +1311,12 @@ function ChangeCountries({
   countries: Country[];
   limit: number;
   current: string[];
+  only?: boolean;
   onCancel: () => void;
   onSaved: () => void;
 }) {
   const [chosen, setChosen] = useState(current);
+  const first = !current.length; // Starter before its country is chosen
   const [error, setError] = useState<unknown>(null);
   const [saving, setSaving] = useState(false);
   const same = chosen.length === current.length && chosen.every((c) => current.includes(c));
@@ -631,16 +1333,18 @@ function ChangeCountries({
     }
   }
   return (
-    <Dialog title="Change your plan's countries" onClose={onCancel}>
-      <CountryPicker countries={countries} limit={limit} value={chosen} onChange={setChosen} />
-      <p className="fine">The change applies at once. After it, the next change is possible in 30 days.</p>
+    <Dialog
+      title={first ? "Choose jurisdiction" : limit === 1 ? "Change jurisdiction" : "Change jurisdictions"}
+      onClose={onCancel}
+    >
+      <CountryPicker countries={countries} limit={limit} value={chosen} onChange={setChosen} only={only} />
       <Problem error={error} />
       <div className="dialog-actions">
         <button className="btn secondary" type="button" onClick={onCancel}>
           Cancel
         </button>
         <button className="btn" type="button" disabled={saving || same || !chosen.length} onClick={save}>
-          {saving ? "Saving…" : "Save countries"}
+          {saving ? "Saving…" : "Save"}
         </button>
       </div>
     </Dialog>
@@ -894,6 +1598,7 @@ export function Keys({ org }: PageProps) {
         }
       />
       <AccessEnded org={org} />
+      <CountryNotice org={org} />
       <Problem error={error} onDismiss={() => setError(null)} />
       {list.loading && !list.data ? <Loading /> : null}
       {list.error ? <Problem error={list.error} /> : null}
@@ -1301,6 +2006,7 @@ export function Apps({ org }: PageProps) {
         }
       />
       <AccessEnded org={org} />
+      <CountryNotice org={org} />
       {org.access.state !== "active" ? <NeedsAccess what="Connected apps" org={org} /> : null}
       <Problem error={error} onDismiss={() => setError(null)} />
       {list.loading && !list.data ? <Loading /> : null}
@@ -1381,6 +2087,7 @@ export function Connect({ org }: PageProps) {
         description="Apps sign in with your Open Alvary account and act for one organisation. You approve each one, and can disconnect it any time."
       />
       {org.access.state !== "active" ? <NeedsAccess what="Connected apps" org={org} /> : null}
+      <CountryNotice org={org} />
       <div className="card">
         <div className="tabs" role="tablist">
           {TABS.map(([id, label]) => (
@@ -1469,7 +2176,7 @@ type UsageDay = {
 
 const REFUSALS: Record<string, [string, string]> = {
   rate_limited: ["More requests than your limit allows", "Wait the seconds in Retry-After"],
-  jurisdiction_not_included: ["A jurisdiction outside your access", "Change it under Plan and limits"],
+  jurisdiction_not_included: ["A jurisdiction outside your plan", "Choose or change it under Plan and limits"],
   entitlement_lapsed: ["Access had ended", "Renew access"],
   entitlement_required: ["No access yet", "Request access"],
 };
@@ -1655,6 +2362,7 @@ type Members = {
     expires_at: string;
   }[];
   invite_roles: string[];
+  seats: Seats & { pending: number; used: number; remaining: number; can_invite: boolean };
 };
 
 export function MembersPage({ org, refresh }: PageProps) {
@@ -1676,11 +2384,35 @@ export function MembersPage({ org, refresh }: PageProps) {
   }
   if (data.loading && !data.data) return <Loading />;
   if (data.error) return <Problem error={data.error} />;
-  const { members, invitations, invite_roles } = data.data!;
+  const { members, invitations, invite_roles, seats } = data.data!;
   const you = members.find((m) => m.you);
+  const share = Math.min(100, Math.round((seats.used / Math.max(1, seats.limit)) * 100));
   return (
     <>
-      <Heading title="Members" org={org} description="People in this organisation and what their role lets them do." />
+      <Heading title="Members" org={org} description="People in this workspace and what their role lets them do." />
+      <SeatNotice org={org} seats={seats} onMembers />
+      <NameYourTeam org={org} refresh={refresh} />
+      <div className="card seats">
+        <div className="seats-head">
+          <b>
+            {seats.used} of {seats.limit} {seats.limit === 1 ? "seat" : "seats"} used
+          </b>
+          <span className="fine">
+            {seats.active} {seats.active === 1 ? "member" : "members"}
+            {seats.pending ? ` · ${seats.pending} invited` : ""}
+          </span>
+        </div>
+        <div
+          className={"seat-bar" + (seats.over_limit ? " over" : "")}
+          role="meter"
+          aria-label="Seats used"
+          aria-valuemin={0}
+          aria-valuemax={seats.limit}
+          aria-valuenow={seats.used}
+        >
+          <span style={{ width: `${share}%` }} />
+        </div>
+      </div>
       <Problem error={error} onDismiss={() => setError(null)} />
       <div className="table-wrap">
         <table>
@@ -1788,7 +2520,32 @@ export function MembersPage({ org, refresh }: PageProps) {
           </tbody>
         </table>
       </div>
-      {invite_roles.length ? (
+      {invite_roles.length && seats.limit <= 1 ? (
+        <div className="card">
+          <h2>Your plan includes 1 seat</h2>
+          <p className="fine">
+            Team has room for up to 5 people, with shared monitors and webhooks. Keys, apps and monitors stay as they
+            are when you change plan.
+          </p>
+          {org.role === "owner" ? (
+            <div className="row">
+              <button className="btn" type="button" onClick={() => go("/console/access")}>
+                See Team
+              </button>
+            </div>
+          ) : (
+            <p className="fine">Ask an owner to change the plan.</p>
+          )}
+        </div>
+      ) : invite_roles.length && seats.remaining === 0 ? (
+        <div className="card">
+          <h2>All {seats.limit} seats are in use</h2>
+          <p className="fine">
+            Remove a member or revoke an invitation to free a seat. For more than {seats.limit} people, ask us about
+            Enterprise at hello@ruhu.ai.
+          </p>
+        </div>
+      ) : invite_roles.length ? (
         <form
           className="card form"
           onSubmit={(e) => {
@@ -1810,13 +2567,19 @@ export function MembersPage({ org, refresh }: PageProps) {
             </div>
             <div className="field">
               <label htmlFor="invite-role">Role</label>
-              <select id="invite-role" value={role} onChange={(e) => setRole(e.target.value)}>
+              <select
+                id="invite-role"
+                aria-describedby="invite-role-help"
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+              >
                 {invite_roles.map((r) => (
                   <option key={r} value={r}>
-                    {ROLE_NAMES[r]}: {ROLE_HELP[r].toLowerCase()}
+                    {ROLE_NAMES[r]}
                   </option>
                 ))}
               </select>
+              <small id="invite-role-help">{ROLE_HELP[role]}.</small>
             </div>
           </div>
           <div className="row">
@@ -1934,6 +2697,20 @@ const ACTIONS: Record<string, string> = {
   "member.role_changed": "Changed a role",
   "ownership.transferred": "Transferred ownership",
   "terms.notice_sent": "Emailed an owner about new terms",
+  "access.countries_changed": "Changed the plan's jurisdictions",
+  "access.country_chosen": "Chose the plan's jurisdiction",
+  "billing.price_agreed": "Agreed to a plan's price",
+  "billing.invoice_sent": "Requested an annual invoice",
+  "billing.invoice_cancelled": "Cancelled an unpaid invoice",
+  "billing.invoice_voided": "Invoice voided",
+  "billing.payment_failed": "Payment failed",
+  "billing.plan_changed": "Changed the plan",
+  "billing.cancelled": "Cancelled the subscription",
+  "billing.refunded": "Payment refunded",
+  "billing.disputed": "Payment disputed",
+  "seats.grace_started": "More members than seats: grace period started",
+  "seats.grace_ended": "Back within the plan's seats",
+  "seats.notice_sent": "Emailed the owners about seats",
 };
 
 export function Settings({ org, refresh }: PageProps) {

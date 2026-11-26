@@ -317,6 +317,35 @@ def webhook_stopped(to: str, organisation: str, url: str, state: str, why: str, 
     )
 
 
+def seats_over_limit(to: str, organisation: str, members: int, seats: int, until, base: str) -> Message:
+    """To each owner of an organisation with more members than its plan's seats (teams-and-seats §5.3)."""
+    when = f"{until.day} {until:%B %Y}"
+    organisation = _name(organisation, "your organisation")
+    plural = "seat" if seats == 1 else "seats"
+    return Message(
+        to,
+        f"{organisation} has more members than its plan allows",
+        f"{organisation} has {members} members, and its plan includes {seats} {plural}. Nothing changes"
+        f" until {when}. After that, members' own API keys and connected apps stop working, except those of"
+        " the owner who joined first; service keys keep working. Nobody is removed.\n\n"
+        f"To keep everyone working, remove members or change the plan under Plan and limits at"
+        f" {base}/console/access.\n\n" + SIGN_OFF,
+    )
+
+
+def billing_alert(to: str, what: str, details: dict) -> Message:
+    """To the operator, when a Stripe event or the reconciliation needs a person to look. Stripe's IDs and
+    the outcome only: no name, address or amount goes through the mail service."""
+    lines = "\n".join(f"{key}: {value}" for key, value in sorted(details.items()) if value is not None)
+    return Message(
+        to,
+        f"Open Alvary billing needs a look: {what.replace('_', ' ')}",
+        f"Stripe billing recorded something to check.\n\n{lines}\n\n"
+        "Look the subscription up in the Stripe dashboard; refunds and cancellations are made there.\n\n"
+        + SIGN_OFF,
+    )
+
+
 LABELS = {
     "catalogue_added": "Added",
     "metadata_corrected": "Corrected",

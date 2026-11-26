@@ -51,15 +51,15 @@ export function accessLabel(state: string): [string, "good" | "warn" | "bad" | u
 export const ROLE_NAMES: Record<string, string> = {
   owner: "Owner",
   admin: "Admin",
-  developer: "Developer",
+  developer: "Member",
   viewer: "Viewer",
 };
 
 export const ROLE_HELP: Record<string, string> = {
-  owner: "Manages access and can delete the organisation",
-  admin: "Manages members and shared keys",
-  developer: "Creates own keys and connects apps",
-  viewer: "Sees access and usage only",
+  owner: "Manages billing, plans, members, and workspace deletion",
+  admin: "Manages members, service keys, webhooks, and audit logs",
+  developer: "Creates personal API keys, connects MCP apps, and uses shared monitors",
+  viewer: "Read-only access to workspace, usage, and shared monitor inbox",
 };
 
 // A refusal, said plainly, with the step that fixes it when there is one.

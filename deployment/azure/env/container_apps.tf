@@ -62,6 +62,10 @@ locals {
     "resend-webhook-secret"        = "RESEND_WEBHOOK_SECRET"
     "auth0-deletion-client-id"     = "ALVARY_AUTH0_DELETION_CLIENT_ID"
     "auth0-deletion-client-secret" = "ALVARY_AUTH0_DELETION_CLIENT_SECRET"
+    # Stripe billing (accounts.billing), listed only once the owner's pre-charge gates are cleared.
+    "stripe-secret-key"       = "STRIPE_SECRET_KEY"
+    "stripe-webhook-secret"   = "STRIPE_WEBHOOK_SECRET"
+    "stripe-portal-config-id" = "STRIPE_PORTAL_CONFIG_ID"
   }
 }
 

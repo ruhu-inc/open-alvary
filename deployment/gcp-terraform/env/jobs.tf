@@ -64,12 +64,14 @@ locals {
       # daily: each step runs whatever the others do (a failed purge never skips the seal check or the
       # backup check), and the run fails if any did, so its alert fires.
       daily = {
-        command = ["sh", "-c", "failed=0; for step in 'accounts.seals seal' 'changes.admin sweep' 'changes.admin purge' 'accounts.privacy purge' 'accounts.seals verify' 'api.traffic maintain' 'operations.cloud_backups check'; do python -m $step || failed=1; done; exit $failed"]
+        command = ["sh", "-c", "failed=0; for step in 'accounts.seals seal' 'changes.admin sweep' 'changes.admin purge' 'accounts.privacy purge' 'accounts.billing reconcile' 'accounts.seals verify' 'api.traffic maintain' 'operations.cloud_backups check'; do python -m $step || failed=1; done; exit $failed"]
         args    = []
         cron    = "15 3 * * *"
         timeout = 600
         secrets = {}
-        reads   = ["ALVARY_AUTH0_DELETION_CLIENT_ID", "ALVARY_AUTH0_DELETION_CLIENT_SECRET"]
+        # STRIPE_SECRET_KEY: the reconciliation's (accounts.billing reconcile), never the webhook secret.
+        # RESEND_API_KEY: its alerts to the operator, and the notice to owners when a seat grace starts.
+        reads = ["ALVARY_AUTH0_DELETION_CLIENT_ID", "ALVARY_AUTH0_DELETION_CLIENT_SECRET", "STRIPE_SECRET_KEY", "RESEND_API_KEY"]
       }
       # New terms, emailed to organisations' owners (runbook, "New terms"), run by hand with the
       # operator and the notice's arguments. The command is fixed, so the job can do nothing else.

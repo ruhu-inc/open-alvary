@@ -48,6 +48,7 @@ from fastapi import BackgroundTasks, Depends, FastAPI, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 
+from accounts import billing as billing_module
 from accounts import mail, policies, privacy, roles
 from accounts.store import AccountError, Accounts, Context
 from api.admission import client_address
@@ -266,15 +267,20 @@ def create_console_app(
     consent_secret: bytes | None = None,
     mailer: mail.Mailer | None = None,
     countries: Callable[[], list[dict]] | None = None,
+    billing: billing_module.Billing | None = None,
 ) -> FastAPI:
     """``consent_secret`` is shared with the provider's post-login step, which signs the hand-off
     to the approval page and verifies our answer (MAC-07). ``countries`` lists the countries with
-    published material, to choose a plan's countries from."""
+    published material, to choose a plan's countries from. ``billing`` is Stripe's (accounts.billing),
+    from the environment when not given: off until STRIPE_SECRET_KEY is set."""
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     base_url = provider.config.base_url if provider else None
     mailer = mailer or mail.Mailer.from_environment()
     site = base_url or "https://open.alvary.ai"
     operator_email = os.getenv("ALVARY_OPERATOR_EMAIL", "hello@ruhu.ai")
+    billing = billing or billing_module.from_environment(
+        accounts, lambda what, details: mailer.send(mail.billing_alert(operator_email, what, details))
+    )
     registrations = mail.Allowance(REGISTRATION_EMAILS_AN_HOUR)
 
     def later(response: Response, *messages: mail.Message) -> Response:
@@ -718,7 +724,7 @@ def create_console_app(
         me = accounts.person(session["person_id"])
         if str(data.get("confirm", "")).strip().lower() != me["email"].lower():
             return error(request, 400, "invalid_input", "Type your email address to confirm.")
-        closed = privacy.close_account(accounts, session["person_id"], context(request))
+        closed = privacy.close_account(accounts, session["person_id"], context(request), billing)
         response = later(
             JSONResponse({"deleted": True}),
             mail.account_deleted(closed["email"], [o["name"] for o in closed["deleted_organisations"]], site),
@@ -768,7 +774,7 @@ def create_console_app(
     def delete_organisation(request: Request, organisation_id: str):
         session = guard(request, write=True)
         fresh(session, second_factor=needs_second_factor(session["person_id"], organisation_id))
-        accounts.delete_organisation(session["person_id"], organisation_id, context(request))
+        accounts.delete_organisation(session["person_id"], organisation_id, context(request), billing)
         return Response(status_code=204)
 
     # ---------- access ----------
@@ -812,6 +818,58 @@ def create_console_app(
             session["person_id"], organisation_id, data.get("jurisdictions"), context(request)
         )
         return Response(status_code=204)
+
+    # ---------- paying for a plan (stripe-billing §5) ----------
+    # Starting to pay, the portal and the invoice ask a fresh sign-in and a second factor of the owner,
+    # even on Starter: an owner without one sets it up first (the second_factor_required step).
+    @app.get("/api/v1/organisations/{organisation_id}/billing")
+    def billing_status(request: Request, organisation_id: str):
+        return billing.status(guard(request)["person_id"], organisation_id)
+
+    @app.get("/api/v1/organisations/{organisation_id}/billing/prices")
+    def billing_prices(request: Request, organisation_id: str):
+        return billing.prices(guard(request)["person_id"], organisation_id)
+
+    @app.post("/api/v1/organisations/{organisation_id}/billing/checkout")
+    def billing_checkout(request: Request, organisation_id: str, sent: object = Depends(json_sent)):
+        session = guard(request, write=True)
+        data = body(sent)
+        fresh(session, second_factor=True)
+        return billing.start_checkout(
+            session["person_id"], organisation_id, data, site=site, context=context(request)
+        )
+
+    @app.post("/api/v1/organisations/{organisation_id}/billing/portal")
+    def billing_portal(request: Request, organisation_id: str):
+        session = guard(request, write=True)
+        fresh(session, second_factor=True)
+        return billing.open_portal(session["person_id"], organisation_id, site=site)
+
+    @app.post("/api/v1/organisations/{organisation_id}/billing/invoice")
+    def billing_invoice(request: Request, organisation_id: str, sent: object = Depends(json_sent)):
+        session = guard(request, write=True)
+        data = body(sent)
+        fresh(session, second_factor=True)
+        sent_invoice = billing.request_invoice(
+            session["person_id"], organisation_id, data, context=context(request)
+        )
+        return JSONResponse(jsonable_encoder(sent_invoice), status_code=201)
+
+    @app.post("/api/v1/organisations/{organisation_id}/billing/invoice/cancel")
+    def billing_invoice_cancel(request: Request, organisation_id: str):
+        session = guard(request, write=True)
+        fresh(session, second_factor=True)
+        billing.cancel_invoice(session["person_id"], organisation_id, context=context(request))
+        return Response(status_code=204)
+
+    async def raw_sent(request: Request) -> bytes:
+        return await request.body()
+
+    @app.post("/billing/webhooks/stripe")
+    def stripe_webhook(request: Request, raw: bytes = Depends(raw_sent)):
+        """Stripe's, signed: no cookie, no CSRF token (stripe-billing §5, §6)."""
+        status, answer = billing.handle_webhook(raw, request.headers.get("stripe-signature", ""))
+        return JSONResponse(answer, status_code=status)
 
     @app.get("/api/v1/tiers")
     def tiers(request: Request):

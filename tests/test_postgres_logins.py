@@ -122,13 +122,12 @@ def person(accounts, name="amina"):
 
 
 def paid_plan(signed, organisation):
-    """Granted by an operator, in the workbench's Access section: not by any of these logins."""
-    plans = json.loads(TIERS.read_text())
-    plan = next(tier for tier in plans if tier["id"] != "starter" and tier.get("published"))
+    """Granted by an operator, in the workbench's Access section: not by any of these logins. Team, whose
+    five seats let a member be invited (teams-and-seats §6)."""
     Accounts(signed.owner, signed.namespace).grant_access(
         "op",
         organisation,
-        tier=plan["id"],
+        tier="team",
         scope={"jurisdictions": ["ng"]},
         source="manual",
         ends_at=None,
@@ -230,6 +229,9 @@ def test_the_public_service_serves_every_door_on_its_own_login(signed, monkeypat
         assert listed.status_code == 200 and "result" in listed.json()
         assert accounts.usage(who, organisation)[0]["requests"] >= 1
         assert accounts.list_keys(who, organisation)[0]["last_used_at"] is not None
+        # Starter reads its default jurisdiction, Nigeria; on this login an owner changes it and the key follows.
+        accounts.change_countries(who, organisation, ["rw"])
+        assert client.get(f"/api/v1/sources/{WORK}", headers=headers).status_code == 403
     # Counted through the two functions it holds, leaving the service as it does at shutdown.
     with signed.owner.connect() as conn:
         days = signed.t(conn, "accounts", "traffic_day")
@@ -337,6 +339,10 @@ def test_on_two_logins_an_anonymous_request_never_reaches_the_consoles_and_the_c
         )
         assert listed.status_code == 200 and "result" in listed.json()
         assert accounts.usage(who, organisation)[0]["requests"] >= 1
+        accounts.change_countries(
+            who, organisation, ["rw"]
+        )  # the console's login may change the jurisdiction
+        assert client.get(f"/api/v1/sources/{WORK}", headers=headers).status_code == 403
     with signed.owner.connect() as conn:
         assert conn.scalar(text(f"SELECT count(*) FROM {signed.t(conn, 'accounts', 'traffic_day')}")) >= 1
         assert conn.scalar(text(f"SELECT count(*) FROM {signed.t(conn, 'policy', 'admission_bucket')}")) >= 1
@@ -395,6 +401,8 @@ def test_the_console_works_for_a_person_on_the_services_login(signed):
     assert browser.get(f"{root}/members").status_code == 200
     assert browser.get(f"{root}/access").status_code == 200
     assert browser.get("/api/v1/tiers").status_code == 200
+    who = browser.get("/api/v1/me").json()["person"]["id"]
+    paid_plan(signed, organisation)  # Starter has one seat: a member is invited on Team
     invited = browser.post(
         f"{root}/invitations", json={"email": "bola@example.org", "role": "developer"}, headers=headers
     )
@@ -405,8 +413,6 @@ def test_the_console_works_for_a_person_on_the_services_login(signed):
     )
     assert browser.get("/api/v1/me/sessions").status_code == 200
 
-    who = browser.get("/api/v1/me").json()["person"]["id"]
-    paid_plan(signed, organisation)
     sender = Sender(resolver=lambda host: ["93.184.216.34"], transport=receiver)
     sealer = Sealer({"k": b"k" * 32}, "k")
     watch = Watches(accounts).create(

@@ -41,7 +41,7 @@ from fastapi.responses import JSONResponse
 from accounts import keys
 from api.admission import AdmissionStore, AdmissionUnavailable, client_address, network_group, pseudonym
 from api.emission import MAX_SINGLE_RESPONSE_BYTES
-from api.reach import OutsidePlanLimited, Reach
+from api.reach import OutsidePlanLimited, Reach, starter_only
 from rights.bytes import ByteLedger, LedgerConflict, LedgerUnavailable, Scope
 
 MAX_FAILED_KEYS = 120  # wrong keys an address may try in a minute on one instance
@@ -65,6 +65,7 @@ STATUS = {
     "insufficient_scope": 403,
     "entitlement_required": 403,
     "entitlement_lapsed": 403,
+    "seat_limit_exceeded": 403,
     "jurisdiction_not_included": 403,
     "account_inactive": 403,
     "organisation_suspended": 403,
@@ -79,7 +80,9 @@ DETAIL = {
     "insufficient_scope": "This token does not allow reading the corpus. Connect the app again.",
     "entitlement_required": "Your organisation has no access yet. Request access in the console.",
     "entitlement_lapsed": "Your organisation's access has ended. Renew it in the console.",
-    "jurisdiction_not_included": "That jurisdiction is outside your organisation's access. Add it in the console.",
+    "seat_limit_exceeded": "Your organisation has more members than its plan allows. An owner can change the plan or remove members in the console.",
+    "jurisdiction_not_included": "That jurisdiction is outside your plan. An owner can change the plan or its "
+    "jurisdictions in the console.",
     "account_inactive": "This account is suspended or closed.",
     "organisation_suspended": "This organisation is suspended.",
     "rate_limited": "Too many requests. Wait for the time in Retry-After.",
@@ -494,7 +497,13 @@ class CredentialGate:
             "scope": result.get("scope") or {},
             "tier": result.get("tier"),
             "ends_at": result.get("ends_at"),
-            "reach": Reach.of(result.get("scope"), lambda: self._outside(organisation)),
+            # Outside its countries a paid plan draws on the Starter rate; Starter is refused (api.reach).
+            "reach": Reach.of(
+                result.get("scope"),
+                starter_only(result.get("scope"))
+                if (result.get("tier") or {}).get("id") == "starter"
+                else lambda: self._outside(organisation),
+            ),
         }
         sent = {"bytes": 0, "refused": None, "status": 0, "reservation": None, "reserved": 0}
         daily = int(((result.get("tier") or {}).get("allowance") or {}).get("bytes_per_day") or 0)
@@ -572,7 +581,12 @@ class CredentialGate:
                     await to_thread.run_sync(self.admission.release, lease)
                 except AdmissionUnavailable:
                     pass  # the lease expires on its own
-            refusal = sent["refused"] or ("rate_limited" if sent["status"] == 429 else None)
+            # A route's own refusal: over a limit (429), or one it names (v1: outside Starter's country).
+            refusal = (
+                sent["refused"]
+                or scope["state"].get("refusal")
+                or ("rate_limited" if sent["status"] == 429 else None)
+            )
             await self._count({**usage, **({"refusal": refusal} if refusal else {"bytes": sent["bytes"]})})
 
     def _outside(self, organisation: str) -> None:

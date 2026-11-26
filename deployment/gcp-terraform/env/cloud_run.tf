@@ -58,6 +58,11 @@ locals {
     "law-check-key"                = "ALVARY_LAW_CHECK_KEY"
     "receipt-signing-key"          = "ALVARY_RECEIPT_SIGNING_KEY"
     "receipt-keys"                 = "ALVARY_RECEIPT_KEYS_JSON"
+    # Stripe billing (accounts.billing): listed in optional_secrets only once the owner's pre-charge gates
+    # are cleared; until then billing stays off. The daily job reads only the API key (jobs.tf).
+    "stripe-secret-key"       = "STRIPE_SECRET_KEY"
+    "stripe-webhook-secret"   = "STRIPE_WEBHOOK_SECRET"
+    "stripe-portal-config-id" = "STRIPE_PORTAL_CONFIG_ID"
   }
 
   # The admission configurations are read as files: one secret volume each (Cloud Run mounts one

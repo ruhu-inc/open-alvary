@@ -779,6 +779,8 @@ tr.dim td {
 .field {
   display: grid;
   gap: 6px;
+  /* Beside a taller field (one with a hint under it), the label and input stay at the top, unstretched. */
+  align-content: start;
   border: 0;
   padding: 0;
   margin: 0;
@@ -1501,4 +1503,31 @@ details.card summary {
     grid-row: 1;
     width: auto;
   }
+}
+
+/* Seats (teams-and-seats §6): how many of the plan's seats are in use. */
+.seats {
+  display: grid;
+  gap: 10px;
+}
+.seats-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.seat-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  overflow: hidden;
+}
+.seat-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+.seat-bar.over > span {
+  background: var(--bad-ink);
 }

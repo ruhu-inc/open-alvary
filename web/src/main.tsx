@@ -1144,7 +1144,7 @@ function Plans() {
             <th>Burst</th>
             <th>At once</th>
             <th>Data a day</th>
-            <th>Countries</th>
+            <th>Jurisdictions</th>
             <th>Monitors</th>
             <th>Webhooks</th>
           </tr>
@@ -1282,9 +1282,10 @@ function Developers() {
         <h2>Plans and limits</h2>
         <p>
           Every plan reads the same published corpus. Limits are shared by every
-          key and app in an organisation; with a plan that names countries,
-          others still answer at the Starter rate. Ask for another plan in the
-          console, under Plan and limits.
+          key and app in an organisation. Starter reads the law of one jurisdiction,
+          Nigeria to begin with; on Pro and Team, other jurisdictions still
+          answer at the Starter rate. Change the jurisdiction or the plan in
+          the console, under Plan and limits.
         </p>
         <Plans />
         <p>

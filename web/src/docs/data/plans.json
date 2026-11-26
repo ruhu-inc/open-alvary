@@ -8,10 +8,13 @@
       "mcp"
     ],
     "allowance": {
+      "members": 1,
       "requests_per_minute": 60,
       "burst": 30,
       "concurrency": 4,
       "bytes_per_day": 200000000,
+      "jurisdictions": 1,
+      "default_jurisdiction": "ng",
       "watches": 3,
       "digest": "weekly",
       "shared_watches": false,
@@ -28,18 +31,19 @@
   },
   {
     "id": "developer",
-    "name": "Developer",
+    "name": "Pro",
     "description": "For individual developers and small products in production.",
     "includes": [
       "rest",
       "mcp"
     ],
     "allowance": {
+      "members": 1,
       "requests_per_minute": 300,
       "burst": 150,
       "concurrency": 10,
       "bytes_per_day": 2000000000,
-      "jurisdictions": 2,
+      "jurisdictions": 1,
       "watches": 20,
       "digest": "daily",
       "shared_watches": false,
@@ -63,6 +67,7 @@
       "mcp"
     ],
     "allowance": {
+      "members": 5,
       "requests_per_minute": 1200,
       "burst": 600,
       "concurrency": 40,
@@ -91,6 +96,7 @@
       "mcp"
     ],
     "allowance": {
+      "members": 10,
       "requests_per_minute": 1200,
       "burst": 600,
       "concurrency": 40,
@@ -108,33 +114,6 @@
       "action": "contact",
       "limits": "Limits set for your use",
       "note": "Agreed with you"
-    }
-  },
-  {
-    "id": "public-interest",
-    "name": "Public interest",
-    "description": "Team limits for research, government and legal aid, free or reduced, by application.",
-    "includes": [
-      "rest",
-      "mcp"
-    ],
-    "allowance": {
-      "requests_per_minute": 1200,
-      "burst": 600,
-      "concurrency": 40,
-      "bytes_per_day": 10000000000,
-      "watches": 50,
-      "digest": "daily",
-      "shared_watches": true,
-      "webhook_endpoints": 3
-    },
-    "published": true,
-    "listing": {
-      "order": 5,
-      "for": "Research, government and legal aid",
-      "price": "Free or reduced",
-      "action": "apply",
-      "note": "By application"
     }
   }
 ]

@@ -7,7 +7,7 @@ description: Answers to common questions, and how to reach us.
 
 **Do I need an account?** Not to read the website, download catalogue releases or follow the change feed. The REST API and the MCP server need an account: sign in to [the console](/console), and your organisation gets the free Starter plan at once. Releases with full text are for organisations whose access includes bulk releases, granted by agreement; they download with a key from [`/api/v1/bulk`](/docs/api/get-bulk-file).
 
-**Is it free?** The Starter plan is free, with no card. Prices for paid plans are coming; until then, we confirm each upgrade by email. Research, government and legal aid can apply for the Public interest plan. See [Plans and rate limits](/docs/plans).
+**Is it free?** The Starter plan is free, with no card. Prices for paid plans are coming; until then, we confirm each upgrade by email. See [Plans and rate limits](/docs/plans).
 
 **I lost my key.** Keys are shown only once. Revoke the old one under **API keys** and create a new one.
 
@@ -17,7 +17,7 @@ description: Answers to common questions, and how to reach us.
 
 ## Answers
 
-**Why is a search empty?** Search needs every word, and whole words: `invest` doesn't find `Investments`. Try fewer or complete words, or leave out `jurisdiction`. Records outside your plan's countries still answer, at the Starter rate. See [Find records](/docs/search).
+**Why is a search empty?** Search needs every word, and whole words: `invest` doesn't find `Investments`. Try fewer or complete words, or leave out `jurisdiction`. On Pro and Team, records outside your plan's jurisdictions still answer, at the Starter rate; Starter reads its one jurisdiction only. See [Find records](/docs/search).
 
 **Why is there no text for a record?** Texts are served only once their rights are cleared and a reviewer has checked them against the official file. The record links the official source in `canonical_url`. See [Rights and reuse](/docs/rights).
 

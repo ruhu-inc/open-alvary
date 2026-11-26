@@ -41,6 +41,17 @@ def person(accounts, name):
 
 
 def join(accounts, owner, organisation, who, role="developer"):
+    """Starter has one seat, so the organisation is put on Team first (teams-and-seats §6)."""
+    if accounts.access(organisation).get("starter"):
+        accounts.grant_access(
+            "op",
+            organisation,
+            tier="team",
+            scope={"jurisdictions": ["ng"]},
+            source="manual",
+            ends_at=None,
+            reason="Test: five seats",
+        )
     invitation = accounts.invite(owner, organisation, f"{who[1]}@example.org", role)
     accounts.accept_invitation(who[0], invitation)
 

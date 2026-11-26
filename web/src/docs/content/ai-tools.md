@@ -12,7 +12,7 @@ AI tools that speak MCP (the Model Context Protocol) can search and read the cat
 | What the tool can do | Read the published catalogue and changes, within your organisation's plan |
 | What it can't do | Change anything, see your keys, or act for another organisation |
 
-You need an Open Alvary account with access (the free Starter plan is enough) and the role of owner, admin or developer in the organisation.
+You need an Open Alvary account with access (the free Starter plan is enough) and the role of owner, admin or member in the organisation. Starter reads the law of one jurisdiction, Nigeria to begin with; an owner can change it in the console under **Plan and limits**.
 
 ## Claude
 
@@ -76,7 +76,7 @@ The tool's answers come from the catalogue, but the tool writes them: check what
 
 | What you see | What to do |
 |---|---|
-| The approval page says none of your organisations can connect apps | Your organisation needs access (sign in to the console once for Starter) and your role must be owner, admin or developer. |
+| The approval page says none of your organisations can connect apps | Your organisation needs access (sign in to the console once for Starter) and your role must be owner, admin or member. |
 | The approval page asks you to accept terms first | Open the console, accept, then connect again. |
 | The tool says it isn't authorised, or keeps asking you to sign in | The connection was disconnected or expired: connect again from the tool. |
 | The tool says a limit was reached | Wait a minute; see [Plans and rate limits](/docs/plans). |

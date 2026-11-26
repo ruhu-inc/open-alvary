@@ -34,6 +34,10 @@ def listed_plans() -> list[dict]:
 
 COUNTRY = re.compile(r"^[a-z]{2}$")  # a plan's countries: ISO 3166-1 alpha-2, lower case
 COUNTRY_CHANGE_DAYS = 30
+# How long an organisation over its plan's seats keeps every credential working (teams-and-seats §5.3).
+SEAT_GRACE_DAYS = 7
+# A Stripe subscription that may still charge or be charged: deleting its organisation cancels it first.
+LIVE_SUBSCRIPTION = "('active','past_due','unpaid','incomplete','trialing','paused')"
 
 
 SESSION_DAYS = 30
@@ -236,6 +240,18 @@ class Accounts:
             access["tier"]["name"] = conn.scalar(
                 text(f"SELECT name FROM {self._t(conn, 'tier')} WHERE id = :t"), {"t": access["tier"]["id"]}
             )
+            allowance = access["tier"]["allowance"]
+            if access.get("starter") and allowance.get("jurisdictions") is not None:
+                # Starter holds no grant, so its one country is the organisation's own choice, or the
+                # plan's default until an owner chooses: the same scope policy.check_credential gives
+                # the runtime. ``chosen`` says which, for the console.
+                country = conn.scalar(
+                    text(f"SELECT starter_country FROM {self._t(conn, 'organisation')} WHERE id = :o"),
+                    {"o": organisation_id},
+                )
+                access["chosen"] = country is not None
+                country = country or allowance.get("default_jurisdiction")
+                access["scope"] = {"jurisdictions": [country] if country else []}
         return access
 
     def keyed(self, organisation_id: str, conn: Connection) -> bool:
@@ -851,7 +867,15 @@ class Accounts:
                 .mappings()
                 .all()
             )
-            return [dict(r) | {"access": self.access(r["id"], conn)} for r in rows]
+            return [
+                dict(r) | {"access": self.access(r["id"], conn), "seats": self._seats_shown(conn, r["id"])}
+                for r in rows
+            ]
+
+    def _seats_shown(self, conn: Connection, organisation_id: str) -> dict:
+        """What every member is shown of the seats: enough to say why a credential may be refused."""
+        seats = self._seat_usage(conn, organisation_id)
+        return {k: seats[k] for k in ("active", "limit", "over_limit", "grace_until")}
 
     def organisation(self, person_id: str, organisation_id: str) -> dict:
         with self.engine.connect() as conn:
@@ -867,7 +891,11 @@ class Accounts:
                 .mappings()
                 .one()
             )
-            result = dict(row) | {"role": membership["role"], "access": self.access(organisation_id, conn)}
+            result = dict(row) | {
+                "role": membership["role"],
+                "access": self.access(organisation_id, conn),
+                "seats": self._seats_shown(conn, organisation_id),
+            }
             if roles.can(membership["role"], "audit.read"):
                 result["counts"] = dict(
                     conn.execute(
@@ -903,6 +931,12 @@ class Accounts:
             membership = self._membership(conn, person_id, organisation_id, lock=True)
             self._require(membership, "organisation.update")
             sets = ", ".join(f"{k} = :{k}" for k in changes)
+            # Naming a personal workspace that is on Team makes it a team's (teams-and-seats §3, Path B).
+            if (
+                "name" in changes
+                and (self.access(organisation_id, conn).get("tier") or {}).get("id") == "team"
+            ):
+                sets += ", personal_of = NULL"
             done = conn.execute(
                 text(
                     f"UPDATE {self._t(conn, 'organisation')} SET {sets}, revision = revision + 1,"
@@ -958,9 +992,12 @@ class Accounts:
                 .mappings()
                 .all()
             )
+            current = self.current_entitlement(conn, organisation_id)
             return {
                 "current": self.access(organisation_id, conn),
+                "source": current["source"] if current else None,
                 "country_change_after": self._country_change_after(conn, organisation_id),
+                "free_country_change": self._free_country_change(conn, organisation_id),
                 "history": [dict(h) | ({} if owner else {"reason": None}) for h in history],
                 "requests": [dict(r) for r in requests] if owner else [],
             }
@@ -1085,6 +1122,14 @@ class Accounts:
                 raise AccountError(
                     "entitlement_inactive", 409, "There is no granted access to end; starter access stays."
                 )
+            if self.current_entitlement(conn, organisation_id)["source"] == "payment":
+                # Paid access ends in Stripe, so that billing and access never part (stripe-billing §6.4).
+                raise AccountError(
+                    "managed_by_billing",
+                    409,
+                    "This plan is paid by subscription. Cancel it under Manage billing; you keep the plan"
+                    " until the end of the period you paid for.",
+                )
             self._change_entitlement(
                 conn,
                 current["entitlement"],
@@ -1093,6 +1138,25 @@ class Accounts:
                 "Ended by an owner",
                 context,
             )
+            self._sync_seat_grace(conn, organisation_id)
+
+    def current_entitlement(self, conn: Connection, organisation_id: str) -> dict | None:
+        """The grant behind the organisation's access now (None on Starter), as accounts_access picks it."""
+        row = (
+            conn.execute(
+                text(
+                    f"SELECT id, tier_id, source, scope, reference, seats, ends_at FROM {self._t(conn, 'entitlement')}"
+                    " WHERE organisation_id = :o AND state IN ('scheduled','active')"
+                    " AND starts_at <= statement_timestamp()"
+                    " AND (ends_at IS NULL OR ends_at > statement_timestamp())"
+                    " ORDER BY starts_at DESC LIMIT 1"
+                ),
+                {"o": organisation_id},
+            )
+            .mappings()
+            .first()
+        )
+        return dict(row) if row else None
 
     def _change_entitlement(self, conn, entitlement_id, to_state, actor, reason, context) -> None:
         old = (
@@ -1150,12 +1214,18 @@ class Accounts:
         reason: str,
         reference: str | None = None,
         request_id: str | None = None,
+        seats: int | None = None,
         context=None,
     ) -> str:
         """Grant (or change) an organisation's access from now; the current access ends in the same
-        transaction, so the periods never overlap and nothing is reset (MAC-04)."""
+        transaction, so the periods never overlap and nothing is reset (MAC-04). ``seats`` overrides the
+        plan's members for a contract (Enterprise, partners): teams-and-seats §5.1."""
         if source not in ("waiver", "manual") or not reason.strip():
             raise AccountError("invalid_input", 400, "A waiver or manual grant needs a reason.")
+        if seats is not None and (
+            isinstance(seats, bool) or not isinstance(seats, int) or not 1 <= seats <= 100000
+        ):
+            raise AccountError("invalid_input", 400, "Seats must be a whole number from 1 to 100,000.")
         actor = ("operator", operator)
         with self.engine.begin() as conn:
             found = conn.scalar(
@@ -1174,7 +1244,7 @@ class Accounts:
                     conn, current["entitlement"], "ended", actor, "Replaced by a new grant", context
                 )
             entitlement_id = self._start_entitlement(
-                conn, organisation_id, tier, source, scope, ends_at, reference, reason, actor
+                conn, organisation_id, tier, source, scope, ends_at, reference, reason, actor, seats
             )
             if request_id:
                 conn.execute(
@@ -1202,20 +1272,22 @@ class Accounts:
                 "entitlement.granted",
                 organisation=organisation_id,
                 target=("entitlement", entitlement_id),
-                summary={"tier": tier, "scope": scope, "source": source},
+                summary={"tier": tier, "scope": scope, "source": source}
+                | ({"seats": seats} if seats is not None else {}),
                 context=context,
             )
+            self._sync_seat_grace(conn, organisation_id)
             return entitlement_id
 
     def _start_entitlement(
-        self, conn, organisation_id, tier, source, scope, ends_at, reference, reason, actor
+        self, conn, organisation_id, tier, source, scope, ends_at, reference, reason, actor, seats=None
     ):
         entitlement_id = new_id("ent")
         conn.execute(
             text(
                 f"INSERT INTO {self._t(conn, 'entitlement')} (id, organisation_id, tier_id, source, scope,"
-                " starts_at, ends_at, state, reference, reason) VALUES (:id, :o, :tier, :source,"
-                " CAST(:scope AS jsonb), statement_timestamp(), :ends, 'active', :ref, :reason)"
+                " starts_at, ends_at, state, reference, reason, seats) VALUES (:id, :o, :tier, :source,"
+                " CAST(:scope AS jsonb), statement_timestamp(), :ends, 'active', :ref, :reason, :seats)"
             ),
             {
                 "id": entitlement_id,
@@ -1226,6 +1298,7 @@ class Accounts:
                 "ends": ends_at,
                 "ref": reference,
                 "reason": reason,
+                "seats": seats,
             },
         )
         conn.execute(
@@ -1235,10 +1308,21 @@ class Accounts:
             ),
             {"e": entitlement_id, "t": actor[0], "r": actor[1], "reason": reason},
         )
+        chosen = scope.get("jurisdictions") if isinstance(scope, dict) else None
+        if chosen:
+            # When this plan ends, Starter continues in one of its countries: the one Starter had if the
+            # plan keeps it, else the plan's first.
+            conn.execute(
+                text(
+                    f"UPDATE {self._t(conn, 'organisation')} SET starter_country = :first WHERE id = :o"
+                    " AND (starter_country IS NULL OR starter_country <> ALL(:chosen))"
+                ),
+                {"o": organisation_id, "first": sorted(chosen)[0], "chosen": list(chosen)},
+            )
         return entitlement_id
 
     def _plan_scope(self, conn, tier: str, scope: dict, request: bool = True) -> dict:
-        """The scope a plan allows. A plan with a number of countries (Developer, Team) covers 1 to that
+        """The scope a plan allows. A plan with a number of countries (Starter, Pro, Team) covers 1 to that
         many, chosen by the organisation; each country includes everything under it, and the
         continent's and regional bodies' law is within every plan (api.reach). A plan without a number
         covers every country: a request for it asks for all; an operator may still grant it narrower."""
@@ -1271,81 +1355,109 @@ class Accounts:
             raise AccountError(
                 "invalid_input",
                 400,
-                f"{row['name']} covers up to {row['countries']} countries: choose 1 to {row['countries']}.",
+                f"{row['name']} covers 1 jurisdiction: choose one."
+                if row["countries"] == 1
+                else f"{row['name']} covers up to {row['countries']} jurisdictions: choose 1 to {row['countries']}.",
             )
         return {"jurisdictions": sorted(chosen)}
 
     def _country_change_after(self, conn, organisation_id: str) -> datetime | None:
-        """When an owner may next change the plan's countries; None when they may now."""
+        """When an owner may next change the plan's countries; None when they may now. Only changes since
+        the latest switch of paid plan count (billing.plan_changed): the first change after a switch is
+        free, and starts a new 30 days (stripe-billing §6.6)."""
+        audit = self._t(conn, "audit_event")
         return conn.scalar(
             text(
-                f"SELECT max(at) + make_interval(days => {COUNTRY_CHANGE_DAYS}) FROM {self._t(conn, 'audit_event')}"
+                f"SELECT max(at) + make_interval(days => {COUNTRY_CHANGE_DAYS}) FROM {audit}"
                 " WHERE organisation_id = :o AND action = 'access.countries_changed'"
+                f" AND at > coalesce((SELECT max(at) FROM {audit} WHERE organisation_id = :o"
+                " AND action = 'billing.plan_changed'), '-infinity')"
                 f" HAVING max(at) + make_interval(days => {COUNTRY_CHANGE_DAYS}) > statement_timestamp()"
             ),
             {"o": organisation_id},
         )
 
+    def _free_country_change(self, conn, organisation_id: str) -> bool:
+        """Whether the plan switched since the countries last changed: that change is free (§6.6)."""
+        audit = self._t(conn, "audit_event")
+        return bool(
+            conn.scalar(
+                text(
+                    f"SELECT max(at) FILTER (WHERE action = 'billing.plan_changed') > coalesce(max(at) FILTER"
+                    f" (WHERE action = 'access.countries_changed'), '-infinity') FROM {audit}"
+                    " WHERE organisation_id = :o AND action IN ('billing.plan_changed', 'access.countries_changed')"
+                ),
+                {"o": organisation_id},
+            )
+        )
+
     def change_countries(self, person_id: str, organisation_id: str, countries: list, context=None) -> None:
-        """An owner swaps the plan's chosen countries, at most once every 30 days. The current access
-        ends and the same plan continues with the new countries, so the history shows both."""
+        """An owner chooses or swaps the plan's countries, at most once every 30 days. Starter begins on
+        the plan's default (allowance.default_jurisdiction), so its first change is free like any plan's;
+        with no default, the first choice is free too. On a paid plan the current access
+        ends and the same plan continues with the new countries, so the history shows both; Starter holds
+        no grant, so its one country is the organisation's own (starter_country)."""
         with self.engine.begin() as conn:
             membership = self._membership(conn, person_id, organisation_id, lock=True)
             self._require(membership, "access.request")
             current = self.access(organisation_id, conn)
-            if current["state"] != "active" or not current.get("entitlement"):
-                raise AccountError("entitlement_inactive", 409, "Starter covers every country already.")
-            old = (
-                conn.execute(
-                    text(
-                        f"SELECT tier_id, source, scope, ends_at, reference FROM {self._t(conn, 'entitlement')}"
-                        " WHERE id = :e"
-                    ),
-                    {"e": current["entitlement"]},
-                )
-                .mappings()
-                .one()
-            )
-            if (
-                conn.scalar(
-                    text(f"SELECT allowance->>'jurisdictions' FROM {self._t(conn, 'tier')} WHERE id = :t"),
-                    {"t": old["tier_id"]},
-                )
-                is None
-            ):
-                raise AccountError("invalid_input", 400, "Your plan covers every country.")
-            scope = self._plan_scope(conn, old["tier_id"], {"jurisdictions": countries})
-            if scope == old["scope"]:
-                raise AccountError("invalid_input", 400, "Those are your countries already.")
-            after = self._country_change_after(conn, organisation_id)
+            if current["state"] != "active":
+                raise AccountError("entitlement_inactive", 409, "Your organisation has no active plan.")
+            if current["tier"]["allowance"].get("jurisdictions") is None:
+                raise AccountError("invalid_input", 400, "Your plan covers every jurisdiction.")
+            scope = self._plan_scope(conn, current["tier"]["id"], {"jurisdictions": countries})
+            before = current["scope"].get("jurisdictions") or []
+            if scope["jurisdictions"] == sorted(before):
+                raise AccountError("invalid_input", 400, "Those are your jurisdictions already.")
+            after = self._country_change_after(conn, organisation_id) if before else None
             if after is not None:
                 raise AccountError(
                     "change_too_soon",
                     409,
-                    f"You can change countries once a month: next from {after:%-d %B %Y}.",
+                    f"You can change jurisdictions once a month: next from {after:%-d %B %Y}.",
                 )
             actor = self._actor(conn, person_id)
-            self._change_entitlement(
-                conn, current["entitlement"], "ended", actor, "Countries changed", context
-            )
-            entitlement_id = self._start_entitlement(
-                conn,
-                organisation_id,
-                old["tier_id"],
-                old["source"],
-                scope,
-                old["ends_at"],
-                old["reference"],
-                "Countries changed by an owner",
-                actor,
-            )
+            if current.get("entitlement"):
+                old = (
+                    conn.execute(
+                        text(
+                            f"SELECT tier_id, source, ends_at, reference, seats FROM {self._t(conn, 'entitlement')}"
+                            " WHERE id = :e"
+                        ),
+                        {"e": current["entitlement"]},
+                    )
+                    .mappings()
+                    .one()
+                )
+                self._change_entitlement(
+                    conn, current["entitlement"], "ended", actor, "Jurisdictions changed", context
+                )
+                target = self._start_entitlement(
+                    conn,
+                    organisation_id,
+                    old["tier_id"],
+                    old["source"],
+                    scope,
+                    old["ends_at"],
+                    old["reference"],
+                    "Jurisdictions changed by an owner",
+                    actor,
+                    old["seats"],
+                )
+            else:
+                conn.execute(
+                    text(f"UPDATE {self._t(conn, 'organisation')} SET starter_country = :c WHERE id = :o"),
+                    {"o": organisation_id, "c": scope["jurisdictions"][0]},
+                )
+                target = None
             self._audit(
                 conn,
                 actor,
-                "access.countries_changed",
+                # The first choice on Starter is not a change: the 30 days count from the first change.
+                "access.countries_changed" if before else "access.country_chosen",
                 organisation=organisation_id,
-                target=("entitlement", entitlement_id),
-                summary={"from": old["scope"].get("jurisdictions"), "to": scope["jurisdictions"]},
+                target=("entitlement", target) if target else ("organisation", organisation_id),
+                summary={"from": before or None, "to": scope["jurisdictions"]},
                 context=context,
             )
 
@@ -1385,6 +1497,7 @@ class Accounts:
                 self._change_entitlement(
                     conn, current["entitlement"], "revoked", ("operator", operator), reason, context
                 )
+                self._sync_seat_grace(conn, organisation_id)
                 return
             marker = new_id("ent")
             conn.execute(
@@ -1411,6 +1524,7 @@ class Accounts:
                 summary={"reason": reason, "starter": True},
                 context=context,
             )
+            self._sync_seat_grace(conn, organisation_id)
 
     def open_requests(self) -> list[dict]:
         with self.engine.connect() as conn:
@@ -1810,10 +1924,104 @@ class Accounts:
             )
 
     # ---------- members ----------
+    def _seat_usage(self, conn: Connection, organisation_id: str) -> dict:
+        """The organisation's seats (teams-and-seats §5.1): members, pending invitations and the limit its
+        access allows now, by policy.organisation_seat_limit, the rule the credential check also uses."""
+        row = (
+            conn.execute(
+                text(
+                    f"SELECT (SELECT count(*) FROM {self._t(conn, 'membership')} WHERE organisation_id = :o) AS active,"
+                    f" (SELECT count(*) FROM {self._t(conn, 'invitation')} WHERE organisation_id = :o"
+                    " AND state = 'pending' AND expires_at > statement_timestamp()) AS pending,"
+                    f" {self._fn(conn, 'organisation_seat_limit')}(:o) AS seat_limit, invitation_limit,"
+                    f" seat_grace_until FROM {self._t(conn, 'organisation')} WHERE id = :o"
+                ),
+                {"o": organisation_id},
+            )
+            .mappings()
+            .one()
+        )
+        active, pending, limit = row["active"], row["pending"], row["seat_limit"]
+        used = active + pending
+        return {
+            "active": active,
+            "pending": pending,
+            "used": used,
+            "limit": limit,
+            "remaining": max(0, limit - used),
+            "over_limit": active > limit,
+            "can_invite": limit > 1 and used < limit and pending < row["invitation_limit"],
+            "grace_until": row["seat_grace_until"],
+            "invitation_limit": row["invitation_limit"],
+        }
+
+    def _sync_seat_grace(
+        self, conn: Connection, organisation_id: str, *, grace_days: int = SEAT_GRACE_DAYS, actor=None
+    ) -> datetime | None:
+        """After anything that changes the members or the access (teams-and-seats §5.3): an organisation
+        within its seats has no grace; one over them gets one, started now, unless it has one already. So a
+        later second downgrade gets a fresh period, never an old timer. Nobody is removed. Locks the
+        organisation's row; gives the grace's end, or None."""
+        row = (
+            conn.execute(
+                text(
+                    f"SELECT seat_grace_until FROM {self._t(conn, 'organisation')} WHERE id = :o FOR UPDATE"
+                ),
+                {"o": organisation_id},
+            )
+            .mappings()
+            .first()
+        )
+        if row is None:
+            return None
+        # Members and seats only: the jobs login, which runs this daily, reads no invitation's address.
+        seats = (
+            conn.execute(
+                text(
+                    f"SELECT (SELECT count(*) FROM {self._t(conn, 'membership')} WHERE organisation_id = :o) AS active,"
+                    f" {self._fn(conn, 'organisation_seat_limit')}(:o) AS seat_limit"
+                ),
+                {"o": organisation_id},
+            )
+            .mappings()
+            .one()
+        )
+        seats = {
+            "active": seats["active"],
+            "limit": seats["seat_limit"],
+            "over_limit": seats["active"] > seats["seat_limit"],
+        }
+        before = row["seat_grace_until"]
+        if not seats["over_limit"]:
+            if before is None:
+                return None
+            after = None
+        elif before is not None:
+            return before
+        else:
+            after = conn.scalar(
+                text("SELECT statement_timestamp() + make_interval(days => :d)"), {"d": grace_days}
+            )
+        conn.execute(
+            text(f"UPDATE {self._t(conn, 'organisation')} SET seat_grace_until = :g WHERE id = :o"),
+            {"g": after, "o": organisation_id},
+        )
+        self._audit(
+            conn,
+            actor or ("system", "seats"),
+            "seats.grace_started" if after else "seats.grace_ended",
+            organisation=organisation_id,
+            target=("organisation", organisation_id),
+            summary={"members": seats["active"], "seats": seats["limit"]}
+            | ({"until": after.isoformat()} if after else {}),
+        )
+        return after
+
     def members(self, person_id: str, organisation_id: str) -> dict:
         with self.engine.connect() as conn:
             membership = self._membership(conn, person_id, organisation_id)
             managers = roles.can(membership["role"], "audit.read")
+            seats = self._seat_usage(conn, organisation_id)
             rows = (
                 conn.execute(
                     text(
@@ -1846,6 +2054,7 @@ class Accounts:
                 "members": [dict(r) for r in rows],
                 "invitations": [dict(i) for i in invitations],
                 "invite_roles": list(roles.invite_roles(membership["role"])),
+                "seats": {k: v for k, v in seats.items() if k != "invitation_limit"},
             }
 
     def invite(self, person_id: str, organisation_id: str, email: str, role: str, context=None) -> str:
@@ -1854,30 +2063,29 @@ class Accounts:
             membership = self._membership(conn, person_id, organisation_id, lock=True)
             if role not in roles.invite_roles(membership["role"]):
                 raise AccountError("role_forbidden", 403, "Your role cannot invite someone with that role.")
-            counts = (
-                conn.execute(
-                    text(
-                        f"SELECT (SELECT count(*) FROM {self._t(conn, 'membership')} WHERE organisation_id = :o) AS members,"
-                        f" (SELECT count(*) FROM {self._t(conn, 'invitation')} WHERE organisation_id = :o"
-                        " AND state = 'pending' AND expires_at > statement_timestamp()) AS pending,"
-                        " member_limit, invitation_limit, EXISTS(SELECT 1 FROM"
-                        f" {self._t(conn, 'membership')} m JOIN {self._t(conn, 'person')} p ON p.id = m.person_id"
-                        " WHERE m.organisation_id = :o AND p.email = :e) AS member"
-                        f" FROM {self._t(conn, 'organisation')} WHERE id = :o"
-                    ),
-                    {"o": organisation_id, "e": email},
-                )
-                .mappings()
-                .one()
+            already_member = conn.scalar(
+                text(
+                    f"SELECT EXISTS(SELECT 1 FROM {self._t(conn, 'membership')} m"
+                    f" JOIN {self._t(conn, 'person')} p ON p.id = m.person_id"
+                    " WHERE m.organisation_id = :o AND p.email = :e)"
+                ),
+                {"o": organisation_id, "e": email},
             )
-            if counts["member"]:
+            if already_member:
                 raise AccountError("already_member", 409, "That person is already a member.")
-            if (
-                counts["members"] + counts["pending"] >= counts["member_limit"]
-                or counts["pending"] >= counts["invitation_limit"]
-            ):
+            seats = self._seat_usage(conn, organisation_id)
+            if seats["limit"] <= 1:
                 raise AccountError(
-                    "limit_reached", 409, "This organisation has reached its member or invitation limit."
+                    "plan_single_seat",
+                    403,
+                    "Your current plan includes 1 seat. Upgrade to Team to invite members.",
+                )
+            if seats["used"] >= seats["limit"] or seats["pending"] >= seats["invitation_limit"]:
+                raise AccountError(
+                    "limit_reached",
+                    409,
+                    f"This workspace has reached its seat or invitation limit"
+                    f" ({seats['active']} active, {seats['pending']} pending of {seats['limit']}).",
                 )
             self._within_mail_limits(
                 conn,
@@ -1886,7 +2094,7 @@ class Accounts:
                 email,
                 "invitation",
                 # An organisation the operator gave more invitations (MAC-03) may send them in a day.
-                max(INVITATIONS_PER_ORGANISATION, counts["invitation_limit"]),
+                max(INVITATIONS_PER_ORGANISATION, seats["invitation_limit"]),
             )
             conn.execute(
                 text(
@@ -1988,6 +2196,13 @@ class Accounts:
                 text(f"SELECT id FROM {self._t(conn, 'organisation')} WHERE id = :o FOR UPDATE"),
                 {"o": invitation["organisation_id"]},
             )
+            seats = self._seat_usage(conn, invitation["organisation_id"])
+            if seats["active"] >= seats["limit"]:
+                raise AccountError(
+                    "limit_reached",
+                    409,
+                    "This team has reached its seat limit. Ask an owner to free a seat or upgrade.",
+                )
             membership_id = new_id("mem")
             conn.execute(
                 text(
@@ -2057,6 +2272,7 @@ class Accounts:
                 summary={"from": target["role"], "to": role},
                 context=context,
             )
+            self._sync_seat_grace(conn, organisation_id)
 
     def remove_member(self, person_id, organisation_id, membership_id, context=None) -> None:
         """Removal, or leaving when the membership is the caller's own. Their personal keys and
@@ -2091,6 +2307,8 @@ class Accounts:
                 target=("membership", membership_id),
                 context=context,
             )
+            # A member fewer may bring the organisation back within its seats: the grace ends at once.
+            self._sync_seat_grace(conn, organisation_id)
 
     def transfer_ownership(self, person_id, organisation_id, membership_id, keep_owner: bool, context=None):
         with self.engine.begin() as conn:
@@ -2125,15 +2343,44 @@ class Accounts:
                 context=context,
             )
 
-    def delete_organisation(self, person_id, organisation_id, context=None) -> None:
-        """Owner only: every key and app is revoked at once and the access ends (MAC-03)."""
+    def delete_organisation(self, person_id, organisation_id, context=None, billing=None) -> None:
+        """Owner only: every key and app is revoked at once and the access ends (MAC-03). ``billing``
+        (accounts.billing.Billing) cancels any subscription in Stripe first, outside the transaction."""
+        if billing is not None:
+            with self.engine.connect() as conn:
+                self._require(self._membership(conn, person_id, organisation_id), "organisation.delete")
+            billing.cancel_for_deletion([organisation_id])
         with self.engine.begin() as conn:
             membership = self._membership(conn, person_id, organisation_id, lock=True)
             self._require(membership, "organisation.delete")
             self._delete_organisation(conn, organisation_id, self._actor(conn, person_id), context)
 
     def _delete_organisation(self, conn, organisation_id, actor, context=None) -> None:
-        """The deletion itself, in the caller's transaction (also used when an account closes)."""
+        """The deletion itself, in the caller's transaction (also used when an account closes). Any live
+        Stripe subscription is cancelled first, outside it (accounts.billing.Billing.cancel_for_deletion):
+        a deleted organisation is never left paying, so one still live here refuses the deletion."""
+        live = conn.scalar(
+            text(
+                f"SELECT count(*) FROM {self._t(conn, 'billing_subscription')} WHERE organisation_id = :o"
+                f" AND status IN {LIVE_SUBSCRIPTION}"
+            ),
+            {"o": organisation_id},
+        )
+        if live:
+            raise AccountError(
+                "billing_unavailable",
+                503,
+                "We couldn't cancel this workspace's subscription with Stripe, so nothing was deleted."
+                " Try again in a few minutes.",
+            )
+        conn.execute(
+            text(
+                f"UPDATE {self._t(conn, 'billing_customer')} SET billing_email = NULL,"
+                " open_checkout_session_id = NULL, open_checkout_key = NULL, updated_at = statement_timestamp()"
+                " WHERE organisation_id = :o"
+            ),
+            {"o": organisation_id},
+        )
         current = self.access(organisation_id, conn)
         if current["state"] == "active" and current.get("entitlement"):
             self._change_entitlement(
@@ -2195,7 +2442,8 @@ class Accounts:
             rows = conn.execute(
                 text(
                     f"SELECT e.seq, e.id, e.at, e.actor_type, coalesce(a.display_name, CASE e.actor_type WHEN"
-                    " 'operator' THEN 'Open Alvary' WHEN 'system' THEN 'Open Alvary' ELSE 'Former member' END)"
+                    " 'operator' THEN 'Open Alvary' WHEN 'system' THEN CASE WHEN e.actor_ref LIKE 'stripe:%'"
+                    " THEN 'Stripe billing' ELSE 'System' END ELSE 'Former member' END)"
                     " AS actor, e.action, e.target_type, e.target_id, e.summary, e.network_prefix,"
                     f" e.client_family FROM {self._t(conn, 'audit_event')} e LEFT JOIN {self._t(conn, 'actor')} a"
                     " ON a.id = e.actor_ref AND e.actor_type = 'person' WHERE e.organisation_id = :o"

@@ -19,7 +19,7 @@ from fastapi.responses import JSONResponse, Response
 
 from api import text_index
 from api.catalogue import NO_WORDS
-from api.reach import EVERYWHERE, OutsidePlanLimited, Reach
+from api.reach import EVERYWHERE, OutsidePlan, OutsidePlanLimited, Reach
 from api.repositories import EDGE_ORDER, ResultTooLarge
 from api.search import normalize_citation
 from api.search import words as search_words
@@ -773,7 +773,7 @@ def create_router(
     signer: Callable[[], object] | None = None,
 ) -> APIRouter:
     """``reach`` gives the organisation's plan (api.reach): its countries at the plan's limits, every
-    other jurisdiction at the Starter rate."""
+    other jurisdiction at the Starter rate, or refused on Starter."""
     router = APIRouter()
 
     def call_tool(
@@ -1226,6 +1226,8 @@ def create_router(
             except OutsidePlanLimited as outside:
                 message = f"{outside} Retry after {outside.retry_after} seconds."
                 return _result(id_, _tool_error("rate_limited", message, outside.retry_after))
+            except OutsidePlan as outside:
+                return _result(id_, _tool_error("jurisdiction_not_included", str(outside)))
             except ToldWithdrawn as told:
                 return _result(id_, _tool_error("withdrawn", WITHDRAWN[told.argument]))
             except LookupError:

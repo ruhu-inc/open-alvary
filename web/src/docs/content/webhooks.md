@@ -8,7 +8,7 @@ A **monitor** watches the catalogue for the changes you choose: countries, recor
 | Plan | Monitors | Email | Webhook endpoints |
 |---|---|---|---|
 | Starter | 3 | Weekly digest | None |
-| Developer | 20 | Daily or weekly | 1 |
+| Pro | 20 | Daily or weekly | 1 |
 | Team | 50, shared with the organisation | Daily or weekly | 3 |
 
 Other plans are in [Plans and rate limits](/docs/plans).

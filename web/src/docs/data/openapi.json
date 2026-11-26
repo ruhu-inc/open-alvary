@@ -74,7 +74,7 @@
             }
           },
           "403": {
-            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`). On Starter, the request is about a jurisdiction other than the plan's one (`jurisdiction_not_included`).",
             "headers": {
               "X-Request-ID": {
                 "$ref": "#/components/headers/RequestId"
@@ -376,7 +376,7 @@
             }
           },
           "403": {
-            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`). On Starter, the request is about a jurisdiction other than the plan's one (`jurisdiction_not_included`).",
             "headers": {
               "X-Request-ID": {
                 "$ref": "#/components/headers/RequestId"
@@ -636,7 +636,7 @@
             }
           },
           "403": {
-            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`). On Starter, the request is about a jurisdiction other than the plan's one (`jurisdiction_not_included`).",
             "headers": {
               "X-Request-ID": {
                 "$ref": "#/components/headers/RequestId"
@@ -897,7 +897,7 @@
             }
           },
           "403": {
-            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`). On Starter, the request is about a jurisdiction other than the plan's one (`jurisdiction_not_included`).",
             "headers": {
               "X-Request-ID": {
                 "$ref": "#/components/headers/RequestId"
@@ -1149,7 +1149,7 @@
             }
           },
           "403": {
-            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`). On Starter, the request is about a jurisdiction other than the plan's one (`jurisdiction_not_included`).",
             "headers": {
               "X-Request-ID": {
                 "$ref": "#/components/headers/RequestId"
@@ -1287,7 +1287,7 @@
             }
           },
           "403": {
-            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`). On Starter, the request is about a jurisdiction other than the plan's one (`jurisdiction_not_included`).",
             "headers": {
               "X-Request-ID": {
                 "$ref": "#/components/headers/RequestId"
@@ -1460,7 +1460,7 @@
             }
           },
           "403": {
-            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`). On Starter, the request is about a jurisdiction other than the plan's one (`jurisdiction_not_included`).",
             "headers": {
               "X-Request-ID": {
                 "$ref": "#/components/headers/RequestId"
@@ -1622,7 +1622,7 @@
             }
           },
           "403": {
-            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`). On Starter, the request is about a jurisdiction other than the plan's one (`jurisdiction_not_included`).",
             "headers": {
               "X-Request-ID": {
                 "$ref": "#/components/headers/RequestId"
@@ -1790,7 +1790,7 @@
             }
           },
           "403": {
-            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`). On Starter, the request is about a jurisdiction other than the plan's one (`jurisdiction_not_included`).",
             "headers": {
               "X-Request-ID": {
                 "$ref": "#/components/headers/RequestId"
@@ -2010,7 +2010,7 @@
             }
           },
           "403": {
-            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`). On Starter, the request is about a jurisdiction other than the plan's one (`jurisdiction_not_included`).",
             "headers": {
               "X-Request-ID": {
                 "$ref": "#/components/headers/RequestId"
@@ -2100,7 +2100,7 @@
             }
           }
         },
-        "description": "Catalogued records a page at a time, with the same filters as search. Without `jurisdiction`, the list covers your plan's countries.",
+        "description": "Catalogued records a page at a time, with the same filters as search. Without `jurisdiction`, the list covers your plan's jurisdictions.",
         "tags": [
           "Catalogue"
         ]
@@ -2160,7 +2160,7 @@
             }
           },
           "403": {
-            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`). On Starter, the request is about a jurisdiction other than the plan's one (`jurisdiction_not_included`).",
             "headers": {
               "X-Request-ID": {
                 "$ref": "#/components/headers/RequestId"
@@ -2451,7 +2451,7 @@
             }
           },
           "403": {
-            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`). On Starter, the request is about a jurisdiction other than the plan's one (`jurisdiction_not_included`).",
             "headers": {
               "X-Request-ID": {
                 "$ref": "#/components/headers/RequestId"
@@ -2622,7 +2622,7 @@
             }
           },
           "403": {
-            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`). On Starter, the request is about a jurisdiction other than the plan's one (`jurisdiction_not_included`).",
             "headers": {
               "X-Request-ID": {
                 "$ref": "#/components/headers/RequestId"
@@ -2891,7 +2891,7 @@
             }
           },
           "403": {
-            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`). On Starter, the request is about a jurisdiction other than the plan's one (`jurisdiction_not_included`).",
             "headers": {
               "X-Request-ID": {
                 "$ref": "#/components/headers/RequestId"
@@ -3103,7 +3103,7 @@
             }
           },
           "403": {
-            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`). On Starter, the request is about a jurisdiction other than the plan's one (`jurisdiction_not_included`).",
             "headers": {
               "X-Request-ID": {
                 "$ref": "#/components/headers/RequestId"
@@ -3367,7 +3367,7 @@
             }
           },
           "403": {
-            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`). On Starter, the request is about a jurisdiction other than the plan's one (`jurisdiction_not_included`).",
             "headers": {
               "X-Request-ID": {
                 "$ref": "#/components/headers/RequestId"
@@ -3558,7 +3558,7 @@
             }
           },
           "403": {
-            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`). On Starter, the request is about a jurisdiction other than the plan's one (`jurisdiction_not_included`).",
             "headers": {
               "X-Request-ID": {
                 "$ref": "#/components/headers/RequestId"
@@ -3728,7 +3728,7 @@
               ],
               "title": "Jurisdiction"
             },
-            "description": "One jurisdiction ID, such as `ng` or `rw`. A country outside your plan answers at the Starter rate."
+            "description": "One jurisdiction ID, such as `ng` or `rw`. A jurisdiction outside a paid plan answers at the Starter rate; Starter reads its one jurisdiction only."
           },
           {
             "name": "access",
@@ -3832,7 +3832,7 @@
             }
           },
           "403": {
-            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`). On Starter, the request is about a jurisdiction other than the plan's one (`jurisdiction_not_included`).",
             "headers": {
               "X-Request-ID": {
                 "$ref": "#/components/headers/RequestId"
@@ -3922,7 +3922,7 @@
             }
           }
         },
-        "description": "Records with every one of the words in their title, citation or summary, or in one part of their cleared full text, a page at a time in record ID order. Whole words only, in any order: `invest` doesn't find the Investments and Securities Act. Without `jurisdiction`, a search covers your plan's countries.",
+        "description": "Records with every one of the words in their title, citation or summary, or in one part of their cleared full text, a page at a time in record ID order. Whole words only, in any order: `invest` doesn't find the Investments and Securities Act. Without `jurisdiction`, a search covers your plan's jurisdictions.",
         "tags": [
           "Catalogue"
         ]
@@ -3960,7 +3960,7 @@
               ],
               "title": "Jurisdiction"
             },
-            "description": "One jurisdiction ID, such as `ng` or `rw`. A country outside your plan answers at the Starter rate."
+            "description": "One jurisdiction ID, such as `ng` or `rw`. A jurisdiction outside a paid plan answers at the Starter rate; Starter reads its one jurisdiction only."
           },
           {
             "name": "language",
@@ -4250,7 +4250,7 @@
             }
           },
           "403": {
-            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`). On Starter, the request is about a jurisdiction other than the plan's one (`jurisdiction_not_included`).",
             "headers": {
               "X-Request-ID": {
                 "$ref": "#/components/headers/RequestId"
@@ -4319,7 +4319,7 @@
             }
           }
         },
-        "description": "Passages of published texts that match the words, best first: each hit is a section, article or schedule paragraph, with a snippet of the exact text, its byte span and the anchor to get it whole. Only published texts are searched; `coverage` says how many records in the scope have one, and `status` tells no result (`no_result`) apart from a scope with no published text (`unsupported_scope`) and a search that could not run (`degraded`). A query that reads as a citation of a part, such as `NDPA s. 23(1)(a)`, puts that part first. Without `jurisdiction`, a search covers your plan's countries.",
+        "description": "Passages of published texts that match the words, best first: each hit is a section, article or schedule paragraph, with a snippet of the exact text, its byte span and the anchor to get it whole. Only published texts are searched; `coverage` says how many records in the scope have one, and `status` tells no result (`no_result`) apart from a scope with no published text (`unsupported_scope`) and a search that could not run (`degraded`). A query that reads as a citation of a part, such as `NDPA s. 23(1)(a)`, puts that part first. Without `jurisdiction`, a search covers your plan's jurisdictions.",
         "tags": [
           "Catalogue"
         ]
@@ -4354,7 +4354,7 @@
               "default": [],
               "title": "Jurisdiction"
             },
-            "description": "Jurisdiction IDs, such as `ng`. Repeat for several, up to 10; with two or more, results alternate between them. A country outside your plan answers at the Starter rate."
+            "description": "Jurisdiction IDs, such as `ng`. Repeat for several, up to 10; with two or more, results alternate between them. A jurisdiction outside a paid plan answers at the Starter rate; Starter reads its one jurisdiction only."
           },
           {
             "name": "language",
@@ -4658,7 +4658,7 @@
             }
           },
           "403": {
-            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`). On Starter, the request is about a jurisdiction other than the plan's one (`jurisdiction_not_included`).",
             "headers": {
               "X-Request-ID": {
                 "$ref": "#/components/headers/RequestId"
@@ -4727,7 +4727,7 @@
             }
           }
         },
-        "description": "Ranked legal evidence for a question, for an application that writes answers: each unit is a provision (or the text a part holds between its provisions, or a whole law's title and preamble), with its exact words or an excerpt within `max_evidence_bytes`, its byte span and hashes to check it, what quoting it asks for, whether it was in force, the definitions it relies on, and why it ranks where it does. A query that cites a part, names a law or asks what a term means is routed to that first (`query.routes`). The same request over the same revisions gives the same answer. Nothing is generated: only published texts' words. Without `jurisdiction`, it covers your plan's countries. With `scope=applicable`, it also covers the regional and treaty law that binds in the one jurisdiction asked about, and says how each unit relates to it.",
+        "description": "Ranked legal evidence for a question, for an application that writes answers: each unit is a provision (or the text a part holds between its provisions, or a whole law's title and preamble), with its exact words or an excerpt within `max_evidence_bytes`, its byte span and hashes to check it, what quoting it asks for, whether it was in force, the definitions it relies on, and why it ranks where it does. A query that cites a part, names a law or asks what a term means is routed to that first (`query.routes`). The same request over the same revisions gives the same answer. Nothing is generated: only published texts' words. Without `jurisdiction`, it covers your plan's jurisdictions. With `scope=applicable`, it also covers the regional and treaty law that binds in the one jurisdiction asked about, and says how each unit relates to it.",
         "tags": [
           "Retrieval"
         ]
@@ -4827,7 +4827,7 @@
             }
           },
           "403": {
-            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`). On Starter, the request is about a jurisdiction other than the plan's one (`jurisdiction_not_included`).",
             "headers": {
               "X-Request-ID": {
                 "$ref": "#/components/headers/RequestId"
@@ -5016,7 +5016,7 @@
             }
           },
           "403": {
-            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`). On Starter, the request is about a jurisdiction other than the plan's one (`jurisdiction_not_included`).",
             "headers": {
               "X-Request-ID": {
                 "$ref": "#/components/headers/RequestId"
@@ -5133,7 +5133,7 @@
             }
           },
           "403": {
-            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`). On Starter, the request is about a jurisdiction other than the plan's one (`jurisdiction_not_included`).",
             "headers": {
               "X-Request-ID": {
                 "$ref": "#/components/headers/RequestId"
@@ -5250,7 +5250,7 @@
             }
           },
           "403": {
-            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`). On Starter, the request is about a jurisdiction other than the plan's one (`jurisdiction_not_included`).",
             "headers": {
               "X-Request-ID": {
                 "$ref": "#/components/headers/RequestId"
@@ -5400,7 +5400,7 @@
             }
           },
           "403": {
-            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`). On Starter, the request is about a jurisdiction other than the plan's one (`jurisdiction_not_included`).",
             "headers": {
               "X-Request-ID": {
                 "$ref": "#/components/headers/RequestId"
@@ -5529,7 +5529,7 @@
             }
           },
           "403": {
-            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`). On Starter, the request is about a jurisdiction other than the plan's one (`jurisdiction_not_included`).",
             "headers": {
               "X-Request-ID": {
                 "$ref": "#/components/headers/RequestId"
@@ -5700,7 +5700,7 @@
             }
           },
           "403": {
-            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`). On Starter, the request is about a jurisdiction other than the plan's one (`jurisdiction_not_included`).",
             "headers": {
               "X-Request-ID": {
                 "$ref": "#/components/headers/RequestId"
@@ -5862,7 +5862,7 @@
             }
           },
           "403": {
-            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`). On Starter, the request is about a jurisdiction other than the plan's one (`jurisdiction_not_included`).",
             "headers": {
               "X-Request-ID": {
                 "$ref": "#/components/headers/RequestId"
@@ -5931,7 +5931,7 @@
             }
           }
         },
-        "description": "The versioned data releases still available: their scope, files and checksums. Download a file from `download_base` + `/` + its name. Catalogue releases download from `/downloads/…` with no key. Releases with full text are listed only when your organisation's access includes bulk releases, for the countries of its plan, and download from `/api/v1/bulk/…` with your key.",
+        "description": "The versioned data releases still available: their scope, files and checksums. Download a file from `download_base` + `/` + its name. Catalogue releases download from `/downloads/…` with no key. Releases with full text are listed only when your organisation's access includes bulk releases, for the jurisdictions of its plan, and download from `/api/v1/bulk/…` with your key.",
         "tags": [
           "Releases"
         ]
@@ -6025,7 +6025,7 @@
             }
           },
           "403": {
-            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`). Or the release's country is outside your plan (`jurisdiction_not_included`).",
+            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`). On Starter, the request is about a jurisdiction other than the plan's one (`jurisdiction_not_included`). Or the release's jurisdiction is outside your plan (`jurisdiction_not_included`).",
             "headers": {
               "X-Request-ID": {
                 "$ref": "#/components/headers/RequestId"
@@ -6136,7 +6136,7 @@
             }
           }
         },
-        "description": "One file of a release, exactly as its manifest's SHA-256 says, for organisations whose access includes bulk releases (granted by agreement, not a listed plan). Releases with full text download only here, and only for the countries of your plan. Each file is checked against the current catalogue just before it is sent: a release with a withdrawn or changed record is no longer served, so download a newer one. Downloads count as bulk use and draw on your organisation's data a day.",
+        "description": "One file of a release, exactly as its manifest's SHA-256 says, for organisations whose access includes bulk releases (granted by agreement, not a listed plan). Releases with full text download only here, and only for the jurisdictions of your plan. Each file is checked against the current catalogue just before it is sent: a release with a withdrawn or changed record is no longer served, so download a newer one. Downloads count as bulk use and draw on your organisation's data a day.",
         "tags": [
           "Releases"
         ]
@@ -8649,7 +8649,7 @@
               }
             ],
             "title": "All",
-            "description": "`true` when every country is read at the plan's limits."
+            "description": "`true` when every jurisdiction is read at the plan's limits."
           },
           "jurisdictions": {
             "anyOf": [
@@ -8664,7 +8664,7 @@
               }
             ],
             "title": "Jurisdictions",
-            "description": "Otherwise the countries that are, by jurisdiction ID."
+            "description": "Otherwise the countries that are, by jurisdiction ID. On Starter, the plan's default until an owner changes it in the console."
           }
         },
         "additionalProperties": false,
@@ -8712,7 +8712,7 @@
           },
           "scope": {
             "$ref": "#/components/schemas/EntitlementScope",
-            "description": "The countries read at the plan's limits. Every other country answers at the Starter rate."
+            "description": "The jurisdictions read at the plan's limits: countries, each with its states and local law. On a paid plan every other one answers at the Starter rate; on Starter no other is read."
           },
           "ends_at": {
             "anyOf": [

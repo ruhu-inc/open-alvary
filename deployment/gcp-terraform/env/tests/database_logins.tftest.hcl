@@ -227,3 +227,24 @@ run "all_moved" {
     error_message = "The webhook keys are read by the service and the jobs' account."
   }
 }
+
+run "the_daily_job_reads_the_stripe_key_on_its_own_account" {
+  command = plan
+  variables {
+    database_logins_ready  = true
+    database_logins_in_use = ["service", "catalogue", "worker", "daily", "terms", "retrieval", "indexer", "publish", "migrate"]
+    optional_secrets       = ["auth0-deletion-client-id", "auth0-deletion-client-secret", "stripe-secret-key", "stripe-webhook-secret"]
+  }
+  assert {
+    condition     = join(",", local.secret_readers["stripe-secret-key"]) == "public,jobs"
+    error_message = "The Stripe key is read by the service and the jobs' account (the daily reconciliation)."
+  }
+  assert {
+    condition     = join(",", local.secret_readers["stripe-webhook-secret"]) == "public"
+    error_message = "Only the service reads the webhook secret."
+  }
+  assert {
+    condition     = join(",", sort(keys(local.job_secret_env["daily"]))) == "ALVARY_AUTH0_DELETION_CLIENT_ID,ALVARY_AUTH0_DELETION_CLIENT_SECRET,DATABASE_URL,RESEND_API_KEY,STRIPE_SECRET_KEY"
+    error_message = "The daily job reads the Stripe key and the mail key, and never the webhook secret."
+  }
+}

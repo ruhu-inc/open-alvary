@@ -11,7 +11,13 @@ from test_postgres import migrate
 from test_postgres import pg_engine as pg_engine
 
 from accounts import keys, policies
-from accounts.store import PERSONAL_KEYS_PER_MEMBER, SERVICE_KEYS_PER_ORGANISATION, AccountError, Accounts
+from accounts.store import (
+    PERSONAL_KEYS_PER_MEMBER,
+    SERVICE_KEYS_PER_ORGANISATION,
+    TIERS,
+    AccountError,
+    Accounts,
+)
 from rights.database import PolicyNamespace
 
 pytestmark = pytest.mark.postgres
@@ -48,6 +54,18 @@ def person(accounts, name="amina", subject=None):
     accounts.accept_policies(signed["id"], dict(policies.CURRENT))
     organisation = accounts.welcome(signed["id"], name.title(), name.title())
     return signed["id"], organisation
+
+
+def country_numbers(accounts, **numbers):
+    """The listed plans with another number of countries (``team=3``), or none (``team=None``: every
+    country), to test the country rules apart from what accounts/tiers.json says today."""
+    tiers = json.loads(TIERS.read_text())
+    for tier in tiers:
+        if tier["id"] in numbers:
+            tier["allowance"].pop("jurisdictions", None)
+            if numbers[tier["id"]] is not None:
+                tier["allowance"]["jurisdictions"] = numbers[tier["id"]]
+    accounts.set_tiers(tiers)
 
 
 def check(accounts, request):
@@ -718,6 +736,90 @@ def test_a_plan_with_countries_takes_the_requests_countries_and_changes_them_onc
     assert accounts.access(organisation)["scope"] == {"jurisdictions": ["ug"]}
     states = [h["state"] for h in accounts.access_details(owner, organisation)["history"]]
     assert states[:3] == ["active", "ended", "ended"]
+
+
+def test_starter_covers_one_country_an_owner_chooses_and_changes_once_a_month(accounts):
+    starter = STARTER | {"allowance": STARTER["allowance"] | {"jurisdictions": 1}}
+    developer = TIER | {
+        "id": "developer",
+        "name": "Developer",
+        "allowance": TIER["allowance"] | {"jurisdictions": 2},
+    }
+    accounts.set_tiers([TIER, starter, developer])
+    owner, organisation = person(accounts)
+    key = accounts.create_key(owner, organisation, kind="personal", name="first")
+    # None chosen yet: the console's view and the runtime's check agree that it covers no country.
+    assert accounts.access(organisation)["scope"] == {"jurisdictions": []}
+    assert check_key(accounts, key["secret"])["scope"] == {"jurisdictions": []}
+    for wrong in ([], ["ng", "rw"], ["nga"], None):
+        with pytest.raises(AccountError) as refused_choice:
+            accounts.change_countries(owner, organisation, wrong)
+        assert (
+            refused_choice.value.code == "invalid_input" and "1 jurisdiction" in refused_choice.value.message
+        )
+    # The first choice is free, and so is one change after it; the next waits 30 days.
+    accounts.change_countries(owner, organisation, ["ng"])
+    assert accounts.access(organisation)["scope"] == {"jurisdictions": ["ng"]}
+    assert check_key(accounts, key["secret"])["scope"] == {"jurisdictions": ["ng"]}
+    assert accounts.access_details(owner, organisation)["country_change_after"] is None
+    with pytest.raises(AccountError) as same:
+        accounts.change_countries(owner, organisation, ["ng"])
+    assert same.value.code == "invalid_input"
+    accounts.change_countries(owner, organisation, ["rw"])
+    assert check_key(accounts, key["secret"])["scope"] == {"jurisdictions": ["rw"]}
+    with pytest.raises(AccountError) as soon:
+        accounts.change_countries(owner, organisation, ["ke"])
+    assert soon.value.code == "change_too_soon"
+    assert accounts.access_details(owner, organisation)["country_change_after"] is not None
+    actions = sql(
+        accounts,
+        "SELECT action, summary FROM {audit_event} WHERE action LIKE 'access.countr%' ORDER BY at, id",
+    ).all()
+    assert [tuple(row) for row in actions] == [
+        ("access.country_chosen", {"from": None, "to": ["ng"]}),
+        ("access.countries_changed", {"from": ["ng"], "to": ["rw"]}),
+    ]
+    # A plan with other countries: when it ends, Starter continues in the first of them.
+    paid = {"tier": "developer", "source": "manual", "ends_at": None, "reason": "Paid"}
+    accounts.grant_access("op-test", organisation, scope={"jurisdictions": ["ug", "ke"]}, **paid)
+    assert accounts.access(organisation)["scope"] == {"jurisdictions": ["ke", "ug"]}
+    accounts.end_access(owner, organisation)
+    assert accounts.access(organisation)["scope"] == {"jurisdictions": ["ke"]}
+    assert check_key(accounts, key["secret"])["scope"] == {"jurisdictions": ["ke"]}
+    # A plan that keeps Starter's country leaves it Starter's.
+    accounts.grant_access("op-test", organisation, scope={"jurisdictions": ["bw", "ke"]}, **paid)
+    accounts.end_access(owner, organisation)
+    assert accounts.access(organisation)["scope"] == {"jurisdictions": ["ke"]}
+    # With a default jurisdiction, Starter reads it from the start; an owner's first change is free.
+    default = STARTER | {
+        "allowance": STARTER["allowance"] | {"jurisdictions": 1, "default_jurisdiction": "ng"}
+    }
+    accounts.set_tiers([TIER, default, developer])
+    other, fresh = person(accounts, "bola")
+    fresh_key = accounts.create_key(other, fresh, kind="personal", name="first")
+    access = accounts.access(fresh)
+    assert access["scope"] == {"jurisdictions": ["ng"]} and access["chosen"] is False
+    assert check_key(accounts, fresh_key["secret"])["scope"] == {"jurisdictions": ["ng"]}
+    with pytest.raises(AccountError) as already:
+        accounts.change_countries(other, fresh, ["ng"])
+    assert already.value.code == "invalid_input"
+    accounts.change_countries(other, fresh, ["rw"])
+    access = accounts.access(fresh)
+    assert access["scope"] == {"jurisdictions": ["rw"]} and access["chosen"] is True
+    assert check_key(accounts, fresh_key["secret"])["scope"] == {"jurisdictions": ["rw"]}
+    with pytest.raises(AccountError) as waits:
+        accounts.change_countries(other, fresh, ["ke"])
+    assert waits.value.code == "change_too_soon"
+    assert accounts.access(organisation)["scope"] == {
+        "jurisdictions": ["ke"]
+    }  # a choice outlasts the default
+    # Starter without a number of countries covers them all, and has none to choose.
+    accounts.set_tiers([TIER, STARTER, developer])
+    assert accounts.access(organisation)["scope"] == {"all": True}
+    assert check_key(accounts, key["secret"])["scope"] == {"all": True}
+    with pytest.raises(AccountError) as every:
+        accounts.change_countries(owner, organisation, ["ng"])
+    assert every.value.code == "invalid_input" and "every jurisdiction" in every.value.message
 
 
 def test_an_organisation_can_set_its_website(accounts):

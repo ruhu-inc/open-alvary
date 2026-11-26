@@ -20,11 +20,11 @@ Create keys in the console under **API keys** ([pictures](/docs/console#keys)). 
 | | Personal | Shared, for servers |
 |---|---|---|
 | For | Your own scripts and experiments | Production servers and scheduled jobs |
-| Who can create one | Owners, admins and developers | Owners and admins |
+| Who can create one | Owners, admins and members | Owners and admins |
 | When the person leaves | Stops working | Keeps working; it belongs to the organisation |
 | How many | 10 per person per organisation | 20 per organisation |
 
-Every key expires: after 90 days unless you choose otherwise, and after at most 365. The console shows when each key was last used. Your code can read its own key's expiry from [Get the calling key](/docs/api/get-key) (`GET /api/v1/key`): `expires_at`, whether a rotation has `replaced` it, and your organisation's plan and countries, never the secret. A server can check it once a day and warn well before `expires_at`.
+Every key expires: after 90 days unless you choose otherwise, and after at most 365. The console shows when each key was last used. Your code can read its own key's expiry from [Get the calling key](/docs/api/get-key) (`GET /api/v1/key`): `expires_at`, whether a rotation has `replaced` it, and your organisation's plan and jurisdictions, never the secret. A server can check it once a day and warn well before `expires_at`.
 
 - **Rotate** a key to replace it. The new key has the old one's name, type and lifetime: a key made for 90 days is replaced by one that lasts 90 days from now. The old key keeps working for an overlap of at most 24 hours, or until its own expiry if that comes sooner, so you can switch over; the console marks it **Replaced**. Rotation is never refused because you have as many keys as allowed: the new key takes the old one's place, and a replaced key isn't counted. A replaced key can't be rotated again: that answers `409` with the code `already_rotated`, so rotate or revoke its replacement. Rotating the replacement during the overlap stops the old key at once.
 - **Revoke** a key to stop it at once.
@@ -47,7 +47,7 @@ Even so, send only what a search needs, and leave out names or other details tha
 
 AI tools such as Claude, Claude Code, Codex and ChatGPT don't use keys. When you add Open Alvary to one, it sends you to sign in and approve it for one of your organisations; it then holds an access token for that organisation only. See [Connect AI tools](/docs/ai-tools).
 
-Owners, admins and developers can connect apps. **Connected apps** in the console lists them; disconnecting one stops it at its next request. An app can only read the corpus (the scope `corpus:read`). It can't see your keys, change anything or act for another organisation.
+Owners, admins and members can connect apps. **Connected apps** in the console lists them; disconnecting one stops it at its next request. An app can only read the corpus (the scope `corpus:read`). It can't see your keys, change anything or act for another organisation.
 
 ### For tool builders
 
@@ -67,7 +67,7 @@ Each person has a role in each organisation they belong to.
 |---|---|
 | Owner | Everything an admin can, plus request plans, end access, transfer ownership and delete the organisation |
 | Admin | Invite and remove members, create shared keys, revoke any key or app, read the audit log |
-| Developer | Create personal keys and connect apps |
+| Member | Create personal keys and connect apps |
 | Viewer | See the organisation's access and usage |
 
 Invite people under **Members** ([pictures](/docs/console#members)).

@@ -155,8 +155,8 @@ def test_bulk_access_withdrawn_during_a_download_stops_it(store, releases):
 def test_plans_granted_by_agreement_are_never_listed():
     tiers = {t["id"]: t for t in json.loads(TIERS.read_text())}
     listed = {t["id"] for t in listed_plans()}
-    assert listed == {"starter", "developer", "team", "enterprise", "public-interest"}
-    for name in ("pilot", "partner", "sovereign"):
+    assert listed == {"starter", "developer", "team", "enterprise"}
+    for name in ("public-interest", "pilot", "partner", "sovereign"):
         assert tiers[name]["published"] is False and "action" not in tiers[name]["listing"], name
     # The documentation's plans table is built from the listed plans only.
     assert {t["id"] for t in json.loads((DATA / "plans.json").read_text())} == listed

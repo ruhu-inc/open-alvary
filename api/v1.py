@@ -41,7 +41,7 @@ from api.catalogue import MAX_CITATION, MAX_OFFSET, InvalidSearch, LegacyCatalog
 from api.credentials import NOT_INCLUDED, problem
 from api.emission import MAX_SINGLE_RESPONSE_BYTES, CheckedFileResponse, CheckedResponse, CheckedText
 from api.openapi_docs import describe
-from api.reach import EVERYWHERE, OutsidePlanLimited, Reach
+from api.reach import EVERYWHERE, OutsidePlan, OutsidePlanLimited, Reach
 from api.release_adapter import LegacyReleases, ReleaseMissing, ReleaseWithdrawn, holds_text
 from api.repositories import LegacyRepository, PublicUnavailable, ResultTooLarge
 from api.store import Store, check_legacy_authority
@@ -138,6 +138,13 @@ def create_v1_app(
             "rate_limited", request_id(request), retry_after=exception.retry_after, detail=str(exception)
         )
 
+    @app.exception_handler(OutsidePlan)
+    async def not_in_plan(request, exception):
+        request.state.refusal = (
+            "jurisdiction_not_included"  # counted as a refusal in the organisation's usage
+        )
+        return problem("jurisdiction_not_included", request_id(request), detail=str(exception))
+
     # Every refusal is a problem document with a code from the errors page. An address that is no route
     # answers not_found_route, so a consumer can tell a missing route from a missing record (unavailable).
     @app.exception_handler(StarletteHTTPException)
@@ -211,8 +218,8 @@ def create_v1_app(
         return getattr(request.state, "access", {}).get("reach", EVERYWHERE)
 
     def within(request: Request, service: LegacyCatalogue, jurisdiction: str | None):
-        """The jurisdiction filter for a list or search: one named jurisdiction (outside the plan, at
-        the Starter rate), or else the plan's."""
+        """The jurisdiction filter for a list or search: one named jurisdiction (outside a paid plan, at
+        the Starter rate; outside Starter's country, refused), or else the plan's."""
         plan = reach(request)
         if jurisdiction is not None:
             plan.admit(jurisdiction)

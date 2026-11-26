@@ -103,6 +103,8 @@ locals {
     "auth0-deletion-client-secret" = (
       contains(var.optional_secrets, "auth0-deletion-client-secret") ? ["jobs"] : []
     )
+    # The daily job's reconciliation (accounts.billing reconcile) asks Stripe; it never reads the webhook secret.
+    "stripe-secret-key" = contains(var.optional_secrets, "stripe-secret-key") ? ["jobs"] : []
   } : {}
 
   secret_readers = merge(

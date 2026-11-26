@@ -66,7 +66,7 @@ def test_the_search_path_bundle_covers_what_a_login_can_run_and_changes_only_the
         for login in logins.LOGINS.values()
         for function in login.functions
         if function.startswith("policy.")
-    } - {"accounts_access(text)"}  # runs as whoever calls it
+    } - {"accounts_access(text)", "organisation_seat_limit(text)"}  # run as whoever calls them
     assert pinned == runs_as_owner
     for entry in manifest["functions"]:
         assert entry["prior_body_hash"] == entry["current_body_hash"], entry["signature"]

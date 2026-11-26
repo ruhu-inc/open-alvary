@@ -186,6 +186,9 @@ SERVICE = Login(
             "actor": FULL,
             "api_key": f"SELECT ({KEY_COLUMNS}), INSERT, UPDATE (expires_at, revoked_at, revoked_reason, rotated_from)",
             "audit_event": "SELECT, INSERT",
+            # Stripe billing (migration 0059): the console's checkout and the webhooks that grant paid access.
+            "billing_customer": WRITE,
+            "billing_subscription": WRITE,
             "client_grant": "SELECT, INSERT, UPDATE (revoked_at, revoked_reason)",
             "consent_handoff": "SELECT, INSERT, DELETE",
             # A session is looked up by its token's hash, the only copy held of it.
@@ -203,6 +206,7 @@ SERVICE = Login(
             "person": WRITE,
             "policy_acceptance": "SELECT, INSERT",
             "sign_in_flow": "SELECT, INSERT, DELETE",
+            "stripe_webhook_event": WRITE,
             "tier": READ,
             "unsubscribe_token": "SELECT, INSERT, DELETE",
             "usage_day": READ,
@@ -219,6 +223,7 @@ SERVICE = Login(
     (
         "policy.accounts_access(text)",
         "policy.check_credential(jsonb)",
+        "policy.organisation_seat_limit(text)",  # seat counts (migration 0059); runs as its caller
         "policy.record_usage(jsonb)",
         *ANONYMOUS_WRITES,
         *PUBLIC_TOTALS,
@@ -239,10 +244,16 @@ JOBS = Login(
             "api_key": "SELECT (revoked_at), DELETE",
             "audit_event": "SELECT, INSERT, DELETE",
             "audit_seal": "SELECT, INSERT",
+            # The daily Stripe reconciliation (accounts.billing reconcile): it records a subscription found only
+            # in Stripe and keeps each in step; the customers' rows only change, never appear.
+            "billing_customer": "SELECT, UPDATE",
+            "billing_subscription": WRITE,
             "client_grant": "SELECT (revoked_at), DELETE",
             "console_session": "SELECT (expires_at, revoked_at), DELETE",
             "digest": "SELECT, INSERT, DELETE",
-            "entitlement": READ,
+            # Ending paid access Stripe reports cancelled, with its history entry (reconciliation).
+            "entitlement": "SELECT, UPDATE",
+            "entitlement_event": "INSERT",
             # Closing an account deletes it at the provider first: this is the link to do that.
             "identity": "SELECT (id, person_id, issuer, subject)",
             "inbox_item": "SELECT, INSERT, DELETE",
@@ -250,9 +261,11 @@ JOBS = Login(
             "matcher_checkpoint": FULL,
             "membership": READ,
             "notification_pref": READ,
-            "organisation": READ,
+            # The seat grace, set or cleared when a timed grant lapses or Stripe ends access.
+            "organisation": "SELECT, UPDATE (seat_grace_until)",
             "person": "SELECT, DELETE",
             "sign_in_flow": "SELECT (expires_at), DELETE",
+            "stripe_webhook_event": "SELECT, DELETE",  # the 90-day purge (accounts.privacy purge)
             "tier": READ,
             "traffic_day": FULL,
             "traffic_record_day": READ,
@@ -272,6 +285,7 @@ JOBS = Login(
     (
         "policy.accounts_access(text)",
         "policy.allocate_publication_revision()",
+        "policy.organisation_seat_limit(text)",  # the seat grace (migration 0059); runs as its caller
         "accounts.traffic_months(date, integer, integer)",
         "changes.purge_change_log(integer)",  # the change log's purge, its only delete (migration 0055)
     ),

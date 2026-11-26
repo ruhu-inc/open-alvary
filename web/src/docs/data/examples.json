@@ -1282,6 +1282,7 @@
             "mcp"
           ],
           "allowance": {
+            "members": 1,
             "requests_per_minute": 60,
             "burst": 30,
             "concurrency": 4,
@@ -1302,18 +1303,19 @@
         },
         {
           "id": "developer",
-          "name": "Developer",
+          "name": "Pro",
           "description": "For individual developers and small products in production.",
           "includes": [
             "rest",
             "mcp"
           ],
           "allowance": {
+            "members": 1,
             "requests_per_minute": 300,
             "burst": 150,
             "concurrency": 10,
             "bytes_per_day": 2000000000,
-            "jurisdictions": 2,
+            "jurisdictions": 1,
             "watches": 20,
             "digest": "daily",
             "shared_watches": false,

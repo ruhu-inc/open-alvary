@@ -182,6 +182,73 @@ def test_outside_the_plans_countries_reads_at_the_starter_rate(api, pg_engine, m
     assert day["refusals"]["rate_limited"] >= 2
 
 
+def test_starter_reads_its_one_country_and_is_refused_any_other(api):
+    client, accounts, person, organisation = api
+    starter = {
+        **TIER,
+        "id": "starter",
+        "name": "Starter",
+        "allowance": TIER["allowance"] | {"jurisdictions": 1},
+    }
+    accounts.set_tiers([TIER, starter])
+    headers = key(accounts, person, organisation)
+    # Before an owner chooses: no country is read, by ID, by name or in a search of everything.
+    asked = (
+        ("/api/v1/sources/ng-foi-act-2011", None),
+        ("/api/v1/search", {"q": "act", "jurisdiction": "ng"}),
+        ("/api/v1/sources", None),
+    )
+    for path, params in asked:
+        refused = client.get(path, params=params, headers=headers)
+        assert refused.status_code == 403 and refused.json()["code"] == "jurisdiction_not_included"
+        assert "none is chosen yet" in refused.json()["detail"]
+    # What is no country's law still answers, and the key says what it covers.
+    assert "ng" in {j["id"] for j in client.get("/api/v1/jurisdictions", headers=headers).json()}
+    assert client.get("/api/v1/key", headers=headers).json()["entitlement"]["scope"] == {"jurisdictions": []}
+    [day] = accounts.usage(person, organisation)
+    assert day["refusals"] == {"jurisdiction_not_included": 3} and day["requests"] == 2
+    accounts.change_countries(person, organisation, ["ng"])
+    assert client.get("/api/v1/sources/ng-foi-act-2011", headers=headers).status_code == 200
+    assert client.get("/api/v1/sources", headers=headers).json()["total"] == 5
+    other = client.get("/api/v1/search", params={"q": "act", "jurisdiction": "rw"}, headers=headers)
+    assert other.status_code == 403 and other.json()["code"] == "jurisdiction_not_included"
+    assert "about another" in other.json()["detail"] and other.json()["retryable"] is False
+
+    def call(name, arguments):
+        return client.post(
+            "/mcp", json=rpc("tools/call", {"name": name, "arguments": arguments}), headers=headers
+        ).json()["result"]
+
+    assert not call("get_source", {"source_id": "ng-foi-act-2011"})["isError"]
+    outside = call("search_catalogue", {"query": "information", "jurisdiction": "RW"})
+    assert outside["isError"] and outside["structuredContent"] == {"code": "jurisdiction_not_included"}
+    assert "about another" in outside["content"][0]["text"]
+    # Another country chosen: the first is refused in turn.
+    accounts.change_countries(person, organisation, ["rw"])
+    assert client.get("/api/v1/sources/ng-foi-act-2011", headers=headers).status_code == 403
+    assert call("get_source", {"source_id": "ng-foi-act-2011"})["isError"]
+
+
+def test_starter_reads_its_default_jurisdiction_until_an_owner_changes_it(api):
+    client, accounts, person, organisation = api
+    allowance = TIER["allowance"] | {"jurisdictions": 1, "default_jurisdiction": "ng"}
+    accounts.set_tiers([TIER, {**TIER, "id": "starter", "name": "Starter", "allowance": allowance}])
+    headers = key(accounts, person, organisation)  # nothing chosen: the key works at once
+    assert client.get("/api/v1/key", headers=headers).json()["entitlement"]["scope"] == {
+        "jurisdictions": ["ng"]
+    }
+    assert client.get("/api/v1/sources/ng-foi-act-2011", headers=headers).status_code == 200
+    assert client.get("/api/v1/sources", headers=headers).json()["total"] == 5
+    other = client.get("/api/v1/search", params={"q": "act", "jurisdiction": "rw"}, headers=headers)
+    assert other.status_code == 403 and "about another" in other.json()["detail"]
+    accounts.change_countries(person, organisation, ["rw"])
+    assert client.get("/api/v1/sources/ng-foi-act-2011", headers=headers).status_code == 403
+    assert (
+        client.get("/api/v1/search", params={"q": "act", "jurisdiction": "rw"}, headers=headers).status_code
+        == 200
+    )
+
+
 def test_the_organisation_allowance_answers_429_with_retry_after(api):
     client, accounts, person, organisation = api
     grant(accounts, organisation, tier="tiny")
@@ -306,8 +373,9 @@ def test_plans_by_agreement_are_never_listed_and_bulk_downloads_need_one_that_in
     write_release(store.load(), tmp_path, "2026-10-05", "ng")
     client = TestClient(create_service(store=store, releases=tmp_path))
     listed = [t["id"] for t in client.get("/api/v1/tiers").json()["tiers"]]
-    assert listed[:5] == ["starter", "developer", "team", "enterprise", "public-interest"]
-    assert not {"pilot", "partner", "sovereign"} & set(listed)  # (and the fixture's own "tiny")
+    assert listed[:4] == ["starter", "developer", "team", "enterprise"]
+    # Public interest is left out for now (owner, 2026-11-25); and the fixture's own "tiny".
+    assert not {"public-interest", "pilot", "partner", "sovereign"} & set(listed)
     url = "/api/v1/bulk/2026-10-05/ng/corpus/manifest.json"
     grant(accounts, organisation, tier="pilot")
     pilot = key(accounts, person, organisation)

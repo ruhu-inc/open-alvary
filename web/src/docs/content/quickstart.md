@@ -9,7 +9,7 @@ You will create an API key, search the catalogue and read one record. You need a
 
 ## 1. Get an API key
 
-1. Sign in at [open.alvary.ai/console](/console) with Google or an email code. The first time, give your name. Your organisation's name is optional: left blank, your own name is used, and you can rename it later. Your organisation starts on the free Starter plan.
+1. Sign in at [open.alvary.ai/console](/console) with Google or an email code. The first time, give your name. Your organisation's name is optional: left blank, your own name is used, and you can rename it later. Your organisation starts on the free Starter plan. Starter reads the law of one jurisdiction: Nigeria (`ng`) to begin with, which the examples below use. An owner can change it under **Plan and limits**.
 2. Open **API keys** and choose **Create key**.
 
 ![The Create an API key form: name, type, expiry and Create key](/guide/key-create.webp)
@@ -146,6 +146,7 @@ When a record has a cleared text (`has_full_text` is true), [Get a record's text
 | `401` [`credential_required`](/docs/errors#credential_required) | No key was sent. | Send `Authorization: Bearer <key>`. Check the variable is set in this terminal. |
 | `401` [`invalid_credentials`](/docs/errors#invalid_credentials) | The key is unknown, revoked or expired. | Copy it again, or create a new one. |
 | `403` [`entitlement_required`](/docs/errors#entitlement_required) | The organisation has no access. | Sign in to the console once; Starter starts at once. |
+| `403` [`jurisdiction_not_included`](/docs/errors#jurisdiction_not_included) | On Starter: the request is about a jurisdiction other than your plan's. | An owner changes the jurisdiction under **Plan and limits** in the console, or upgrades. |
 | `429` [`rate_limited`](/docs/errors#rate_limited) | A limit is used up for now. | Wait for `Retry-After` seconds. See [Plans and rate limits](/docs/plans). |
 | `"total": 0` | Nothing matched. | Try fewer words, or leave out `jurisdiction`. |
 

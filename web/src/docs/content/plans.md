@@ -7,7 +7,7 @@ Every plan reads the same published corpus. Plans differ in their limits, which 
 
 {{plans}}
 
-Prices for paid plans are coming. Until then, request a plan in the console under **Plan and limits**, and we confirm it by email ([pictures](/docs/console#plan)). Research, government and legal aid can apply for the Public interest plan. For anything else, write to [hello@ruhu.ai](mailto:hello@ruhu.ai).
+Prices for paid plans are coming. Until then, request a plan in the console under **Plan and limits**, and we confirm it by email ([pictures](/docs/console#plan)). For anything else, write to [hello@ruhu.ai](mailto:hello@ruhu.ai).
 
 The current plans are also published, without a key, at [`/api/v1/tiers`](/docs/api/list-plans).
 
@@ -16,8 +16,9 @@ The current plans are also published, without a key, at [`/api/v1/tiers`](/docs/
 - **Requests a minute** is a steady rate, and **burst** is how many requests you can make at once after a pause. The organisation's allowance refills continuously (a token bucket).
 - **At once** is how many requests can be in progress together. One key or app can use at most half of them, so one busy script can't block the others.
 - **Data a day** is how many bytes of answers your organisation can receive. It holds one day's worth and refills evenly over 24 hours, so it never resets all at once at midnight. Each answer's body counts as sent, before compression. An answer that would go over it is refused, and `Retry-After` says when enough has refilled for it.
-- **Countries.** On a plan that names countries, requests about those countries, with their states and local law, run at the plan's limits. The law of the African Union and the regional bodies (IDs starting `aa-`, such as `aa-ecowas`) is within every plan. Every other country still answers, at the Starter rate (60 a minute, burst 30). A search or list without `jurisdiction` covers your plan's countries.
-- The change feed isn't narrowed by your plan's countries.
+- **Jurisdictions.** A plan's jurisdictions are countries whose law you read, not where you are based. Requests about those countries, with their states and local law, run at the plan's limits. The law of the African Union and the regional bodies (IDs starting `aa-`, such as `aa-ecowas`) is within every plan. On Pro and Team, every other jurisdiction still answers, at the Starter rate (60 a minute, burst 30). A search or list without `jurisdiction` covers your plan's jurisdictions.
+- **Starter's jurisdiction.** Starter reads one jurisdiction: Nigeria to begin with, which an owner can change in the console under **Plan and limits**, once a month. A request about another is refused with `403 jurisdiction_not_included`. The website shows every jurisdiction to everyone.
+- The change feed isn't narrowed by your plan's jurisdictions.
 
 You can see today's requests and data, by key and app, under **Usage** in the console.
 
@@ -30,7 +31,7 @@ RateLimit-Policy: "organisation";q=100;w=10
 RateLimit: "organisation";r=87;t=2
 ```
 
-`RateLimit-Policy` gives your plan's burst (`q`, in requests) and how many seconds it takes to refill from empty (`w`). `RateLimit` gives the requests left now (`r`) and the seconds until the burst is full again (`t`). When `r` gets low, slow down rather than wait for a `429`. The headers count requests only: requests at once, data a day and the Starter rate outside your plan's countries aren't in them. They follow the IETF draft [RateLimit header fields for HTTP](https://datatracker.ietf.org/doc/draft-ietf-httpapi-ratelimit-headers/).
+`RateLimit-Policy` gives your plan's burst (`q`, in requests) and how many seconds it takes to refill from empty (`w`). `RateLimit` gives the requests left now (`r`) and the seconds until the burst is full again (`t`). When `r` gets low, slow down rather than wait for a `429`. The headers count requests only: requests at once, data a day and the Starter rate outside your plan's jurisdictions aren't in them. They follow the IETF draft [RateLimit header fields for HTTP](https://datatracker.ietf.org/doc/draft-ietf-httpapi-ratelimit-headers/).
 
 ## When you reach a limit
 

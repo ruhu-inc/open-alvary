@@ -2,7 +2,7 @@
 
 import pytest
 
-from api.reach import EVERYWHERE, OutsidePlanLimited, Reach, country
+from api.reach import EVERYWHERE, OutsidePlan, OutsidePlanLimited, Reach, country, starter_only
 
 
 def test_a_country_includes_what_is_under_it_and_regional_law_belongs_to_none():
@@ -32,3 +32,23 @@ def test_only_requests_outside_the_plan_draw_on_the_starter_allowance():
     with pytest.raises(OutsidePlanLimited) as limited:
         Reach.of({"jurisdictions": ["rw"]}, used_up).admit("ke")
     assert limited.value.retry_after == 7 and "Starter rate" in str(limited.value)
+
+
+def test_starter_reads_its_one_country_and_is_refused_any_other():
+    scope = {"jurisdictions": ["ng"]}
+    plan = Reach.of(scope, starter_only(scope))
+    plan.admit("ng", "ng-la", "aa-ecowas")  # its country, what is under it, and regional law
+    assert plan.within(["ng", "rw", "aa-au"]) == frozenset({"ng", "aa-au"})
+    with pytest.raises(OutsidePlan) as refused:
+        plan.admit("ng", "rw")
+    assert "about another" in str(refused.value)
+
+
+def test_starter_before_its_country_is_chosen_reads_regional_law_only_and_says_what_to_do():
+    scope = {"jurisdictions": []}
+    plan = Reach.of(scope, starter_only(scope))
+    plan.admit("aa-eac")
+    for ask in (lambda: plan.admit("ng"), lambda: plan.within(["ng", "aa-eac"])):
+        with pytest.raises(OutsidePlan) as refused:
+            ask()
+        assert "none is chosen yet" in str(refused.value)

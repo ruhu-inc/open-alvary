@@ -14,7 +14,9 @@ GATE = {
     "401": "No key or token, or one that is unknown, revoked, expired or for another resource "
     "(`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
     "403": "The organisation has no access, or its access does not include this (`entitlement_required`, "
-    "`entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+    "`entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`). On Starter, "
+    "the request is about a jurisdiction other than the plan's one "
+    "(`jurisdiction_not_included`).",
     "429": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
     "503": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, "
     "`capacity_exhausted`). Try again shortly, or after Retry-After when it is sent.",
@@ -85,11 +87,11 @@ OPERATIONS: dict[str, dict] = {
         "description": "Records with every one of the words in their title, citation or summary, or in one "
         "part of their cleared full text, a page at a time in record ID order. Whole words only, in any "
         "order: `invest` doesn't find the Investments and Securities Act. Without `jurisdiction`, a search "
-        "covers your plan's countries.",
+        "covers your plan's jurisdictions.",
         "parameters": {
             "q": "Words to find, 1 to 200 characters. Case, punctuation and spacing don't matter.",
-            "jurisdiction": "One jurisdiction ID, such as `ng` or `rw`. A country outside your plan "
-            "answers at the Starter rate.",
+            "jurisdiction": "One jurisdiction ID, such as `ng` or `rw`. A jurisdiction outside a paid plan "
+            "answers at the Starter rate; Starter reads its one jurisdiction only.",
             "access": "`all` (default), `open` (records with cleared full text) or `metadata` (records "
             "without).",
             "limit": "Records per page, 1 to 100. Default 25.",
@@ -102,7 +104,7 @@ OPERATIONS: dict[str, dict] = {
         "tag": "Catalogue",
         "summary": "List records",
         "description": "Catalogued records a page at a time, with the same filters as search. Without "
-        "`jurisdiction`, the list covers your plan's countries.",
+        "`jurisdiction`, the list covers your plan's jurisdictions.",
         "parameters": {
             "jurisdiction": "One jurisdiction ID, such as `ng` or `rw`.",
             "access": "`all` (default), `open` (records with cleared full text) or `metadata` (records "
@@ -254,11 +256,11 @@ OPERATIONS: dict[str, dict] = {
         "have one, and `status` tells no result (`no_result`) apart from a scope with no published text "
         "(`unsupported_scope`) and a search that could not run (`degraded`). A query that reads as a "
         "citation of a part, such as `NDPA s. 23(1)(a)`, puts that part first. Without `jurisdiction`, "
-        "a search covers your plan's countries.",
+        "a search covers your plan's jurisdictions.",
         "parameters": {
             "q": 'Words to find, 1 to 2,000 characters: `"exact phrase"`, `-without`, `this OR that`.',
-            "jurisdiction": "One jurisdiction ID, such as `ng` or `rw`. A country outside your plan "
-            "answers at the Starter rate.",
+            "jurisdiction": "One jurisdiction ID, such as `ng` or `rw`. A jurisdiction outside a paid plan "
+            "answers at the Starter rate; Starter reads its one jurisdiction only.",
             "language": "Texts in this language, such as `en`; `en` also matches `en-NG`.",
             "type": "Document types, such as `act` or `regulation`. Repeat for several.",
             "status": "Legal statuses: `current`, `historical`, `repealed`, `superseded` or `unknown`. "
@@ -293,7 +295,7 @@ OPERATIONS: dict[str, dict] = {
         "on, and why it ranks where it does. A query that cites a part, names a law or asks what a term "
         "means is routed to that first (`query.routes`). The same request over the same revisions gives "
         "the same answer. Nothing is generated: only published texts' words. Without `jurisdiction`, it "
-        "covers your plan's countries. With `scope=applicable`, it also covers the regional and treaty law "
+        "covers your plan's jurisdictions. With `scope=applicable`, it also covers the regional and treaty law "
         "that binds in the one jurisdiction asked about, and says how each unit relates to it.",
         "parameters": {
             "q": "The question or words, 1 to 2,000 characters. It may be a citation (`NDPA s. 24(1)(a)`, "
@@ -301,7 +303,8 @@ OPERATIONS: dict[str, dict] = {
             "(`page 18 of the NDPA`), or an address: an Open Alvary page or API address of a record or part, "
             "or a text's official address. A pinpoint alone (`s. 24`) is read within `source_id`.",
             "jurisdiction": "Jurisdiction IDs, such as `ng`. Repeat for several, up to 10; with two or more, "
-            "results alternate between them. A country outside your plan answers at the Starter rate.",
+            "results alternate between them. A jurisdiction outside a paid plan answers at the Starter rate; "
+            "Starter reads its one jurisdiction only.",
             "language": "Texts in this language, such as `en`; `en` also matches `en-NG`.",
             "type": "Document types, such as `act` or `regulation`. Repeat for several.",
             "status": "Legal statuses: `current`, `historical`, `repealed`, `superseded` or `unknown`. "
@@ -438,7 +441,7 @@ OPERATIONS: dict[str, dict] = {
         "description": "The versioned data releases still available: their scope, files and checksums. "
         "Download a file from `download_base` + `/` + its name. Catalogue releases download from "
         "`/downloads/…` with no key. Releases with full text are listed only when your organisation's "
-        "access includes bulk releases, for the countries of its plan, and download from `/api/v1/bulk/…` "
+        "access includes bulk releases, for the jurisdictions of its plan, and download from `/api/v1/bulk/…` "
         "with your key.",
         "errors": {},
         "answer": {"type": "array", "items": {"$ref": "#/components/schemas/Release"}},
@@ -449,7 +452,7 @@ OPERATIONS: dict[str, dict] = {
         "summary": "Download a bulk release file",
         "description": "One file of a release, exactly as its manifest's SHA-256 says, for organisations "
         "whose access includes bulk releases (granted by agreement, not a listed plan). Releases with "
-        "full text download only here, and only for the countries of your plan. Each file is checked "
+        "full text download only here, and only for the jurisdictions of your plan. Each file is checked "
         "against the current catalogue just before it is sent: a release with a withdrawn or changed "
         "record is no longer served, so download a newer one. Downloads count as bulk use and draw on "
         "your organisation's data a day.",
@@ -460,7 +463,7 @@ OPERATIONS: dict[str, dict] = {
             "filename": "A file the manifest lists, such as `versions.jsonl`, or `manifest.json`.",
         },
         "errors": {
-            "403": "Or the release's country is outside your plan (`jurisdiction_not_included`).",
+            "403": "Or the release's jurisdiction is outside your plan (`jurisdiction_not_included`).",
             "404": "There is no such release or file (`unavailable`).",
             "410": "The release was withdrawn: a record in it changed or stopped being public (`withdrawn`).",
         },
@@ -1910,7 +1913,8 @@ FIELDS: dict[str, dict[str, str]] = {
     },
     "EntitlementView": {
         "tier": "The plan.",
-        "scope": "The countries read at the plan's limits. Every other country answers at the Starter rate.",
+        "scope": "The jurisdictions read at the plan's limits: countries, each with its states and local law. On a "
+        "paid plan every other one answers at the Starter rate; on Starter no other is read.",
         "ends_at": "When the access ends; null when no end is set.",
     },
     "EntitlementTier": {
@@ -1920,8 +1924,9 @@ FIELDS: dict[str, dict[str, str]] = {
         "bytes_per_day and the rest.",
     },
     "EntitlementScope": {
-        "all": "`true` when every country is read at the plan's limits.",
-        "jurisdictions": "Otherwise the countries that are, by jurisdiction ID.",
+        "all": "`true` when every jurisdiction is read at the plan's limits.",
+        "jurisdictions": "Otherwise the countries that are, by jurisdiction ID. On Starter, the plan's default "
+        "until an owner changes it in the console.",
     },
 }
 

@@ -1,20 +1,36 @@
 """How far an organisation's plan reaches (owner decision, 2026-10-16).
 
-A plan names countries, or covers them all. A country includes everything under it: Nigeria
+A plan names countries, or covers them all; to users they are the plan's "jurisdictions", because
+"country" in the console is where an organisation is based. A country includes everything under it: Nigeria
 includes Lagos State (AKN ``ng-la``). The continent's and the regional bodies' law (AKN ``aa-…``:
 the African Union, the EAC, ECOWAS, OHADA and the others) is within every plan, because national
 law cannot be read without it.
 
-Nothing is refused for lying outside the plan. Such a request also draws on an allowance of its own
-at the free Starter rate, so a plan buys speed and volume, never permission to read the law.
+On a paid plan nothing is refused for lying outside the plan. Such a request also draws on an
+allowance of its own at the free Starter rate, so a paid plan buys speed and volume.
+
+Starter covers one country (owner decision, 2026-11-25): the plan's default
+(``allowance.default_jurisdiction``) until an owner changes it in the console. A Starter key that asks
+about another country is refused (``jurisdiction_not_included``), as is any country when the plan has
+no default and none is chosen; the website still shows every country to everyone.
 """
 
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 
 OUTSIDE = (
-    "Outside your plan's countries, requests run at the free Starter rate, and that is used up for now. "
-    "Try again shortly, or change your plan's countries in the console."
+    "Outside your plan's jurisdictions, requests run at the free Starter rate, and that is used up for now. "
+    "Try again shortly, or change your plan's jurisdictions in the console."
+)
+
+
+NOT_INCLUDED = (
+    "Starter covers one jurisdiction, and this request is about another. An owner can change the "
+    "jurisdiction, or the plan, in the console under Plan and limits."
+)
+NOT_CHOSEN = (
+    "Starter covers one jurisdiction, and none is chosen yet. An owner chooses it in the console under "
+    "Plan and limits; then this key reads that jurisdiction's law."
 )
 
 
@@ -24,6 +40,20 @@ class OutsidePlanLimited(Exception):
     def __init__(self, retry_after: int):
         super().__init__(OUTSIDE)
         self.retry_after = retry_after
+
+
+class OutsidePlan(Exception):
+    """A Starter key asked about a country that is not its own, or before one was chosen."""
+
+
+def starter_only(scope: dict | None) -> Callable[[], None]:
+    """What a Starter key's reach does with a request outside its country: refuse, saying which case."""
+    message = NOT_INCLUDED if (scope or {}).get("jurisdictions") else NOT_CHOSEN
+
+    def refuse() -> None:
+        raise OutsidePlan(message)
+
+    return refuse
 
 
 def country(jurisdiction_id: str) -> str | None:
@@ -39,7 +69,9 @@ def _always() -> None:
 @dataclass(frozen=True)
 class Reach:
     countries: frozenset[str] | None = None  # None: every country at the plan's own limits
-    outside: Callable[[], None] = field(default=_always, compare=False)  # raises OutsidePlanLimited
+    # Called for a request outside the countries: raises OutsidePlanLimited (a paid plan, once the
+    # Starter-rate allowance is used up) or OutsidePlan (Starter, always).
+    outside: Callable[[], None] = field(default=_always, compare=False)
 
     @classmethod
     def of(cls, scope: dict | None, outside: Callable[[], None] = _always) -> "Reach":
@@ -62,6 +94,8 @@ class Reach:
         """What a search or listing without a jurisdiction covers: None for every jurisdiction."""
         if self.countries is None:
             return None
+        if not self.countries:
+            self.outside()  # Starter before its country is chosen: there is no country to search
         return frozenset(j for j in jurisdiction_ids if self.covers(j))
 
 

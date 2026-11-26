@@ -62,8 +62,10 @@ def deletion_check(accounts: Accounts, person_id: str) -> dict:
     return plan
 
 
-def close_account(accounts: Accounts, person_id: str, context=None) -> dict:
-    """Delete the account now (MAC-14): refused while it is the sole owner of a shared organisation."""
+def close_account(accounts: Accounts, person_id: str, context=None, billing=None) -> dict:
+    """Delete the account now (MAC-14): refused while it is the sole owner of a shared organisation.
+    ``billing`` (accounts.billing.Billing) first cancels in Stripe any subscription of an organisation the
+    account deletes, outside the transaction; refused with billing_unavailable if Stripe cannot be reached."""
     plan = deletion_check(accounts, person_id)
     if plan["blocking"]:
         names = ", ".join(o["name"] for o in plan["blocking"])
@@ -73,6 +75,8 @@ def close_account(accounts: Accounts, person_id: str, context=None) -> dict:
             f"You are the only owner of {names}, which has other members. Make someone else an owner or"
             " delete it first.",
         )
+    if billing is not None and plan["deleted"]:
+        billing.cancel_for_deletion([o["id"] for o in plan["deleted"]])
     t = accounts._t
     with accounts.engine.begin() as conn:
         person = (
@@ -109,6 +113,7 @@ def close_account(accounts: Accounts, person_id: str, context=None) -> dict:
                 summary={"account_closed": True},
                 context=context,
             )
+            accounts._sync_seat_grace(conn, organisation["id"])
         # Their monitors (with their filters and matches) and email settings go now.
         for table, column in (
             ("watch", "owner_person_id"),
@@ -282,6 +287,20 @@ def export_organisation(accounts: Accounts, person_id: str, organisation_id: str
             " WHERE organisation_id = :o ORDER BY created_at",
             o=organisation_id,
         )
+        # Billing (stripe-billing §4.3): the billing email, and each subscription's plan and state. No card
+        # is ever held here; Stripe's own records are Stripe's.
+        billing_customer = _rows(
+            conn,
+            f"SELECT billing_email, created_at FROM {t(conn, 'billing_customer')} WHERE organisation_id = :o",
+            o=organisation_id,
+        )
+        subscriptions = _rows(
+            conn,
+            f"SELECT tier_id, billing_interval, collection_method, status, invoice_paid, scope,"
+            f" current_period_end, cancel_at_period_end, past_due_since, updated_at"
+            f" FROM {t(conn, 'billing_subscription')} WHERE organisation_id = :o ORDER BY updated_at",
+            o=organisation_id,
+        )
     return json.loads(
         json.dumps(
             {
@@ -296,6 +315,10 @@ def export_organisation(accounts: Accounts, person_id: str, organisation_id: str
                 "audit_log": _clean(audit),
                 "shared_monitors": _clean(shared),
                 "webhook_endpoints": _clean(endpoints),
+                "billing": {
+                    "billing_email": billing_customer[0]["billing_email"] if billing_customer else None,
+                    "subscriptions": _clean(subscriptions),
+                },
             },
             default=_stamp,
         )
@@ -385,12 +408,15 @@ def purge(accounts: Accounts, deleter: ProviderDeleter | None = None, now: datet
             ("keys", "api_key", "revoked_at < :y1", {}),
             ("connected_apps", "client_grant", "revoked_at < :y1", {}),
             ("usage_days", "usage_day", "day < CAST(:y2 AS date)", {}),
+            # Stripe's events, long past its three days of retries (stripe-billing §4.3).
+            ("stripe_events", "stripe_webhook_event", "received_at < :d90", {}),
         ):
             done[name] = conn.execute(
                 text(f"DELETE FROM {t(conn, table)} WHERE {condition}"),
                 {
                     "now": now,
                     "d30": now - CLOSED_KEPT,
+                    "d90": now - timedelta(days=90),
                     "y1": now - timedelta(days=365),
                     "y2": now - timedelta(days=730),
                 }

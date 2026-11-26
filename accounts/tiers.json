@@ -8,10 +8,13 @@
       "mcp"
     ],
     "allowance": {
+      "members": 1,
       "requests_per_minute": 60,
       "burst": 30,
       "concurrency": 4,
       "bytes_per_day": 200000000,
+      "jurisdictions": 1,
+      "default_jurisdiction": "ng",
       "watches": 3,
       "digest": "weekly",
       "shared_watches": false,
@@ -28,18 +31,19 @@
   },
   {
     "id": "developer",
-    "name": "Developer",
+    "name": "Pro",
     "description": "For individual developers and small products in production.",
     "includes": [
       "rest",
       "mcp"
     ],
     "allowance": {
+      "members": 1,
       "requests_per_minute": 300,
       "burst": 150,
       "concurrency": 10,
       "bytes_per_day": 2000000000,
-      "jurisdictions": 2,
+      "jurisdictions": 1,
       "watches": 20,
       "digest": "daily",
       "shared_watches": false,
@@ -63,6 +67,7 @@
       "mcp"
     ],
     "allowance": {
+      "members": 5,
       "requests_per_minute": 1200,
       "burst": 600,
       "concurrency": 40,
@@ -91,6 +96,7 @@
       "mcp"
     ],
     "allowance": {
+      "members": 10,
       "requests_per_minute": 1200,
       "burst": 600,
       "concurrency": 40,
@@ -119,6 +125,7 @@
       "mcp"
     ],
     "allowance": {
+      "members": 5,
       "requests_per_minute": 1200,
       "burst": 600,
       "concurrency": 40,
@@ -128,13 +135,9 @@
       "shared_watches": true,
       "webhook_endpoints": 3
     },
-    "published": true,
+    "published": false,
     "listing": {
-      "order": 5,
-      "for": "Research, government and legal aid",
-      "price": "Free or reduced",
-      "action": "apply",
-      "note": "By application"
+      "order": 5
     }
   },
   {
@@ -146,6 +149,7 @@
       "mcp"
     ],
     "allowance": {
+      "members": 5,
       "requests_per_minute": 1200,
       "burst": 600,
       "concurrency": 256,
@@ -170,6 +174,7 @@
       "bulk"
     ],
     "allowance": {
+      "members": 10,
       "requests_per_minute": 6000,
       "burst": 3000,
       "concurrency": 100,
@@ -194,6 +199,7 @@
       "bulk"
     ],
     "allowance": {
+      "members": 10,
       "requests_per_minute": 1200,
       "burst": 600,
       "concurrency": 40,
@@ -216,6 +222,7 @@
       "mcp"
     ],
     "allowance": {
+      "members": 1,
       "requests_per_minute": 300,
       "burst": 100,
       "concurrency": 10,

@@ -678,6 +678,9 @@ WRITE = (
     "UPDATE (state, ends_at, revision, updated_at) ON {a}.entitlement",
     "UPDATE (state, revision, decision, updated_at, renewable_after) ON {a}.access_request",
     "UPDATE (state, revision, updated_at) ON {a}.organisation, {a}.person",
+    # A grant or a revocation settles the organisation's seat grace (teams-and-seats §5.3); a grant with
+    # countries keeps Starter's country among them, for when the grant ends.
+    "UPDATE (seat_grace_until, starter_country) ON {a}.organisation",
     "UPDATE (role, revision, updated_at) ON {a}.membership",
     "UPDATE (revoked_at, revoked_reason) ON {a}.api_key, {a}.client_grant",
     "UPDATE (revoked_at) ON {a}.console_session",
@@ -694,6 +697,7 @@ def grant_statements(accounts_schema: str, policy_schema: str, role: str) -> lis
     statements += [f"GRANT {w.format(a=a)} TO {role}" for w in WRITE]
     statements.append(f"GRANT USAGE ON ALL SEQUENCES IN SCHEMA {a} TO {role}")
     statements.append(f"GRANT EXECUTE ON FUNCTION {policy_schema}.accounts_access(text) TO {role}")
+    statements.append(f"GRANT EXECUTE ON FUNCTION {policy_schema}.organisation_seat_limit(text) TO {role}")
     return statements
 
 

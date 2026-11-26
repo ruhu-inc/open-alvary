@@ -1010,7 +1010,7 @@ def stepped_world(accounts, fake, app):
     accounts.grant_access(
         "op",
         organisation,
-        tier="developer",
+        tier="team",
         scope={"jurisdictions": ["ng"]},
         source="manual",
         ends_at=None,

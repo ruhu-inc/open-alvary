@@ -58,7 +58,7 @@ How words match:
 | `access` | `open` for records with cleared full text, `metadata` for records without, `all` (default) for both. |
 | `limit`, `offset` | Page size (1 to 100, default 25) and where to start. See [Pagination](/docs/pagination). |
 
-Asking about a country outside your plan works, at the Starter rate; see [Plans and rate limits](/docs/plans#how-limits-are-counted).
+On Pro and Team, asking about a jurisdiction outside your plan works, at the Starter rate. Starter reads its one jurisdiction only: another is refused with `403 jurisdiction_not_included`. See [Plans and rate limits](/docs/plans#how-limits-are-counted).
 
 The same goes for `jurisdiction` in [Search published texts](#search-published-texts), [List records](#list-records) and [Retrieve evidence](/docs/retrieval). Two places work differently: the [change feed](/docs/changes#filters)'s `jurisdiction` filter matches by prefix, so a country there includes its states and local law; and the [applicable-law scope](/docs/retrieval#the-law-that-applies-in-a-country) (`scope=applicable`) adds a place's country, with the regional and treaty law that binds there.
 

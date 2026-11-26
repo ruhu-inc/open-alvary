@@ -130,6 +130,9 @@ function App() {
 
 function Shell({ me, path, refresh }: { me: Me; path: string; refresh: () => void }) {
   const [orgId, setOrgId] = useState(() => {
+    // Back from Stripe: the workspace that paid, even if another was chosen meanwhile.
+    const returned = new URLSearchParams(location.search).get("organisation");
+    if (returned && me.organisations.some((o) => o.id === returned)) return returned;
     try {
       return localStorage.getItem("oa_console_org");
     } catch {
@@ -317,7 +320,7 @@ function OrgSwitcher({ me, org, onChoose }: { me: Me; org: Organisation; onChoos
       </button>
       {open ? (
         <div className="popover" role="menu">
-          <div className="popover-label">Organisations</div>
+          <div className="popover-label">Workspaces</div>
           {me.organisations.map((o) => (
             <button
               key={o.id}
@@ -339,7 +342,7 @@ function OrgSwitcher({ me, org, onChoose }: { me: Me; org: Organisation; onChoos
           <div className="popover-rule" />
           <button role="menuitem" type="button" onClick={() => (setOpen(false), setCreating(true))}>
             <Plus size={16} aria-hidden="true" />
-            Create organisation
+            Create team
           </button>
         </div>
       ) : null}
@@ -363,25 +366,32 @@ function CreateOrganisation({ onClose, onCreated }: { onClose: () => void; onCre
     try {
       const made = await api<{ id: string }>("/organisations", { method: "POST", body: { name, kind } });
       onCreated(made.id);
-      location.assign("/console");
+      location.assign("/console/access?new_team=1");
     } catch (e) {
       setError(e);
     }
   }
   return (
-    <Dialog title="Create an organisation" onClose={onClose}>
+    <Dialog title="Create a team workspace" onClose={onClose}>
       <form className="form" onSubmit={create}>
         <p className="fine">
-          An organisation holds its own keys, connected apps, members and limits. It starts on the free starter plan.
+          A team workspace has its own keys, connected apps, shared monitors, members and plan. It starts on Starter, with 1 seat; you can choose Team, for up to 5 people, next.
         </p>
         <div className="field">
-          <label htmlFor="new-org-name">Name</label>
-          <input id="new-org-name" type="text" required maxLength={120} value={name} onChange={(e) => setName(e.target.value)} />
+          <label htmlFor="new-org-name">Team or firm name</label>
+          <input
+            id="new-org-name"
+            type="text"
+            required
+            maxLength={120}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
         </div>
         <div className="field">
-          <label htmlFor="new-org-kind">Type</label>
+          <label htmlFor="new-org-kind">Organisation type</label>
           <select id="new-org-kind" value={kind} onChange={(e) => setKind(e.target.value)}>
-            <option value="company">Company</option>
+            <option value="company">Company / Law firm</option>
             <option value="academic">Academic</option>
             <option value="non_profit">Non-profit</option>
             <option value="government">Government</option>
@@ -395,7 +405,7 @@ function CreateOrganisation({ onClose, onCreated }: { onClose: () => void; onCre
             Cancel
           </button>
           <button className="btn" type="submit">
-            Create organisation
+            Create team
           </button>
         </div>
       </form>
@@ -623,7 +633,7 @@ function Welcome({ me, onDone }: { me: Me; onDone: () => void }) {
                 />
                 <small id="welcome-org-hint">
                   Your company, or leave it blank to use your own name. Access, keys and usage belong to an organisation;
-                  rename it or invite colleagues any time.
+                  rename it any time. Inviting colleagues needs a plan with more than one seat, such as Team.
                 </small>
               </div>
             </>

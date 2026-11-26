@@ -151,6 +151,7 @@ export type Access = {
   starter?: boolean; // the free starter tier every organisation holds when it has nothing else
   tier?: { id: string; name?: string; includes: string[]; allowance: Record<string, number> };
   scope?: { all?: boolean; jurisdictions?: string[] };
+  chosen?: boolean; // Starter: false while it reads the plan's default jurisdiction, not one an owner chose
   ends_at?: string | null;
 };
 export type Organisation = {
@@ -165,6 +166,8 @@ export type Organisation = {
   access: Access;
   revision?: number;
   counts?: { members: number; pending_invitations: number };
+  // Seats (teams-and-seats §5): members now, the plan's limit, and the grace while over it.
+  seats?: { active: number; limit: number; over_limit: boolean; grace_until: string | null };
 };
 export type Me = {
   person: { id: string; email: string; display_name: string | null; second_factor: string; created_at: string };

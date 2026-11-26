@@ -176,6 +176,10 @@ def test_an_owner_is_restored_only_where_no_active_person_owns_it_and_with_evide
     owner_store, admin, _, _ = world
     amina, own = person(owner_store, "amina")
     bola, _ = person(owner_store, "bola")
+    # Starter has one seat: a member is invited on Team (teams-and-seats §6).
+    owner_store.grant_access(
+        "op", own, tier="team", scope={"jurisdictions": ["ng"]}, source="manual", ends_at=None, reason="Test"
+    )
     invitation = owner_store.invite(amina, own, "bola@example.org", "developer")
     owner_store.accept_invitation(bola, invitation)
     bolas = next(m["id"] for m in admin.organisation(own)["members"] if m["person_id"] == bola)

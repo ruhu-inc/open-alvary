@@ -1,0 +1,25 @@
+{
+  "vocabulary": "policy-vocabulary-1",
+  "literals": {},
+  "vocabulary_file": "vocabularies/v1.json",
+  "vocabulary_hash": "cac594e752fdb6c2cb6adfc63930ceea8a8fe8be3afe9570552d5c2f486d8c80",
+  "revision": "0059",
+  "functions": [
+    {
+      "signature": "check_credential(jsonb)",
+      "file": "check_credential.sql",
+      "prior_file": "prior_check_credential.sql",
+      "prior_body_hash": "916282a0d3161a24a60ced135734d9ca73f1e9f022a7aaa723ab823b546bd802",
+      "current_body_hash": "05b54d7339e82373e7c76f92de02e790af56973b3a2bea9031cdd49eb9d0f8ba",
+      "prior_definition_hash": "10264a1ef60a843992a38476f3fe0adb564223b25b8685819c22408b12b81994",
+      "current_definition_hash": "1fe83bb6d1cdf0cbc21625a42289bbd844fe9ae6d555bb8fb31a1b920663d19d"
+    }
+  ],
+  "ddl": "billing.sql",
+  "new_functions": [
+    {
+      "signature": "organisation_seat_limit(text)",
+      "current_definition_hash": "10cedd5aed56c8947a8aeb23afb3a7c86f731a4159ac6a7524d34f8ae8c10004"
+    }
+  ]
+}

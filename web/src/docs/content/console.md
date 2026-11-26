@@ -33,17 +33,17 @@ The dashboard is the starting point. It shows your plan, today's requests and wh
 
 ## Choose a plan {#plan}
 
-Every new organisation starts on **Starter**: free, with no card, and ready at once. It reads every country through the REST API and MCP, at 60 requests a minute. You can create a key and start straight away; the other plans raise the limits ([compare plans](/docs/plans)).
+Every new organisation starts on **Starter**: free, with no card, and ready at once. It reads the law of one jurisdiction of your choice through the REST API and MCP, at 60 requests a minute. A jurisdiction is the country whose law you want to read, with its states and local law; it is not where you are based. It is Nigeria to begin with; an owner can change it with **Change jurisdiction** on this page, once a month. The other plans raise the limits and add jurisdictions ([compare plans](/docs/plans)).
 
 - {1} Your current plan and its limits.
-- {2} **Request upgrade** on Developer or Team. For research, government or legal aid, choose **Apply** under Public interest; for Enterprise, **Contact us**.
+- {2} **Request upgrade** on Pro or Team. For Enterprise, choose **Contact us**.
 
-![Plan and limits: the current plan, Starter, and cards for Developer, Team and Enterprise](/guide/plans.webp)
+![Plan and limits: the current plan, Starter, and cards for Pro, Team and Enterprise](/guide/plans.webp)
 
 The request form asks how you will use the corpus. Only owners can request a plan.
 
 - {1} What you are building. Don't include confidential client or case details.
-- {2} The countries you need most. Developer includes 2 of your choice and Team 5; other countries still answer, at the Starter rate.
+- {2} The jurisdictions you need most. Pro includes 1 of your choice and Team 5; other jurisdictions still answer, at the Starter rate.
 - {3} Roughly how many requests a day you expect.
 - {4} **Send request**.
 
@@ -51,7 +51,7 @@ The request form asks how you will use the corpus. Only owners can request a pla
 
 Your request shows as **Being reviewed**, and we reply by email. Prices for paid plans are coming; until then, we confirm each upgrade by email. You can withdraw the request while it is open.
 
-![The plan page with the request for Developer marked Being reviewed](/guide/plan-requested.webp)
+![The plan page with the request for Pro marked Being reviewed](/guide/plan-requested.webp)
 
 ## Create an API key {#keys}
 
@@ -204,10 +204,10 @@ Each endpoint has **Verify**, **Send test**, **Deliveries** (what was sent and h
 
 ## Members {#members}
 
-Invite colleagues to your organisation from **Members**.
+Invite colleagues to your organisation from **Members**. Each member takes a seat: Starter and Pro include 1, so they have no room for a colleague; Team includes 5.
 
 - {1} Their email address.
-- {2} Their role. **Admin** manages members and shared keys; **Developer** creates their own keys and connects apps; **Viewer** sees access and usage only. The **Owner** also manages access and can delete the organisation.
+- {2} Their role. **Admin** manages members and shared keys; **Member** creates their own keys and connects apps; **Viewer** sees access and usage only. The **Owner** also manages access and can delete the organisation.
 - {3} **Send invitation**. They accept by signing in with that address within 7 days.
 
 ![The Members page: the owner, and the Invite someone form with email, role and Send invitation](/guide/members.webp)
