@@ -48,7 +48,7 @@
       "authority_id": "ng-federal-government",
       "jurisdiction_id": "ng",
       "language": "en",
-      "legal_status": "unknown",
+      "legal_status": "current",
       "catalogue_note": "Later amendments have not yet been checked, so no consolidated text is offered here. Use the official source for the current text.",
       "year": 1999,
       "summary": "The supreme law of Nigeria: it sets up the federal government, the states and the courts, and guarantees fundamental rights."
@@ -63,7 +63,7 @@
       "authority_id": "ng-national-assembly",
       "jurisdiction_id": "ng",
       "language": "en",
-      "legal_status": "unknown",
+      "legal_status": "current",
       "catalogue_note": "The official copy is published by the Central Bank of Nigeria. Amendments since 2007 have not yet been checked.",
       "year": 2007,
       "summary": "Establishes the Central Bank of Nigeria and sets out its objects, powers and governance."
@@ -78,7 +78,7 @@
       "authority_id": "ng-national-assembly",
       "jurisdiction_id": "ng",
       "language": "en",
-      "legal_status": "unknown",
+      "legal_status": "current",
       "catalogue_note": "The official link leads to the Federal Ministry of Justice's page for the Act.",
       "year": 2011,
       "summary": "Gives everyone a right of access to records and information held by public institutions in Nigeria."

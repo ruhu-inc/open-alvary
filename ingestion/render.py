@@ -46,7 +46,7 @@ JPEG = b"\xff\xd8\xff"
 # none of them, so none may reach it: one added by mistake stops it starting rather than sitting beside
 # pdftoppm.
 SECRET = re.compile(
-    r"^(ALVARY|OPEN_ALVARY|RESEND|AZURE|GOOGLE)_|SECRET|PASSWORD|TOKEN|PEPPER|CREDENTIAL|DATABASE|_KEYS?$",
+    r"^(ALVARY|OPEN_ALVARY|RESEND|AZURE|GOOGLE|STRIPE)_|SECRET|PASSWORD|TOKEN|PEPPER|CREDENTIAL|DATABASE|_KEYS?$",
     re.I,
 )
 # What the image and the platform set themselves. GPG_KEY is the Python image's: the id of the public

@@ -30,7 +30,7 @@ from ingestion.pipeline import MAX_BYTES, normalize
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "ingestion" / "catalogue" / "ng-first-collection.json"
 STAGING = ROOT / "private-staging" / "first-collection"
-ALLOWED_HOSTS = {"placng.org"}
+ALLOWED_HOSTS = {"placng.org", "www.cbn.gov.ng", "cbn.gov.ng"}
 USER_AGENT = "OpenAlvary/0.1 (operator review; contact hello@ruhu.ai)"
 SECTION = re.compile(r"^\s*(\d{1,3}[A-Z]?)\.\s*[—–-]?\s*(\(1\)\s*)?(\S.*)$")
 GAZETTE = re.compile(r"No\.\s*(\d+)\s*,?\s*Vol(?:ume)?\.?\s*(\d+)", re.I)

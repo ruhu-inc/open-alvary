@@ -7,6 +7,13 @@
   "retrieval_mirror": "Policy and Legal Advocacy Centre (placng.org) — PDFs of the official gazette; PLAC's own HTML is not used.",
   "documents": [
     {
+      "id": "ng-cbn-act-2007",
+      "title": "Central Bank of Nigeria Act, 2007",
+      "year": 2007,
+      "url": "https://www.cbn.gov.ng/OUT/CIRCULARS/CSD/2007/CBN%20ACT%202007.PDF",
+      "media_type": "application/pdf"
+    },
+    {
       "id": "ng-electoral-act-2026",
       "title": "Electoral Act, 2026",
       "year": 2026,
