@@ -9,7 +9,7 @@
         "citation": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 300,
+          "maxLength": 600,
           "description": "A citation such as 'Freedom of Information Act 2011, s. 1(1)'. One of citation or anchor_id is required."
         },
         "anchor_id": {
@@ -3799,7 +3799,7 @@
         "citation": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 300,
+          "maxLength": 600,
           "description": "The citation, such as FOI Act 2011, s. 1(1)."
         },
         "as_of": {
@@ -6675,7 +6675,7 @@
         "query": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 200,
+          "maxLength": 500,
           "description": "Words to find, such as a title or a citation. Every word must appear; case and punctuation don't matter."
         },
         "limit": {

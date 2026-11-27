@@ -99,7 +99,7 @@ LAW_CHECK_TOOLS = [
                 "query": {
                     "type": "string",
                     "minLength": 1,
-                    "maxLength": 200,
+                    "maxLength": 500,
                     "description": "Words to find, such as a title or a citation.",
                 },
                 "limit": {
@@ -132,7 +132,7 @@ LAW_CHECK_TOOLS = [
                 "citation": {
                     "type": "string",
                     "minLength": 1,
-                    "maxLength": 300,
+                    "maxLength": 600,
                     "description": "The citation, such as Freedom of Information Act 2011, s. 1(1).",
                 },
                 "as_of": {
@@ -248,7 +248,7 @@ LAW_CHECK_TOOLS = [
                 "citation": {
                     "type": "string",
                     "minLength": 1,
-                    "maxLength": 300,
+                    "maxLength": 600,
                     "description": "Citation such as 'Freedom of Information Act 2011, s. 1(1)'. Send "
                     "citation or anchor_id, never both.",
                 },

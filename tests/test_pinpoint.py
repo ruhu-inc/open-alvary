@@ -207,6 +207,46 @@ def test_a_part_is_cited_from_its_printed_numbers_and_read_back_to_the_same_key(
     assert pinpoint.cite([part("paragraph", "(a)")]) is None  # outside any section
 
 
+def test_a_chapter_numbered_in_words_is_cited_by_its_number_and_read_back():
+    # Rwanda's laws print "UMUTWE WA MBERE:" (Chapter One) and "CHAPITRE PREMIER", and keep chap_mbere;
+    # Law check once cited these "Chapter UMUTWE WA MBERE:", which nothing could read back.
+    for label, locator in (
+        ("UMUTWE WA MBERE:", "chap_mbere"),
+        ("CHAPITRE PREMIER", "chap_premier"),
+        ("CHAPTER ONE", "chap_one"),
+        ("UMUTWE WA MBERE", "x"),
+    ):
+        key, shown = pinpoint.cite([part("document"), part("chapter", label, locator)])
+        assert (key, shown) == (("chap:1",), "Chapter I") and pinpoint.read(shown) == key
+    for label in ("Chapter II:", "UMUTWE WA II:"):
+        key, shown = pinpoint.cite([part("chapter", label, "chap_ii")])
+        assert (key, shown) == (("chap:2",), "Chapter II") and pinpoint.read(shown) == key
+    for cited in (
+        "Chapter UMUTWE WA MBERE:",
+        "Chapter CHAPITRE PREMIER",
+        "Umutwe wa mbere",
+        "Chapitre premier",
+        "Chapter 1",
+    ):
+        assert pinpoint.read(cited) == ("chap:1",)
+    title = "Law n° 001/2016 of 05/02/2016 determining the National Youth Council"
+    assert pinpoint.split(f"{title}, Chapter UMUTWE WA MBERE:")[0] == (
+        title,
+        "Chapter UMUTWE WA MBERE:",
+        ("chap:1",),
+    )
+    # An article inside it is still cited by its own number.
+    assert (
+        pinpoint.cite(
+            [
+                part("chapter", "UMUTWE WA MBERE:", "chap_mbere"),
+                part("article", "Ingingo ya 3", "chap_mbere__art_3"),
+            ]
+        )[1]
+        == "art. 3"
+    )
+
+
 def test_an_alinea_and_an_inserted_article_are_cited_and_read_back():
     # ohada-uniform-act-1: an alinéa has no printed number; its locator counts it. A list's item keeps its
     # "1°)" as label, and is cited by its place among the alinéas, as French drafting counts them.

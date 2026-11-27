@@ -345,8 +345,8 @@ def _validate_arguments(arguments: dict, today: date) -> tuple[dict, dict]:
     echoed: dict[str, object] = {}
 
     if "citation" in arguments:
-        if not isinstance(citation, str) or not (1 <= len(citation) <= 300) or not citation.strip():
-            raise ValueError("citation must be a non-empty string of 1 to 300 characters")
+        if not isinstance(citation, str) or not (1 <= len(citation) <= 600) or not citation.strip():
+            raise ValueError("citation must be a non-empty string of 1 to 600 characters")
         echoed["citation"] = citation
 
     if "anchor_id" in arguments:
@@ -621,6 +621,76 @@ def _enforce_allowed_source(source_id: str, allowed_source_ids: set[str] | None)
         )
 
 
+HOLDS_QUOTE = frozenset({"exact", "normalised", "with_omissions"})
+MAX_WORK_SPLITS = 4
+
+
+def _choose_by_words(catalogue: LegacyCatalogue, candidates, quote: str, assessed_at: date):
+    """The one candidate part whose published words hold ``quote``, where a citation names more than one
+    part of a record (its texts in three languages, two readings of one Act): the words decide which part
+    the claim is about. Where several hold it with the very same words (the same span hash) in one
+    record, they are one passage in more than one of its texts, and the one in force on ``assessed_at``
+    (else the latest) is read. None when no candidate holds the quote, or different parts do. A quote
+    too short or too spread for every candidate raises that error, as it would for one part."""
+    holding, errors = [], []
+    for candidate in candidates:
+        row = catalogue.repository.node(candidate.anchor_id)
+        if row is None:
+            continue
+        node = NodeViewRecord.model_validate(row)
+        try:
+            version, _, _ = catalogue.version(node.version_id)
+        except SourceUnavailable:
+            continue
+        span_bytes, _ = catalogue._span(node, version)
+        if len(span_bytes) > MAX_PART_BYTES:
+            continue
+        try:
+            found = match_quote(span_bytes.decode("utf-8"), quote)
+        except VerifyToolError as error:
+            errors.append(error)
+            continue
+        if found["quote"] in HOLDS_QUOTE:
+            holding.append(candidate)
+    if not holding:
+        if errors and len(errors) == len(candidates):
+            raise errors[0]
+        return None
+    if len(holding) == 1:
+        return holding[0]
+    if len({c.source_id for c in holding}) == 1 and len({c.span_hash for c in holding}) == 1:
+        return max(
+            holding,
+            key=lambda c: (_in_force(c, assessed_at), c.effective_from or date.min, c.version_id),
+        )
+    return None
+
+
+def _names_a_record(
+    catalogue: LegacyCatalogue, citation: str, allowed_source_ids, check_jurisdiction=None
+) -> bool:
+    """Whether the words before one of the citation's last commas name a public record ("Law n° 1/2016
+    …, Chapter One A"): the record is in the catalogue though its part was not read, so the part is not
+    found rather than the record missing."""
+    at = len(citation)
+    for _ in range(MAX_WORK_SPLITS):
+        at = citation.rfind(",", 0, at)
+        if at <= 0:
+            return False
+        work = citation[:at].strip(" ,;")
+        if not work:
+            return False
+        matches = catalogue.citations(work).matches
+        if allowed_source_ids is not None:
+            matches = [m for m in matches if m.id in allowed_source_ids]
+        if matches:
+            if check_jurisdiction is not None:  # a record outside a plan is answered as any other is
+                for match in matches:
+                    check_jurisdiction(match.jurisdiction_id)
+            return True
+    return False
+
+
 def verify_claim(
     catalogue: LegacyCatalogue,
     arguments: dict,
@@ -750,8 +820,11 @@ def verify_claim(
             for match in res.matches:
                 check_jurisdiction(match.jurisdiction_id)
 
-        # Row 1: no public record named
+        # Row 1: no public record named. A record named with a part Law check cannot read is a part not
+        # found: the record is in the catalogue.
         if not res.matches:
+            if _names_a_record(catalogue, citation, allowed_source_ids, check_jurisdiction):
+                return finish("part_not_found")
             return finish("not_in_catalogue")
 
         # Row 2a: more than one work matched
@@ -800,10 +873,22 @@ def verify_claim(
         if prov.status == "unresolved" and prov.reason == "no_text_in_scope":
             return finish("not_in_that_language")
 
-        # Row 5: ambiguous provision
+        # Row 5: ambiguous provision. With a quote, the part whose words hold it is the one checked.
         if prov.status == "ambiguous":
-            if prov.reason == "several_texts" and as_of is not None:
-                in_force_cands = [c for c in prov.candidates if _in_force(c, as_of)]
+            dated = (
+                [c for c in prov.candidates if _in_force(c, as_of)]
+                if prov.reason == "several_texts" and as_of is not None
+                else list(prov.candidates)
+            )
+            chosen = (
+                _choose_by_words(catalogue, dated, quote, assessed_at)
+                if quote is not None and dated
+                else None
+            )
+            if chosen is not None:
+                target_anchor_id = chosen.anchor_id
+            elif prov.reason == "several_texts" and as_of is not None:
+                in_force_cands = dated
                 if len(in_force_cands) == 1:
                     target_anchor_id = in_force_cands[0].anchor_id
                 elif len(in_force_cands) == 0:

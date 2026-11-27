@@ -266,7 +266,7 @@ export function parseCitationAndQuote(text) {
     .replace(/\b(?:says|states|provides|reads)$/i, "")
     .replace(/[\s:;,–—-]+$/u, "")
     .trim();
-  if (!citation || citation.length > 200) return null;
+  if (!citation || citation.length > 600) return null;
   if (!/(?:^|[^\p{L}])(?:ss?|secs?|sect|sections?|arts?|articles?|regs?|regulations?|rules?|paras?|paragraphs?)\.?\s*\d/iu.test(citation)) {
     return null;
   }

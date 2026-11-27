@@ -33,6 +33,26 @@ ORDINALS = "first second third fourth fifth sixth seventh eighth ninth tenth ele
 _ROMAN = re.compile(r"^[ivxlc]+$")
 _ROMAN_VALUES = {"i": 1, "v": 5, "x": 10, "l": 50, "c": 100}
 _WORD_ONE = {"mbere", "premier", "one", "first"}
+# A Chapter or Part numbered in words, as Rwanda's and French texts print them and their locators keep
+# them: "UMUTWE WA MBERE" (Kinyarwanda, Chapter One), "CHAPITRE PREMIER", "chap_mbere".
+NUMBER_WORDS = {
+    "one": 1,
+    "mbere": 1,
+    "kabiri": 2,
+    "gatatu": 3,
+    "kane": 4,
+    "gatanu": 5,
+    "gatandatu": 6,
+    "karindwi": 7,
+    "munani": 8,
+    "cyenda": 9,
+    "cumi": 10,
+    "premier": 1,
+    "première": 1,
+    "premiere": 1,
+}
+# The word a Chapter's printed label leads with in Kinyarwanda and French: "UMUTWE WA II", "CHAPITRE 3".
+_CHAPTER_WORDS = r"umutwe(?:\s+wa)?|chapitre"
 # Leads of a numbered provision: sections of an Act, regulations and rules of an instrument made under
 # one, all keyed alike; articles apart.
 _SECTION_LEADS = r"ss?|secs?|sects?|sections?|§§?|regs?|regulations?|r|rr|rules?"
@@ -72,8 +92,11 @@ ORDER = re.compile(
     re.I,
 )
 # A Part or Chapter of an Act outside its schedules: "Part V", "Pt. 5", "Chapter 3", "Chap. III".
+# "Chapter UMUTWE WA MBERE" and "Chapter CHAPITRE PREMIER" too, as Law check cited a Chapter numbered in words
+# before it read the number, and "UMUTWE WA II" and "Chapitre premier" as the texts print them.
 CONTAINER = re.compile(
-    rf"^(part|pt|chapter|chap|ch)\.?\s*(\d{{1,2}}|[ivxlc]{{1,6}}|{'|'.join(ORDINALS)})$",
+    rf"^(part|pt|chapter|chap|ch|{_CHAPTER_WORDS})\.?\s*(?:(?:{_CHAPTER_WORDS})\s+)?"
+    rf"(\d{{1,2}}|[ivxlc]{{1,6}}|{'|'.join(ORDINALS)}|{'|'.join(NUMBER_WORDS)})$",
     re.I,
 )
 # A neutral citation, "[2019] NGSC 4", "[2020] EWCA Civ 123", "[2020] EWHC 123 (Ch)", and a judgment's
@@ -99,7 +122,7 @@ AFTER_NEUTRAL = re.compile(
 # Where a pinpoint may begin within a citation: "NDPA s. 23(1)(a)", "ISA 2025, First Schedule, para. 3".
 _STARTS = re.compile(
     rf"(?:^|(?<=[\s,;(]))(?:{_SECTION_LEADS}|{_ARTICLE_LEADS}|(?:{'|'.join(ORDINALS)}|\d{{1,2}}(?:st|nd|rd|th))\s+schedule"
-    rf"|schedule|sch|part|pt|chapter|chap|ch|order|{_ANNEX_LEADS})(?=[\s.,\d(]|$)",
+    rf"|schedule|sch|part|pt|chapter|chap|ch|{_CHAPTER_WORDS}|order|{_ANNEX_LEADS})(?=[\s.,\d(]|$)",
     re.I,
 )
 
@@ -117,7 +140,7 @@ def _roman(value: str) -> int:
 
 def _printed(label: str | None) -> str:
     """A printed number without its dot or brackets: "23A." → "23A", "(1)" → "1"."""
-    return (label or "").strip().strip(".()").strip()
+    return (label or "").strip().strip(".():").strip()
 
 
 def _plain(label: str | None) -> str:
@@ -129,6 +152,8 @@ def _ordinal(value: str | None) -> str:
     value = (value or "").strip().casefold()
     if value in ORDINALS:
         return str(ORDINALS.index(value) + 1)
+    if value in NUMBER_WORDS:
+        return str(NUMBER_WORDS[value])
     if re.fullmatch(r"\d{1,2}(?:st|nd|rd|th)", value):
         return str(int(value[:-2]))
     if _ROMAN.fullmatch(value):
@@ -142,6 +167,18 @@ def _token_number(locator: str, token: str) -> str:
     own = locator.rsplit("__", 1)[-1]
     found = re.match(rf"{token}_([0-9]+(?:-[0-9]+)*|[ivxlc]+)", own)
     return found.group(1) if found else ""
+
+
+def _word_number(locator: str, token: str) -> str:
+    """A Chapter's or Part's number its locator keeps as a word ("chap_mbere"), as a Roman numeral, "I"."""
+    own = locator.rsplit("__", 1)[-1]
+    found = re.match(rf"{token}_([a-zà-ÿ]+)(?:_\d+)?$", own)
+    value = found.group(1) if found else ""
+    return _as_roman(NUMBER_WORDS[value]) if value in NUMBER_WORDS else ""
+
+
+def _as_roman(number: int) -> str:
+    return ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"][number - 1]
 
 
 def _annex_title(label: str | None) -> str:
@@ -209,7 +246,11 @@ def cite(chain: list[Part], document_type: str | None = None) -> tuple[tuple[str
             word = "Part" if part.kind == "part" else "Chapter"
             number = re.sub(rf"^{word}\s+", "", _printed(part.label), flags=re.I)
             if not re.match(rf"^{word}\b", _printed(part.label), re.I):  # "CHAPITRE 1", "PREMIERE PARTIE"
-                number = _token_number(part.locator, "part" if part.kind == "part" else "chap") or number
+                token = "part" if part.kind == "part" else "chap"
+                number = _token_number(part.locator, token) or _word_number(part.locator, token) or number
+                number = re.sub(rf"^(?:{_CHAPTER_WORDS})\s+", "", number, flags=re.I)  # "UMUTWE WA MBERE"
+            if number.casefold() in NUMBER_WORDS:  # "Chapter ONE", "UMUTWE WA MBERE": "Chapter I"
+                number = _as_roman(NUMBER_WORDS[number.casefold()])
             key = [f"{'part' if part.kind == 'part' else 'chap'}:{_ordinal(number)}"]
             shown = f"{word} {number.upper() if _ROMAN.fullmatch(number.casefold()) else number}"
             if annex:  # "Republicação, Chapter II"
@@ -256,7 +297,7 @@ def cite(chain: list[Part], document_type: str | None = None) -> tuple[tuple[str
 def read(pinpoint: str, *, annexed: bool = False) -> tuple[str, ...] | None:
     """The key of a cited pinpoint, or None when it is not one this module reads. An annex holds
     articles, sections, parts or chapters, never another annex (``annexed``), so reading stops there."""
-    value = unicodedata.normalize("NFC", " ".join(pinpoint.split())).strip(" ,;")
+    value = unicodedata.normalize("NFC", " ".join(pinpoint.split())).strip(" ,;:")
     subs = lambda group: [_plain(s) for s in re.findall(r"\(\s*([0-9a-z]{1,5})\s*\)", group or "", re.I)]  # noqa: E731
     found = SECTION.match(value)
     if found:
