@@ -38,7 +38,9 @@ DELETION = "Open Alvary account deletion"  # Management API: delete:users only (
 TOOLS = ("Claude", "Claude Code", "Codex")
 # Newly verified host CIMD entries captured in Measurement 2: (display_name, exact_https_cimd_url).
 # Previewed read-only during dry-run; registered and granted corpus:read on --apply.
-CIMD_CLIENTS: tuple[tuple[str, str], ...] = ()
+CIMD_CLIENTS: tuple[tuple[str, str], ...] = (
+    ("Google Antigravity", "https://antigravity.google/oauth/client-metadata.json"),
+)
 CONNECTIONS = ("google-oauth2", "email")
 
 
