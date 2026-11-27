@@ -1649,16 +1649,15 @@ def create_router(
             next_offset = offset + page_size
             next_cursor = _encode_cursor(next_offset) if next_offset < len(catalog) else None
             if is_2026:
-                return _result(
-                    id_,
-                    {
-                        "resultType": "complete",
-                        "tools": page,
-                        "nextCursor": next_cursor,
-                        "ttlMs": 0,
-                        "cacheScope": "public",
-                    },
-                )
+                body_26: dict = {
+                    "resultType": "complete",
+                    "tools": page,
+                    "ttlMs": 0,
+                    "cacheScope": "public",
+                }
+                if next_cursor is not None:
+                    body_26["nextCursor"] = next_cursor
+                return _result(id_, body_26)
             body: dict = {"tools": page}
             if next_cursor is not None:
                 body["nextCursor"] = next_cursor
@@ -1802,12 +1801,14 @@ def create_router(
             except ResultTooLarge:
                 message = "result_too_large: the answer would be larger than one response may be."
                 return _result(id_, _tool_error("result_too_large", message, include_result_type=is_2026))
-            except ValueError:
+            except ValueError as invalid:
+                # check_claim says which argument is wrong, so a model can correct its next call.
+                from retrieval.verify import InvalidClaimArguments
+
+                message = str(invalid) if isinstance(invalid, InvalidClaimArguments) else "Invalid arguments"
                 return JSONResponse(
                     status_code=400 if is_2026 else 200,
-                    content=_error(
-                        id_, -32602, "Invalid arguments", {"code": "invalid_input"} if is_2026 else None
-                    ),
+                    content=_error(id_, -32602, message, {"code": "invalid_input"} if is_2026 else None),
                 )
             if payload is None:
                 return JSONResponse(

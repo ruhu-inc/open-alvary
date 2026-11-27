@@ -230,8 +230,9 @@ def test_2026_discover_ping_wire_errors_2025_03_26_and_paginated_tools_list(stor
         res = resp.json()["result"]
         assert res["resultType"] == "complete" and res["ttlMs"] == 0 and res["cacheScope"] == "public"
         collected_26.extend(res["tools"])
-        cursor = res["nextCursor"]
+        cursor = res.get("nextCursor")
         if cursor is None:
+            assert "nextCursor" not in res
             break
     assert pages == 3 and len(collected_26) == 13
     names = [t["name"] for t in collected_26]
@@ -643,7 +644,27 @@ def test_check_claim_starter_refusal_paid_single_debit_and_request_state_refusal
             {"name": "check_claim", "arguments": {"anchor_id": "test-node", "jurisdiction": bad_jur}},
         ).json()
         assert err["error"]["code"] == -32602, bad_jur
+        assert err["error"]["message"] == "jurisdiction must be a valid jurisdiction code (e.g. 'ng')"
     assert debits == []  # zero debit on invalid jurisdiction
+
+    # Blank optional arguments, as Gemini sends them, count as not sent.
+    blanks = rpc(
+        p_client,
+        "tools/call",
+        {
+            "name": "check_claim",
+            "arguments": {
+                "anchor_id": "test-node",
+                "citation": "",
+                "as_of": "",
+                "language": "",
+                "jurisdiction": "",
+            },
+        },
+    ).json()["result"]
+    assert blanks["isError"] is False
+    assert json.loads(blanks["content"][0]["text"])["claim"] == {"anchor_id": "test-node"}
+    debits.clear()
 
     ok = rpc(
         p_client,
