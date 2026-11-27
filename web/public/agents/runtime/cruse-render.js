@@ -1,5 +1,8 @@
 // Presentation renderers use DOM nodes and a small allowlist. Model output never
 // supplies executable code, SVG markup, network resources, or global CSS.
+// Changed by agentic-web. See README.md in this folder for what changed.
+import { trustedHtml } from "./trusted-types.js";
+
 export const PRESENTATION_CSS = `
 .ns-presentation{align-self:stretch;display:flex;flex-direction:column;gap:12px;min-width:0}
 .ns-presentation>.ns-widget{width:100%;max-width:100%}
@@ -107,7 +110,7 @@ const dropContent = new Set("script style iframe object embed template noscript 
 export function renderSafeHtml(container, html) {
   // A template is inert while parsing: images cannot fetch, scripts cannot run.
   const template = document.createElement("template");
-  template.innerHTML = html;
+  template.innerHTML = trustedHtml(html);
   const copy = (source, target) => {
     for (const child of source.childNodes) {
       if (child.nodeType === 3) { target.append(document.createTextNode(child.textContent)); continue; }

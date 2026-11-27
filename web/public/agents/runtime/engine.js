@@ -51,24 +51,39 @@ export async function isPublishedMockRouter(router, fetchImpl = fetch) {
   }
 }
 
+/**
+ * True when `url` is the router this site's manifest says the site pays for
+ * (`llm_router.publisher_funded`, spec §4). A visitor's key is never sent to it,
+ * by the chat or by the settings panel.
+ */
+export function isPublisherFundedRouter(manifest, url) {
+  const declared = manifest?.llm_router || {};
+  return declared.publisher_funded === true && declared.mock !== true && !!url && !!declared.base_url
+    && sameRouter(String(url).replace(/\/$/, ""), declared.base_url);
+}
+
 export function selectTopRouter(manifest, routerOverride, byokKey, modelOverride = "") {
   const declared = manifest?.llm_router || {};
   const hasRealKey = !!(byokKey && byokKey !== "demo");
   const hasExplicitModel = !!String(modelOverride || "").trim();
   let requested = String(routerOverride || "").replace(/\/$/, "");
   const requestedMock = requested && declared.mock === true && sameRouter(requested, declared.base_url);
+  // A publisher-funded default router is paid for by the site and takes no
+  // visitor key (spec §4, "Default inference"). A visitor's own key never goes to it.
+  const publisherFunded = declared.publisher_funded === true && declared.mock !== true;
+  const requestedPublisherFunded = requested && publisherFunded && sameRouter(requested, declared.base_url);
 
-  if ((hasRealKey || hasExplicitModel) && (!requested || requestedMock)) {
+  if ((hasRealKey || hasExplicitModel) && (!requested || requestedMock || requestedPublisherFunded)) {
     if (!declared.byok_router) {
       throw new Error("A real API key is configured, but this site publishes no AI provider route.");
     }
     requested = declared.byok_router;
-    return { baseUrl: requested, mock: false, upgradedToByok: true };
+    return { baseUrl: requested, mock: false, publisherFunded: false, upgradedToByok: true };
   }
   if (requested) {
-    return { baseUrl: requested, mock: declared.mock === true && sameRouter(requested, declared.base_url), upgradedToByok: false };
+    return { baseUrl: requested, mock: declared.mock === true && sameRouter(requested, declared.base_url), publisherFunded: !!requestedPublisherFunded, upgradedToByok: false };
   }
-  return { baseUrl: declared.base_url || "", mock: declared.mock === true, upgradedToByok: false };
+  return { baseUrl: declared.base_url || "", mock: declared.mock === true, publisherFunded, upgradedToByok: false };
 }
 
 export function manifestAllowsPeer(target, manifest, runtimeAllowedPeers = new Set()) {
@@ -90,7 +105,7 @@ export function selectPeerRouter(callerRouter) {
   if (!callerRouter?.baseUrl) {
     throw new Error("The caller has no active LLM router to use for this peer network.");
   }
-  return { baseUrl: callerRouter.baseUrl, mock: callerRouter.mock === true };
+  return { baseUrl: callerRouter.baseUrl, mock: callerRouter.mock === true, publisherFunded: callerRouter.publisherFunded === true };
 }
 
 export class Engine {
@@ -175,6 +190,7 @@ export class Engine {
       this.trace.note("action_catalog", { count: this.actions.catalog({ base, network: network.name }).length,
         issues: this.actions.discoveryIssues });
       this.mockLLM = llm.mock; // true when using the deterministic mock router
+      this.publisherFundedLLM = llm.publisherFunded; // true when the site pays and no key is needed
       this.byokRouter = manifest.llm_router?.byok_router || ""; // real-LLM proxy for BYOK keys
       this.trace.end(span, {
         network: network.name,
@@ -210,12 +226,14 @@ export class Engine {
     // contribute network definitions only and can never redirect execution or keys.
     let routerBase;
     let mock;
+    let publisherFunded;
     if (isTop) {
       const selected = selectTopRouter(manifest, this.routerOverride, this.byokKey, this.modelOverride);
       routerBase = selected.baseUrl;
       mock = selected.mock;
+      publisherFunded = selected.publisherFunded === true;
       this.routerOverride = selected.upgradedToByok ? routerBase : this.routerOverride;
-      this.userRouter = { baseUrl: routerBase, mock };
+      this.userRouter = { baseUrl: routerBase, mock, publisherFunded };
     } else {
       // A peer contributes its network definition, not its execution environment.
       // It always runs in this browser with the top caller's active router, even
@@ -223,8 +241,10 @@ export class Engine {
       const selected = selectPeerRouter(this.userRouter);
       routerBase = selected.baseUrl;
       mock = selected.mock;
+      publisherFunded = selected.publisherFunded;
     }
-    const llm = new LlmClient({ baseUrl: routerBase, apiKey: this.byokKey, trace: this.trace, mock });
+    // A publisher-funded router gets no visitor key, even when one is saved.
+    const llm = new LlmClient({ baseUrl: routerBase, apiKey: publisherFunded ? "" : this.byokKey, trace: this.trace, mock, publisherFunded });
     return { network, bundleUrl, integrity, llm, hoconUrl, validation };
   }
 
@@ -370,7 +390,8 @@ export class Engine {
       externalRunner: llm.baseUrl === "browser://mock" ? null : self.agentRunner,
       routerBaseUrl: llm.baseUrl,
       mock: llm.mock,
-      apiKey: self.byokKey,
+      publisherFunded: llm.publisherFunded,
+      apiKey: llm.publisherFunded ? "" : self.byokKey,
       // A partner network runs on the visitor's model, or on this site's front-agent model
       // when the visitor picked none, and within this site's step limit. So a partner
       // network cannot choose how much the visitor pays.

@@ -1,6 +1,8 @@
 // Discover the native HTML contract of site-owner-selected pages. No page scripts
 // execute during discovery. JavaScript-only forms need a registered site module.
+// Changed by agentic-web. See README.md in this folder for what changed.
 import { validateData } from "./actions.js";
+import { trustedHtml } from "./trusted-types.js";
 
 const secret = /password|passwd|secret|token|csrf|authorization|cookie|credit.?card|card.?number|cvv|cvc|otp/i;
 const unsafe = new Set(["__proto__", "constructor", "prototype"]);
@@ -33,7 +35,7 @@ async function boundedText(response) {
 async function pageDocument(url, signal) {
   const response = await fetch(url, { credentials: "same-origin", cache: "no-store", redirect: "error", signal });
   if (!response.ok || !(response.headers.get("content-type") || "").includes("text/html")) throw new Error("Form page unavailable or not HTML; sign in on the owning site if needed.");
-  const doc = new DOMParser().parseFromString(await boundedText(response), "text/html");
+  const doc = new DOMParser().parseFromString(trustedHtml(await boundedText(response)), "text/html");
   const base = ownUrl(doc.querySelector("base[href]")?.getAttribute("href") || url, url);
   return { doc, base };
 }
@@ -124,7 +126,7 @@ function responseEvidence(text, contentType, hiddenValues) {
     const data = JSON.parse(text, (key, value) => secret.test(key) || unsafe.has(key) ? undefined : value);
     return { format: "json", text: redact(JSON.stringify(data)).slice(0, 12000) };
   }
-  const doc = new DOMParser().parseFromString(text, "text/html");
+  const doc = new DOMParser().parseFromString(trustedHtml(text), "text/html");
   doc.querySelectorAll("script,style,template,form,input,textarea,select,[hidden]").forEach(e => e.remove());
   return { format: "text", text: redact(doc.body.textContent.replace(/\s+/g, " ").trim()).slice(0, 12000) };
 }

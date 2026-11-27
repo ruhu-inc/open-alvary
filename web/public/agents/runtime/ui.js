@@ -26,31 +26,36 @@ import { PRESENTATION_CSS, renderMarkdown, renderRichComponent } from "./cruse-r
 import { createTurnStatusController } from "./turn-status.js";
 import { reviewActions, setActionWindowPrompt } from "./action-transport.js";
 import { OpenRouterConnect } from "./openrouter-connect.js";
+import { OtariConnect } from "./otari-connect.js";
 import { InUseLine } from "./in-use-line.js";
+import { EnterKey } from "./enter-key.js";
+import { isPublisherFundedRouter } from "./engine.js";
+import { trustedHtml } from "./trusted-types.js";
 
 export const AI_MODEL_SETTINGS_LABEL = "AI model settings";
 export const API_KEY_HELP_URL = "https://ai.google.dev/gemini-api/docs/api-key";
 export const API_KEY_PROVIDERS = [
   // First, because sites built with the agentify-website skill use hosted Otari by default.
   // Only hosted Otari keys start with "otk_". A self-hosted Otari's keys start with "tk-"
-  // and belong to the visitor's own Otari, so they are not matched here.
+  // and belong to the visitor's own Otari, so they are not matched here. The Connect with
+  // Otari button (otari-connect.js) gets a key without pasting.
   {
-    name: "Otari",
-    keyUrl: "https://otari.ai/dashboard#/keys",
-    router: "https://api.otari.ai/api/v1",
-    model: "alibaba/qwen3.8-flash",
-    keyPrefixes: ["otk_"],
+    name: OtariConnect.NAME,
+    keyUrl: OtariConnect.KEYS_PAGE_URL,
+    router: OtariConnect.ROUTER,
+    model: OtariConnect.MODEL,
+    keyPrefixes: [OtariConnect.KEY_PREFIX],
     accessNote: "Billing may be required",
   },
   // An otari.ai key belongs to one region, and the other region's gateway refuses it with
   // HTTP 421. EU keys start with "otk_v1_eu_" and go to the EU gateway. This entry has no
   // button, because visitors make keys for both regions on the same Otari dashboard.
   {
-    name: "Otari EU",
-    keyUrl: "https://otari.ai/dashboard#/keys",
-    router: "https://eu.api.otari.ai/api/v1",
-    model: "alibaba/qwen3.8-flash",
-    keyPrefixes: ["otk_v1_eu_"],
+    name: OtariConnect.EU_NAME,
+    keyUrl: OtariConnect.KEYS_PAGE_URL,
+    router: OtariConnect.EU_ROUTER,
+    model: OtariConnect.MODEL,
+    keyPrefixes: [OtariConnect.EU_KEY_PREFIX],
     accessNote: "Billing may be required",
     button: false,
   },
@@ -301,6 +306,9 @@ fieldset.ns-w-row{min-width:0;margin:0;padding:0;border:0}
 .ns-openrouter-key{display:flex;flex-direction:column;gap:2px}
 .ns-openrouter-key[hidden]{display:none}
 .ns-openrouter-key a{color:var(--ns-primary,#2563eb);font-weight:600}
+.ns-otari-key{display:flex;flex-direction:column;gap:2px}
+.ns-otari-key[hidden]{display:none}
+.ns-otari-key a{color:var(--ns-primary,#2563eb);font-weight:600}
 .ns-settings-advanced{border-top:1px solid var(--ns-border,#e2e2e2);margin-top:2px}
 .ns-settings-advanced>summary{padding:7px 0;color:var(--ns-muted,#666)}
 .ns-settings-advanced-body{display:flex;flex-direction:column;gap:6px;padding:2px 0 4px}
@@ -331,11 +339,13 @@ export function mountApp(root, { engine, trace, manifest, connect = null }) {
 
   const net = engine.top?.network;
   const title = manifest?.networks?.[0]?.description || net?.name || "Agent network";
-  const needsByok = !engine.mockLLM && (!engine.byokKey || engine.byokKey === "demo");
-  // The Connect button needs an https page (or this computer's own address) in its own tab.
+  const needsByok = !engine.mockLLM && !engine.publisherFundedLLM && (!engine.byokKey || engine.byokKey === "demo");
+  // The Connect buttons need an https page (or this computer's own address) in its own tab.
   const canConnect = OpenRouterConnect.isAvailable();
-  const setupMessage = canConnect
-    ? `To start, connect an AI provider. In ⚙ ${AI_MODEL_SETTINGS_LABEL}, select Connect with OpenRouter. Or choose a provider, create a key on its site, paste it into the API key field and select Save and start. Your key is saved in this browser.`
+  const canConnectOtari = OtariConnect.isAvailable();
+  const connectNames = [canConnectOtari && "Connect with Otari", canConnect && "Connect with OpenRouter"].filter(Boolean).join(" or ");
+  const setupMessage = connectNames
+    ? `To start, connect an AI provider. In ⚙ ${AI_MODEL_SETTINGS_LABEL}, select ${connectNames}. Or choose a provider, create a key on its site, paste it into the API key field and select Save and start. Your key is saved in this browser.`
     : `To start, add an AI provider key. In ⚙ ${AI_MODEL_SETTINGS_LABEL}, choose a provider, create a key on its site, and paste it into the API key field. Then select Save and start. Your key is saved in this browser.`;
   const chatSlot = root.querySelector('[data-ns-slot="chat"]');
   const agentsSlot = root.querySelector('[data-ns-slot="agents"]');
@@ -349,8 +359,9 @@ export function mountApp(root, { engine, trace, manifest, connect = null }) {
     // Where the Connect button works, it is how a visitor adds OpenRouter, so OpenRouter
     // gets no second button that opens its keys page.
     if (canConnect && provider.name === OpenRouterConnect.NAME) continue;
+    if (canConnectOtari && provider.name === OtariConnect.NAME) continue;
     providerLinksHtml += `
-        <a href="${provider.keyUrl}" target="_blank" rel="noopener noreferrer" data-ns-provider="${provider.name}" data-router="${provider.router}" data-model="${provider.model}">${provider.name} <span aria-hidden="true">↗</span><small>${provider.accessNote}</small></a>`;
+        <a href="${escapeHtml(provider.keyUrl)}" target="_blank" rel="noopener noreferrer" data-ns-provider="${escapeHtml(provider.name)}" data-router="${escapeHtml(provider.router)}" data-model="${escapeHtml(provider.model)}">${escapeHtml(provider.name)} <span aria-hidden="true">↗</span><small>${escapeHtml(provider.accessNote)}</small></a>`;
   }
   const settingsBodyHtml = `
     <div class="ns-settings-body">
@@ -369,11 +380,18 @@ export function mountApp(root, { engine, trace, manifest, connect = null }) {
         <a href="https://openrouter.ai/settings/keys" target="_blank" rel="noopener noreferrer">Manage this key on OpenRouter <span aria-hidden="true">↗</span></a>
         <div class="ns-hint">See what it spends, set a spending limit, or revoke it.</div>
       </div>
+      <div class="ns-otari-key" hidden>
+        <a href="${OtariConnect.KEYS_PAGE_URL}" target="_blank" rel="noopener noreferrer">Manage this key on Otari <span aria-hidden="true">↗</span></a>
+        <div class="ns-hint">See what it spends, or revoke it.</div>
+      </div>
       <div class="ns-start-actions">
         <button id="ns-apply">Save and start</button>
+        ${canConnectOtari ? `<span class="ns-or">or</span>
+        <button id="ns-connect-otari" type="button">Connect with Otari</button>` : ""}
         ${canConnect ? `<span class="ns-or">or</span>
         <button id="ns-connect-openrouter" type="button">Connect with OpenRouter</button>` : ""}
       </div>
+      ${canConnectOtari ? `<div class="ns-hint">Connect with Otari: sign in to otari.ai and approve a key for this site, with nothing to copy. You choose its spending limit and when it expires.</div>` : ""}
       ${canConnect ? `<div class="ns-hint">Connect with OpenRouter: sign in and approve a key for this site, with nothing to copy. It uses a free model, which has a daily limit.</div>` : ""}
       <details class="ns-settings-advanced">
         <summary>Advanced settings (optional)</summary>
@@ -400,7 +418,7 @@ export function mountApp(root, { engine, trace, manifest, connect = null }) {
 
   const headerHtml = `
     <div class="ns-header">
-      ${theme.logo ? `<img class="ns-logo" src="${theme.logo}" alt="logo">` : ""}
+      ${theme.logo ? `<img class="ns-logo" src="${escapeHtml(theme.logo)}" alt="logo">` : ""}
       <div class="ns-title">${escapeHtml(manifest?.brand || net?.name || "neuro-san-web")}</div>
       ${engine.mockLLM
         ? `<div class="ns-llmbadge mock" title="The default router is a deterministic mock — it ignores the model name. Add a real key + router in ⚙ settings.">⚠ MOCK LLM — no real model</div>`
@@ -453,9 +471,9 @@ export function mountApp(root, { engine, trace, manifest, connect = null }) {
     root.classList.add("ns-composed-app");
     root.dataset.nsLayout = "composed";
     root.dataset.dev = "false";
-    headerSlot.innerHTML = headerHtml;
-    chatSlot.innerHTML = chatHtml;
-    agentsSlot.innerHTML = agentsHtml + devHtml;
+    headerSlot.innerHTML = trustedHtml(headerHtml);
+    chatSlot.innerHTML = trustedHtml(chatHtml);
+    agentsSlot.innerHTML = trustedHtml(agentsHtml + devHtml);
     if (settingsSlot) {
       // A theme can wrap the empty slot in native <details>/<summary> to choose
       // its own gear label and drawer placement. Otherwise the runtime supplies
@@ -464,22 +482,22 @@ export function mountApp(root, { engine, trace, manifest, connect = null }) {
       if (disclosure && root.contains(disclosure)) {
         disclosure.classList.add("ns-settings");
         if (needsByok) disclosure.open = true;
-        settingsSlot.innerHTML = settingsBodyHtml;
+        settingsSlot.innerHTML = trustedHtml(settingsBodyHtml);
       } else {
-        settingsSlot.innerHTML = settingsHtml;
+        settingsSlot.innerHTML = trustedHtml(settingsHtml);
       }
     }
     if (activitySlot) {
       // Theme prompt v10 briefly exposed a separate activity rail. Keep those
       // themes valid, but retire the empty rail now that status lives in chat.
-      activitySlot.innerHTML = "";
+      activitySlot.replaceChildren();
       activitySlot.hidden = true;
     }
-    root.insertAdjacentHTML("beforeend", modalHtml);
+    root.insertAdjacentHTML("beforeend", trustedHtml(modalHtml));
     app = root;
   } else {
     root.removeAttribute("data-ns-layout");
-    root.innerHTML = `
+    root.innerHTML = trustedHtml(`
       <div class="ns-app" data-dev="false">
         ${headerHtml}
         <main class="ns-main">${chatHtml}</main>
@@ -487,7 +505,7 @@ export function mountApp(root, { engine, trace, manifest, connect = null }) {
         ${agentsHtml}
         ${modalHtml}
         ${devHtml}
-      </div>`;
+      </div>`);
     app = root.querySelector(".ns-app");
   }
 
@@ -681,7 +699,8 @@ export function mountApp(root, { engine, trace, manifest, connect = null }) {
 
   sendBtn.addEventListener("click", send);
   input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") send();
+    // Not the Enter that confirms Japanese, Chinese or Korean input (enter-key.js).
+    if (EnterKey.sendsMessage(e)) send();
   });
   newChatBtn.addEventListener("click", () => {
     engine.resetHistory();
@@ -823,7 +842,7 @@ export function mountApp(root, { engine, trace, manifest, connect = null }) {
   };
 
   function renderANodes() {
-    anodesEl.innerHTML = "";
+    anodesEl.replaceChildren();
     for (const [host, meta] of nodeMeta) {
       const st = nodeStatus.get(host) || "idle";
       const el = document.createElement("div");
@@ -832,9 +851,9 @@ export function mountApp(root, { engine, trace, manifest, connect = null }) {
       const address = meta.address
         ? `<div class="ns-aaddr">${escapeHtml(meta.address).replace(/[/_]/g, "$&<wbr>")}</div>`
         : "";
-      el.innerHTML = `<span class="ns-aicon">${escapeHtml(meta.icon)}</span>` +
+      el.innerHTML = trustedHtml(`<span class="ns-aicon">${escapeHtml(meta.icon)}</span>` +
         `<div class="ns-ameta"><div class="ns-aname">${escapeHtml(meta.label)}</div><div class="ns-arole">${escapeHtml(meta.role)}</div>${address}</div>` +
-        `<span class="ns-adot" title="${st}"></span>`;
+        `<span class="ns-adot" title="${escapeHtml(st)}"></span>`);
       el.addEventListener("click", () => openInspector(host));
       anodesEl.appendChild(el);
     }
@@ -903,11 +922,11 @@ export function mountApp(root, { engine, trace, manifest, connect = null }) {
     statusText.textContent = `Waiting for the ${info.reference} network URL…`;
     const el = document.createElement("div");
     el.className = "ns-msg bot ns-linker";
-    el.innerHTML =
+    el.innerHTML = trustedHtml(
       `<div class="ns-linker-title">Link ${escapeHtml(info.reference)}</div>` +
       `<div class="ns-linker-sub">Enter the root URL of the nsDeploy site that provides this network.</div>` +
       `<form class="ns-linker-form"><input type="url" required placeholder="https://airline.example.com" aria-label="Target nsDeploy site URL">` +
-      `<button type="submit">Link</button><button type="button" class="ghost">Cancel</button></form>`;
+      `<button type="submit">Link</button><button type="button" class="ghost">Cancel</button></form>`);
     msgs.appendChild(el);
     msgs.scrollTop = msgs.scrollHeight;
     const form = el.querySelector("form");
@@ -923,13 +942,13 @@ export function mountApp(root, { engine, trace, manifest, connect = null }) {
         nodeMeta.set(host, { label: host, role: "linked partner network", icon: "🏢", kind: "remote", origin: new URL(target).origin });
         renderANodes();
       }
-      form.innerHTML = `<div class="ns-consent-done">Linked to ${escapeHtml(host)}. Validating…</div>`;
+      form.innerHTML = trustedHtml(`<div class="ns-consent-done">Linked to ${escapeHtml(host)}. Validating…</div>`);
       statusEl.classList.add("busy");
       statusText.textContent = `Validating ${host}…`;
       resolve(target);
     }, { once: true });
     el.querySelector("button.ghost").addEventListener("click", () => {
-      form.innerHTML = `<div class="ns-consent-done">Linking cancelled.</div>`;
+      form.innerHTML = trustedHtml(`<div class="ns-consent-done">Linking cancelled.</div>`);
       statusText.textContent = "Continuing without that network…";
       resolve(null);
     }, { once: true });
@@ -947,7 +966,7 @@ export function mountApp(root, { engine, trace, manifest, connect = null }) {
     const cost = info.est?.costText ? ` (~${info.est.costText})` : "";
     const el = document.createElement("div");
     el.className = "ns-msg bot ns-consent";
-    el.innerHTML =
+    el.innerHTML = trustedHtml(
       `<div class="ns-consent-title">🔗 Contact <b>${escapeHtml(info.peerLabel)}</b> on your behalf?</div>` +
       `<div class="ns-consent-sub">${escapeHtml(info.peerOrigin)}${tokens ? " · est. " + escapeHtml(tokens) + escapeHtml(cost) : ""}</div>` +
       (info.requestText ? `<div class="ns-consent-req">“${escapeHtml(info.requestText.slice(0, 140))}”</div>` : "") +
@@ -955,14 +974,14 @@ export function mountApp(root, { engine, trace, manifest, connect = null }) {
         `<button data-d="allow">Allow</button>` +
         `<button data-d="always">Always allow</button>` +
         `<button data-d="decline" class="ghost">Decline</button>` +
-      `</div>`;
+      `</div>`);
     msgs.appendChild(el);
     msgs.scrollTop = msgs.scrollHeight;
     el.querySelectorAll("button").forEach((b) =>
       b.addEventListener("click", () => {
         const d = b.dataset.d;
         el.querySelector(".ns-consent-actions").outerHTML =
-          `<div class="ns-consent-done">${d === "decline" ? "✕ Declined" : "✓ Allowed"}</div>`;
+          trustedHtml(`<div class="ns-consent-done">${d === "decline" ? "✕ Declined" : "✓ Allowed"}</div>`);
         statusEl.classList.add("busy");
         statusText.textContent = d === "decline" ? "Skipping that partner…" : `Contacting ${info.peerLabel}…`;
         resolve(d);
@@ -980,13 +999,13 @@ export function mountApp(root, { engine, trace, manifest, connect = null }) {
     statusText.textContent = `Waiting for you to open ${label}…`;
     const el = document.createElement("div");
     el.className = "ns-msg bot ns-consent ns-action-window";
-    el.innerHTML =
+    el.innerHTML = trustedHtml(
       `<div class="ns-consent-title"><b>${escapeHtml(label)}</b> will open its own window, so you can check and finish this there.</div>` +
       `<div class="ns-consent-sub">Opens on ${escapeHtml(host)}</div>` +
       `<div class="ns-consent-actions">` +
         `<button data-d="open">Open ${escapeHtml(label)}</button>` +
         `<button data-d="cancel" class="ghost">Cancel</button>` +
-      `</div>`;
+      `</div>`);
     msgs.appendChild(el);
     msgs.scrollTop = msgs.scrollHeight;
     const finish = (text) => {
@@ -1050,14 +1069,14 @@ export function mountApp(root, { engine, trace, manifest, connect = null }) {
       if (sess) instructions = sess.network.getAgentSpec(sess.network.findFrontMan())?.instructions?.trim() || "";
     }
     const acts = trace.events.filter((ev) => ev.phase !== "update" && (ev.origin === host || ev.peerOrigin === host)).map(friendlyActivity).filter(Boolean);
-    modalCard.innerHTML =
+    modalCard.innerHTML = trustedHtml(
       `<button class="ns-modal-close" title="Close">×</button>` +
       `<h4>${escapeHtml(meta.icon)} ${escapeHtml(meta.label)}</h4>` +
       `<div class="ns-mrole">${escapeHtml(meta.role)} · ${escapeHtml(meta.address || host)}</div>` +
       `<h5>Instructions</h5>` +
       (instructions ? `<pre>${escapeHtml(instructions)}</pre>` : `<div class="ns-mrole">Loaded when first contacted.</div>`) +
       `<h5>What it did this session</h5>` +
-      (acts.length ? acts.map((a) => `<div class="ns-mact">${escapeHtml(a)}</div>`).join("") : `<div class="ns-mrole">Nothing yet.</div>`);
+      (acts.length ? acts.map((a) => `<div class="ns-mact">${escapeHtml(a)}</div>`).join("") : `<div class="ns-mrole">Nothing yet.</div>`));
     modalCard.querySelector(".ns-modal-close").addEventListener("click", closeModal);
     modal.hidden = false;
   }
@@ -1082,9 +1101,12 @@ export function mountApp(root, { engine, trace, manifest, connect = null }) {
   const keyHelpEl = root.querySelector(".ns-key-help");
   // An OpenRouter key, connected or pasted, gets a link to its settings page on OpenRouter.
   const openRouterKeyEl = root.querySelector(".ns-openrouter-key");
+  // An otari.ai key gets a link to the keys page on otari.ai.
+  const otariKeyEl = root.querySelector(".ns-otari-key");
   const refreshKeyHelp = () => {
     if (keyHelpEl) keyHelpEl.hidden = keyEl.value.trim().length > 0;
     OpenRouterConnect.refreshKeyLink(keyEl, openRouterKeyEl);
+    OtariConnect.refreshKeyLink(keyEl, otariKeyEl);
   };
   // The compiled LLM may already point at BYOK after a saved-profile upgrade.
   // New manifests identify an opt-in mock separately; retain compatibility with
@@ -1099,6 +1121,7 @@ export function mountApp(root, { engine, trace, manifest, connect = null }) {
   const inUseEl = root.querySelector("#ns-in-use");
   inUseEl.textContent = InUseLine.text({
     mock: engine.mockLLM,
+    publisherFunded: engine.publisherFundedLLM,
     key: engine.byokKey,
     router: activeRouter,
     model: engine.modelOverride,
@@ -1119,7 +1142,7 @@ export function mountApp(root, { engine, trace, manifest, connect = null }) {
   // The Model field is optional only when every agent already has a model. Otherwise it
   // is marked required, like the API key.
   if (!everyAgentHasModel) {
-    root.querySelector("#ns-model-label").innerHTML = 'Model <span aria-hidden="true">*</span>';
+    root.querySelector("#ns-model-label").innerHTML = trustedHtml('Model <span aria-hidden="true">*</span>');
     modelEl.placeholder = "Enter a model your provider supports";
     modelEl.required = true;
     modelEl.setAttribute("aria-required", "true");
@@ -1134,6 +1157,7 @@ export function mountApp(root, { engine, trace, manifest, connect = null }) {
   // does not fill in that provider's defaults again.
   let formProvider = providerForApiKey(keyEl.value);
   OpenRouterConnect.refreshKeyLink(keyEl, openRouterKeyEl);
+  OtariConnect.refreshKeyLink(keyEl, otariKeyEl);
   profileNameEl.value = selectedProfile?.name || "";
 
   const profileStorageText = canUseByokCookie()
@@ -1142,8 +1166,8 @@ export function mountApp(root, { engine, trace, manifest, connect = null }) {
 
   const profileLabel = (p) => `${p.name || guessByokProfileName(p)}${p.model ? ` (${p.model})` : ""}`;
   const refreshProfileOptions = (selectedId = profileStore.selectedId) => {
-    profileEl.innerHTML = `<option value="">Custom / unsaved</option>` +
-      profileStore.profiles.map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(profileLabel(p))}</option>`).join("");
+    profileEl.innerHTML = trustedHtml(`<option value="">Custom / unsaved</option>` +
+      profileStore.profiles.map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(profileLabel(p))}</option>`).join(""));
     profileEl.value = profileStore.profiles.some((p) => p.id === selectedId) ? selectedId : "";
     deleteProfileBtn.disabled = !profileEl.value;
   };
@@ -1223,7 +1247,9 @@ export function mountApp(root, { engine, trace, manifest, connect = null }) {
         && resolveByokRouter(routerEl.value) === resolveByokRouter(byokRouter);
       hintEl.textContent = viaThisSite
         ? "This site passes your key on to your AI provider."
-        : "Your browser sends your key directly to the Provider URL above.";
+        : !routerEl.value.trim() && hasKey && byokRouter
+          ? `Your browser sends your key directly to ${byokRouter}, this site's router for visitors' own keys.`
+          : "Your browser sends your key directly to the Provider URL above.";
     }
   };
   const applyProviderDefaults = (provider, message) => {
@@ -1237,6 +1263,8 @@ export function mountApp(root, { engine, trace, manifest, connect = null }) {
   };
   const fetchAvailableModels = async (router, key) => {
     if (!router || isMockRouter(router)) return null;
+    // The model check must not send a visitor's key to the router this site pays for.
+    if (key && isPublisherFundedRouter(manifest, router)) return null;
     try {
       const response = await fetch(`${router.replace(/\/$/, "")}/models`, {
         cache: "no-store",
@@ -1247,7 +1275,7 @@ export function mountApp(root, { engine, trace, manifest, connect = null }) {
       const models = (Array.isArray(body?.data) ? body.data : [])
         .map((item) => normalizeModelName(item?.id))
         .filter(Boolean);
-      modelOptionsEl.innerHTML = "";
+      modelOptionsEl.replaceChildren();
       for (const id of models) {
         const option = document.createElement("option");
         option.value = id;
@@ -1295,7 +1323,7 @@ export function mountApp(root, { engine, trace, manifest, connect = null }) {
     const key = keyEl.value.trim();
     const model = normalizeModelName(modelEl.value);
     modelEl.value = model;
-    if (requireActiveKey && !engine.mockLLM && (!engine.byokKey || engine.byokKey === "demo")) {
+    if (requireActiveKey && !engine.mockLLM && !engine.publisherFundedLLM && (!engine.byokKey || engine.byokKey === "demo")) {
       const message = key
         ? "Your API key is ready. Select Save and start before sending a request."
         : setupMessage;
@@ -1366,6 +1394,9 @@ export function mountApp(root, { engine, trace, manifest, connect = null }) {
       // to the mock. Then show the Provider URL and Model fields and ask for a check.
       if (formProvider) clearProviderDefaults(formProvider);
       if (byokRouter && isMockRouter(routerEl.value.trim())) routerEl.value = byokRouter;
+      // An unknown key must not go to the router this site pays for. An empty box means
+      // "use the configured default", which with a key is byok_router.
+      if (isPublisherFundedRouter(manifest, routerEl.value.trim())) routerEl.value = "";
       root.querySelector(".ns-settings-advanced").open = true;
       setProfileHint(unrecognizedKeyMessage());
     } else if (!key && needsByok) {
@@ -1401,6 +1432,10 @@ export function mountApp(root, { engine, trace, manifest, connect = null }) {
     "click",
     OpenRouterConnect.connect.bind(OpenRouterConnect, keyLabel, setProfileHint),
   );
+  root.querySelector("#ns-connect-otari")?.addEventListener(
+    "click",
+    OtariConnect.connect.bind(OtariConnect, setProfileHint),
+  );
   profileEl.addEventListener("change", () => {
     const id = profileEl.value;
     profileStore = selectByokProfile(id);
@@ -1429,7 +1464,7 @@ export function mountApp(root, { engine, trace, manifest, connect = null }) {
   });
   refreshHint();
   if (needsByok) setProfileHint(setupMessage, "warn");
-  // Report the OpenRouter sign-in that boot() finished before this panel existed.
+  // Report the OpenRouter or Otari sign-in that boot() finished before this panel existed.
   if (connect) {
     const connected = connect.status === "connected";
     setProfileHint(connect.message, connected ? "" : "warn");
@@ -1632,25 +1667,25 @@ function renderWidget(container, spec, onSubmit, turnId) {
   if (spec.description) html += `<div class="ns-w-desc">${escapeHtml(spec.description)}</div>`;
 
   if (kind === "action") {
-    card.innerHTML = html;
+    card.innerHTML = trustedHtml(html);
     const button = document.createElement("button");
     button.className = "ns-w-btn"; button.textContent = spec.label || "Review action";
     button.onclick = () => submit(button.textContent, {});
     card.append(button);
   } else if (["report", "table", "chart", "html"].includes(kind)) {
-    card.innerHTML = html;
+    card.innerHTML = trustedHtml(html);
     const body = document.createElement("div");
     renderRichComponent(body, spec);
     card.append(body);
   } else if (kind === "confirm") {
     html += `<div class="ns-w-actions"><button class="ns-w-btn" data-act="confirm">${escapeHtml(spec.confirmLabel || "Confirm")}</button><button class="ns-w-btn ghost" data-act="cancel">${escapeHtml(spec.cancelLabel || "Cancel")}</button></div>`;
-    card.innerHTML = html;
+    card.innerHTML = trustedHtml(html);
     card.querySelector('[data-act="confirm"]').addEventListener("click", () => submit(spec.confirmText || spec.confirmLabel || "Confirm", { action: "confirm" }));
     card.querySelector('[data-act="cancel"]').addEventListener("click", () => submit(spec.cancelText || "Not yet, hold off.", { action: "cancel" }));
   } else if (kind === "choice") {
     html += `<div class="ns-w-choices">` + (spec.options || []).map((o, idx) =>
       `<button class="ns-w-choice" data-idx="${idx}"><div class="ns-w-ctitle">${escapeHtml(o.title || o.value || "")}</div>${o.subtitle ? `<div class="ns-w-csub">${escapeHtml(o.subtitle)}</div>` : ""}${o.meta ? `<div class="ns-w-cmeta">${escapeHtml(o.meta)}</div>` : ""}</button>`).join("") + `</div>`;
-    card.innerHTML = html;
+    card.innerHTML = trustedHtml(html);
     card.querySelectorAll(".ns-w-choice").forEach((b) => b.addEventListener("click", () => {
       const o = (spec.options || [])[+b.dataset.idx];
       submit(`${spec.choosePrefix || "I'll go with"}: ${o.title || o.value}`, { value: o.value ?? o.title });
@@ -1658,14 +1693,14 @@ function renderWidget(container, spec, onSubmit, turnId) {
   } else if (kind === "info") {
     html += `<div class="ns-w-fields">` + Object.entries(spec.fields || {}).map(([k, v]) =>
       `<div class="ns-w-field"><span class="ns-w-fk">${escapeHtml(k)}</span><span class="ns-w-fv">${escapeHtml(String(v))}</span></div>`).join("") + `</div>`;
-    card.innerHTML = html;
+    card.innerHTML = trustedHtml(html);
   } else { // form
     const props = (spec.schema && spec.schema.properties) || {};
     const required = (spec.schema && spec.schema.required) || [];
     const entries = Object.entries(props);
     html += `<form class="ns-w-form">` + entries.map(([key, f], i) => renderField("f" + i, key, f, required.includes(key))).join("") +
       `<div class="ns-w-actions"><button type="submit" class="ns-w-btn">${escapeHtml(spec.submitLabel || "Submit")}</button></div></form>`;
-    card.innerHTML = html;
+    card.innerHTML = trustedHtml(html);
     entries.forEach(([key, field], i) => {
       const control = card.querySelector(`[data-field="f${i}"]`) || card.querySelector(`input[name="f${i}"]`);
       if (!control) return;
@@ -1717,7 +1752,7 @@ function renderNodes(el, net, activeAgents, activeOrigins = new Set()) {
 
   function box(cls, icon, label, { active = false, dot = false, title = "" } = {}) {
     return `<div class="ns-tbox ${cls}${active ? " active" : ""}"${title ? ` title="${escapeHtml(title)}"` : ""}>` +
-      `${icon ? `<span class="ns-ticon">${icon}</span>` : ""}<span>${escapeHtml(label)}</span>` +
+      `${icon ? `<span class="ns-ticon">${escapeHtml(icon)}</span>` : ""}<span>${escapeHtml(label)}</span>` +
       `${dot ? '<span class="ns-tdot"></span>' : ""}</div>`;
   }
 
@@ -1748,7 +1783,7 @@ function renderNodes(el, net, activeAgents, activeOrigins = new Set()) {
   const top = [];
   if (front) top.push(`<li>${node(front)}</li>`);
   for (const n of specByName.keys()) if (isAgent(n) && !rendered.has(n)) top.push(`<li>${node(n)}</li>`);  // orphans
-  el.innerHTML = `<ul class="ns-tree">${top.join("")}</ul>`;
+  el.innerHTML = trustedHtml(`<ul class="ns-tree">${top.join("")}</ul>`);
 }
 
 function rowLabel(ev) {
@@ -1769,10 +1804,10 @@ function rowLabel(ev) {
     case "remote_call": detail = `${escapeHtml(ev.brand || ev.network || ev.peerOrigin || "")} <span class="ns-meta">@ ${escapeHtml(ev.peerOrigin || "")} · via ${escapeHtml(ev.method || "")}</span>`; break;
     case "mcp_call": detail = `${escapeHtml(ev.method || "")} <span class="ns-meta">@ ${escapeHtml(ev.peerOrigin || "")}</span>`; break;
     case "tool_result": detail = `${escapeHtml(ev.tool || "")} <span class="ns-meta">${escapeHtml((ev.preview || "").slice(0, 80))}</span>`; break;
-    case "presentation_proposal": detail = `${escapeHtml(ev.agent || "")} <span class="ns-meta">${ev.presentation?.components?.length || 0} components</span>`; break;
+    case "presentation_proposal": detail = `${escapeHtml(ev.agent || "")} <span class="ns-meta">${Number(ev.presentation?.components?.length) || 0} components</span>`; break;
     default: detail = "";
   }
-  return `<span class="ns-tag">${tag}</span>${detail}`;
+  return `<span class="ns-tag">${escapeHtml(tag)}</span>${detail}`;
 }
 
 function detailJson(ev) {
@@ -1788,7 +1823,7 @@ function addRow(rows, ev, marker) {
   div.className = `ns-row k-${ev.kind}` + (ev.status === "error" ? " status-error" : "");
   if (ev.id) div.dataset.id = ev.id;
   const json = detailJson(ev);
-  div.innerHTML = `<div class="ns-line">${rowLabel(ev)}</div>` + (json ? `<pre style="display:none">${escapeHtml(json)}</pre>` : "");
+  div.innerHTML = trustedHtml(`<div class="ns-line">${rowLabel(ev)}</div>` + (json ? `<pre style="display:none">${escapeHtml(json)}</pre>` : ""));
   if (json) {
     div.addEventListener("click", () => {
       const pre = div.querySelector("pre");
@@ -1807,7 +1842,7 @@ function updateRow(rows, ev) {
   if (ev.status === "error") existing.classList.add("status-error");
   const ms = ev.durationMs != null ? ` <span class="ns-meta">· ${Math.round(ev.durationMs)}ms</span>` : "";
   const err = ev.error ? ` <span class="ns-meta" style="color:#dc2626">· ${escapeHtml(ev.error)}</span>` : "";
-  existing.querySelector(".ns-line").innerHTML = rowLabel(ev) + ms + err;
+  existing.querySelector(".ns-line").innerHTML = trustedHtml(rowLabel(ev) + ms + err);
   const json = detailJson(ev);
   if (json) {
     let pre = existing.querySelector("pre");

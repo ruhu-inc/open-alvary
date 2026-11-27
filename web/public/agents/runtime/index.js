@@ -17,11 +17,13 @@ import { TraceBus } from "./trace.js";
 import { mountApp } from "./ui.js";
 import { getSelectedByokProfile, loadTabByokSetup } from "./byok.js";
 import { OpenRouterConnect } from "./openrouter-connect.js";
+import { OtariConnect } from "./otari-connect.js";
 
 export async function boot(rootSelector = "#app", opts = {}) {
-  // Finish an OpenRouter sign-in first. It takes the one-time code out of the address
-  // and saves the new key, so the URL and the setup read below are the final ones.
-  const connect = await OpenRouterConnect.finish();
+  // Finish an OpenRouter or Otari sign-in first. It takes the one-time code out of the
+  // address and saves the new key, so the URL and the setup read below are the final ones.
+  // Each finishes only a sign-in this tab started with it.
+  const connect = (await OpenRouterConnect.finish()) || (await OtariConnect.finish());
   const root = typeof rootSelector === "string" ? document.querySelector(rootSelector) : rootSelector;
   if (!root) throw new Error("Agent widget mount not found.");
   root.setAttribute("data-nsdeploy-ui", "");

@@ -27,6 +27,8 @@ import {
 import { renderReceiptPanel } from "./receipt-panel.js";
 
 const STORAGE_KEY = "oa_law_check_thread_v2";
+// The most steps listed under one answer; a longer turn is cut at this many.
+const MAX_STEPS = 40;
 const OLD_STORAGE_KEY = "oa_law_check_receipts_v1";
 const MAX_SAVED_ITEMS = 60;
 const MAX_QUESTION_LEN = 4000;
@@ -326,6 +328,59 @@ export function statusLineForEvent(event) {
   }
 }
 
+// The agents and tools of Open Alvary's own two networks, with the words the page uses for
+// them. Only these names are ever shown: any other name comes from outside and is not.
+const KNOWN_AGENTS = {
+  law_desk: "Law desk",
+  finder: "Finder",
+  verifier: "Verifier",
+  law_check: "Law check",
+  locator: "Locator",
+};
+const KNOWN_TOOLS = {
+  search_catalogue: "searched the published laws (search_catalogue)",
+  resolve_citation: "looked up the section cited (resolve_citation)",
+  get_anchor: "read the section's exact words (get_anchor)",
+  retrieve_evidence: "found matching passages (retrieve_evidence)",
+  check_claim: "sent a quote to Open Alvary's check, where code compares the words and signs a receipt (check_claim)",
+  website_open_section: "added a link to the section on this page",
+  website_show_receipt: "pointed to a result card on this page",
+};
+
+function knownAgent(name) {
+  return KNOWN_AGENTS[String(name || "").toLowerCase()] || "";
+}
+
+function knownTool(name) {
+  return KNOWN_TOOLS[String(name || "").toLowerCase().replace(/^mcp_/, "")] || "";
+}
+
+/**
+ * One line for the list of steps under an AI answer, or "" for an event that is not a step.
+ * Names come only from Open Alvary's own networks (KNOWN_AGENTS, KNOWN_TOOLS); anything else
+ * is described without its name, so no model or peer text reaches the page.
+ */
+export function stepLineForEvent(event) {
+  const who = knownAgent(event?.source?.agent) || "An agent";
+  const kind = event?.tool?.kind;
+  switch (event?.type) {
+    case "tool.started": {
+      if (kind === "agent") return `${who} asked ${knownAgent(event.tool?.name) || "another agent"} for help.`;
+      if (kind === "remote network" || kind === "linked network") return `${who} contacted another agent site, after asking you.`;
+      const tool = knownTool(event.tool?.name);
+      return tool ? `${who} ${tool}.` : `${who} used a tool.`;
+    }
+    case "tool.failed": {
+      const name = knownAgent(event.tool?.name) || (knownTool(event.tool?.name) ? String(event.tool.name).replace(/^mcp_/, "") : "");
+      return `${name ? `The step ${name}` : "A step"} did not finish.`;
+    }
+    case "agent.failed":
+      return `${who} could not finish.`;
+    default:
+      return "";
+  }
+}
+
 function appendInline(parent, text) {
   // **bold** and `code` only; everything else is plain text.
   const pattern = /(\*\*[^*\n]+\*\*|`[^`\n]+`)/g;
@@ -570,9 +625,12 @@ class LawCheckController {
     this.openAgentsView = params.get("dev") === "1";
 
     if (params.has("code")) {
-      // Returning from OpenRouter: the runtime finishes that sign-in itself, so it starts even with no key yet.
+      // Returning from Otari or OpenRouter. The page finishes the sign-in here, so it can say
+      // how it went; the runtime then finds nothing left to finish and starts on the new key.
       this._setMode("ask", { updateHash: false });
-      this._ensureRuntimeLoaded().then(() => this._refreshProviderUi?.());
+      this._finishSignIn()
+        .then(() => this._ensureRuntimeLoaded())
+        .then(() => this._refreshProviderUi?.());
     } else if (hash === "ask") {
       this._setMode("ask", { updateHash: false });
     } else if (hash === "check" || hash === "recheck" || hash === "verify") {
@@ -581,6 +639,25 @@ class LawCheckController {
       // No address given: Ask AI comes first (owner, 2026-11-25); Check a quote is one click away.
       this._setMode("ask", { updateHash: false, chosen: false });
     }
+  }
+
+  async _finishSignIn() {
+    let outcome = null;
+    try {
+      const [{ OpenRouterConnect }, { OtariConnect }] = await Promise.all([
+        import("./runtime/openrouter-connect.js"),
+        import("./runtime/otari-connect.js"),
+      ]);
+      outcome = (await OpenRouterConnect.finish()) || (await OtariConnect.finish());
+    } catch {
+      outcome = { status: "failed", message: "The sign-in could not be finished. Paste a key in AI key settings instead." };
+    }
+    if (!outcome) return;
+    // The runtime's messages point at its own settings panel, which this page does not show.
+    const message = String(outcome.message || "").replace(/⚙ AI model settings/g, "AI key settings");
+    this._appendNotice(message, outcome.status === "connected" ? "grey" : "amber", {
+      actions: outcome.status === "connected" ? [] : [{ label: "AI key settings", onClick: () => $("open-provider-modal")?.click() }],
+    });
   }
 
   _bindConnectivity() {
@@ -832,15 +909,16 @@ class LawCheckController {
     };
     $("try-true-quote")?.addEventListener("click", () => runExample(false));
     $("try-altered-quote")?.addEventListener("click", () => runExample(true));
-    $("try-question")?.addEventListener("click", () => {
-      const rec = this.records.find((r) => r.example) || this.records[0];
-      this._setMode("ask");
-      input.value = rec
-        ? `What does ${rec.title}${rec.example?.section ? `, ${rec.example.section}` : ""} say? Quote the words.`
-        : "What does the Freedom of Information Act 2011 say about who may ask for information? Quote the words.";
-      input.focus();
-      form.requestSubmit();
-    });
+    // The example questions. With no key yet, sending one shows how to add a key.
+    for (const id of ["try-question", "try-question-2"]) {
+      $(id)?.addEventListener("click", (event) => {
+        this._setMode("ask");
+        input.value = event.currentTarget.dataset.question
+          || "What does the Freedom of Information Act 2011 say about who may ask for information? Quote the words.";
+        input.focus();
+        form.requestSubmit();
+      });
+    }
   }
 
   _claimDefaults(citation) {
@@ -1063,41 +1141,74 @@ class LawCheckController {
   }
 
   _bindProviderModal() {
+    // Suggested models, read from OpenRouter's public model list on 2026-11-27: each provider's
+    // current tool-calling models, the low-cost one first. "Show all models" asks the chosen
+    // provider for its own full list, so a newer model can always be picked or typed.
     const PRESETS = {
-      openai: {
-        name: "OpenAI",
-        router: "https://api.openai.com/v1",
-        model: "gpt-4o-mini",
-        keyUrl: "https://platform.openai.com/api-keys",
-        keyLabel: "OpenAI",
-      },
-      anthropic: {
-        name: "Claude (Anthropic)",
-        router: "https://api.anthropic.com/v1",
-        model: "claude-sonnet-4-6",
-        keyUrl: "https://console.anthropic.com/settings/keys",
-        keyLabel: "Anthropic Console",
-      },
-      gemini: {
-        name: "Google Gemini",
-        router: "https://generativelanguage.googleapis.com/v1beta/openai",
-        model: "gemini-2.5-flash",
-        keyUrl: "https://aistudio.google.com/apikey",
-        keyLabel: "Google AI Studio",
+      otari: {
+        name: "Otari",
+        router: "https://api.otari.ai/api/v1",
+        model: "alibaba/qwen3.8-flash",
+        keyUrl: "https://otari.ai/dashboard#/keys",
+        keyLabel: "Otari",
+        connect: "otari",
+        models: [{ id: "alibaba/qwen3.8-flash", label: "Qwen3.8 Flash · suggested" }],
       },
       openrouter: {
         name: "OpenRouter",
         router: "https://openrouter.ai/api/v1",
-        model: "openai/gpt-4o-mini",
+        model: "qwen/qwen3.8-flash",
         keyUrl: "https://openrouter.ai/settings/keys",
         keyLabel: "OpenRouter",
+        connect: "openrouter",
+        models: [
+          { id: "qwen/qwen3.8-flash", label: "Qwen3.8 Flash" },
+          { id: "deepseek/deepseek-v4.1-flash", label: "DeepSeek V4.1 Flash" },
+          { id: "google/gemini-3.8-flash", label: "Gemini 3.8 Flash" },
+          { id: "openai/gpt-6.2-sol", label: "GPT-6.2 Sol" },
+          { id: "anthropic/claude-sonnet-5.5", label: "Claude Sonnet 5.5" },
+          { id: "moonshotai/kimi-k3.1-pro", label: "Kimi K3.1 Pro" },
+          { id: "google/gemma-4-31b-it:free", label: "Gemma 4 31B · free" },
+        ],
       },
-      otari: {
-        name: "Otari",
-        router: "https://api.otari.ai/api/v1",
-        model: "openai/gpt-4o-mini",
-        keyUrl: "https://otari.ai/dashboard#/keys",
-        keyLabel: "Otari",
+      gemini: {
+        name: "Google Gemini",
+        router: "https://generativelanguage.googleapis.com/v1beta/openai",
+        model: "models/gemini-3.8-flash",
+        keyUrl: "https://aistudio.google.com/apikey",
+        keyLabel: "Google AI Studio",
+        models: [
+          { id: "models/gemini-3.8-flash", label: "Gemini 3.8 Flash" },
+          { id: "models/gemini-3.5-flash-lite", label: "Gemini 3.5 Flash-Lite" },
+          { id: "models/gemini-4-hydrogen", label: "Gemini 4 Hydrogen" },
+          { id: "models/gemini-4-neon", label: "Gemini 4 Neon" },
+        ],
+      },
+      openai: {
+        name: "OpenAI",
+        router: "https://api.openai.com/v1",
+        model: "gpt-6.2-sol",
+        keyUrl: "https://platform.openai.com/api-keys",
+        keyLabel: "OpenAI",
+        models: [
+          { id: "gpt-6-luna", label: "GPT-6 Luna · low cost" },
+          { id: "gpt-6.1-terra", label: "GPT-6.1 Terra" },
+          { id: "gpt-6.2-sol", label: "GPT-6.2 Sol" },
+          { id: "gpt-6.2-astra", label: "GPT-6.2 Astra" },
+        ],
+      },
+      anthropic: {
+        name: "Claude (Anthropic)",
+        router: "https://api.anthropic.com/v1",
+        model: "claude-sonnet-5-5",
+        keyUrl: "https://console.anthropic.com/settings/keys",
+        keyLabel: "Anthropic Console",
+        models: [
+          { id: "claude-haiku-5-5", label: "Claude Haiku 5.5 · low cost" },
+          { id: "claude-sonnet-5-5", label: "Claude Sonnet 5.5" },
+          { id: "claude-opus-5-5", label: "Claude Opus 5.5" },
+          { id: "claude-fable-5-2", label: "Claude Fable 5.2" },
+        ],
       },
       custom: {
         name: "Custom provider",
@@ -1105,8 +1216,10 @@ class LawCheckController {
         model: "",
         keyUrl: "",
         keyLabel: "",
+        models: [],
       },
     };
+    const DEFAULT_PRESET = "otari";
 
     const dialog = document.getElementById("provider-dialog");
     const openBtn = document.getElementById("open-provider-modal");
@@ -1126,7 +1239,15 @@ class LawCheckController {
     const pillDot = document.getElementById("provider-dot");
     if (!dialog || !form) return;
 
-    let activePreset = "openrouter";
+    const modelChoices = document.getElementById("provider-model-choices");
+    const modelOptions = document.getElementById("provider-model-options");
+    const modelsBtn = document.getElementById("provider-models-btn");
+    const modelsStatus = document.getElementById("provider-models-status");
+    const connectBox = document.getElementById("provider-connect");
+    const connectBtn = document.getElementById("provider-connect-btn");
+    const connectStatus = document.getElementById("provider-connect-status");
+
+    let activePreset = DEFAULT_PRESET;
     let savedKey = "";
     let dirty = false;
     let byokMod = null;
@@ -1142,11 +1263,47 @@ class LawCheckController {
       if (r.includes("generativelanguage.googleapis.com")) return "gemini";
       if (r.includes("openrouter")) return "openrouter";
       if (r.includes("otari")) return "otari";
-      return router ? "custom" : "openai";
+      return router ? "custom" : DEFAULT_PRESET;
     };
 
+    // Every model a provider button can fill in. Switching provider replaces one of these, but
+    // never a model the visitor typed.
+    const suggestedIds = new Set(
+      Object.values(PRESETS).flatMap((preset) => [preset.model, ...preset.models.map((m) => m.id)]).filter(Boolean),
+    );
+
+    const syncModelChoices = () => {
+      const current = modelInput.value.trim();
+      for (const btn of modelChoices?.querySelectorAll("button") || []) {
+        btn.setAttribute("aria-pressed", btn.dataset.model === current ? "true" : "false");
+      }
+    };
+
+    const renderModelChoices = (info) => {
+      if (!modelChoices) return;
+      modelChoices.replaceChildren();
+      for (const choice of info.models) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "lc-model-chip";
+        btn.dataset.model = choice.id;
+        btn.textContent = choice.label;
+        btn.title = choice.id;
+        btn.addEventListener("click", () => {
+          modelInput.value = choice.id;
+          modelInput.dispatchEvent(new Event("input", { bubbles: true }));
+          this._setFieldError(modelInput, null);
+        });
+        modelChoices.appendChild(btn);
+      }
+      modelChoices.hidden = info.models.length === 0;
+      syncModelChoices();
+    };
+
+    const connectAvailable = () => Boolean(globalThis.isSecureContext && globalThis.crypto?.subtle && globalThis.top === globalThis.self);
+
     const selectPreset = (presetKey, { keepValues = false } = {}) => {
-      activePreset = PRESETS[presetKey] ? presetKey : "openrouter";
+      activePreset = PRESETS[presetKey] ? presetKey : DEFAULT_PRESET;
       const info = PRESETS[activePreset];
       for (const btn of presetBtns) {
         btn.setAttribute("aria-pressed", btn.dataset.preset === activePreset ? "true" : "false");
@@ -1156,10 +1313,22 @@ class LawCheckController {
       if (!keepValues) {
         // Custom starts with an empty address, never the previous provider's.
         urlInput.value = info.router;
-        // A model the visitor typed is kept; only a provider's own default is swapped.
-        const defaults = Object.values(PRESETS).map((preset) => preset.model).filter(Boolean);
+        // A model the visitor typed is kept; only a suggested model is swapped.
         const current = modelInput.value.trim();
-        if (!current || defaults.includes(current)) modelInput.value = info.model;
+        if (!current || suggestedIds.has(current)) modelInput.value = info.model;
+      }
+      renderModelChoices(info);
+      // The full list belongs to one provider; a new provider starts without it.
+      modelOptions?.replaceChildren();
+      if (modelsStatus) modelsStatus.textContent = "";
+      if (modelsBtn) modelsBtn.hidden = activePreset === "custom" && !urlInput.value.trim();
+      if (connectBox) {
+        connectBox.hidden = !info.connect || !connectAvailable();
+        if (connectBtn) connectBtn.textContent = `Connect with ${info.connect === "openrouter" ? "OpenRouter" : "Otari"}`;
+        if (connectStatus) {
+          connectStatus.hidden = true;
+          connectStatus.textContent = "";
+        }
       }
       if (keyHint) {
         keyHint.replaceChildren();
@@ -1177,6 +1346,84 @@ class LawCheckController {
       }
     };
 
+    modelInput.addEventListener("input", syncModelChoices);
+
+    // "Connect with Otari" and "Connect with OpenRouter": the runtime's own sign-ins. The
+    // provider sends the visitor back here, and the page finishes the sign-in as it loads.
+    connectBtn?.addEventListener("click", async () => {
+      const info = PRESETS[activePreset];
+      const report = (text, tone) => {
+        if (!connectStatus) return;
+        connectStatus.textContent = text;
+        connectStatus.dataset.tone = tone || "";
+        connectStatus.hidden = false;
+      };
+      try {
+        if (info.connect === "openrouter") {
+          const { OpenRouterConnect } = await import("./runtime/openrouter-connect.js");
+          await OpenRouterConnect.connect(OpenRouterConnect.keyLabel("Open Alvary Law check"), report);
+        } else if (info.connect === "otari") {
+          const { OtariConnect } = await import("./runtime/otari-connect.js");
+          await OtariConnect.connect(report);
+        }
+      } catch {
+        report("The sign-in could not start. Paste a key below instead.", "warn");
+      }
+    });
+
+    // Ask the chosen provider for every model it offers. The key goes only to that provider,
+    // as it does for each question.
+    const listModels = async () => {
+      const info = PRESETS[activePreset];
+      const router = (activePreset === "custom" ? urlInput.value.trim() : info.router).replace(/\/$/, "");
+      const key = keyInput.value.trim() || savedKey;
+      if (!router || !/^https:\/\//i.test(router)) {
+        modelsStatus.textContent = "Enter the provider's https:// address first.";
+        return;
+      }
+      // OpenRouter lists its models to anyone; the others need the key.
+      if (!key && activePreset !== "openrouter") {
+        modelsStatus.textContent = "Paste your key first: the provider lists its models only to its own customers.";
+        keyInput.focus();
+        return;
+      }
+      const headers = {};
+      if (activePreset === "anthropic") {
+        headers["x-api-key"] = key;
+        headers["anthropic-version"] = "2023-06-01";
+        headers["anthropic-dangerous-direct-browser-access"] = "true";
+      } else if (key) {
+        headers.Authorization = `Bearer ${key}`;
+      }
+      modelsBtn.disabled = true;
+      modelsStatus.textContent = "Asking the provider for its models…";
+      try {
+        const response = await fetch(`${router}/models`, { headers, cache: "no-store", credentials: "omit" });
+        if (!response.ok) throw new Error(String(response.status));
+        const body = await response.json();
+        const list = Array.isArray(body?.data) ? body.data : Array.isArray(body?.models) ? body.models : [];
+        const ids = [...new Set(list.map((m) => String(m?.id || m?.name || "").trim()).filter(Boolean))].sort();
+        modelOptions.replaceChildren();
+        for (const id of ids) {
+          const option = document.createElement("option");
+          option.value = id;
+          modelOptions.appendChild(option);
+        }
+        modelsStatus.textContent = ids.length
+          ? `${ids.length} models listed. Type in the Model field to search them.`
+          : "The provider listed no models. Type the model name instead.";
+        if (ids.length) modelInput.focus();
+      } catch {
+        modelsStatus.textContent = "The provider did not list its models to this page. Type the model name instead.";
+      } finally {
+        modelsBtn.disabled = false;
+      }
+    };
+    modelsBtn?.addEventListener("click", listModels);
+    urlInput.addEventListener("input", () => {
+      if (modelsBtn && activePreset === "custom") modelsBtn.hidden = !urlInput.value.trim();
+    });
+
     const refreshProviderUi = async () => {
       try {
         const byok = await loadByok();
@@ -1192,8 +1439,6 @@ class LawCheckController {
           pillDot.classList.toggle("is-connected", hasKey);
         }
         this.providerName = hasKey ? profile.name || "your AI provider" : "";
-        const tryQuestion = document.getElementById("try-question");
-        if (tryQuestion) tryQuestion.hidden = !hasKey;
         // A visitor who already saved a key and gave no address starts on Ask AI.
         if (hasKey && !this.modeChosen && this.mode !== "ask") {
           this._setMode("ask", { updateHash: false, chosen: false });
@@ -1237,6 +1482,7 @@ class LawCheckController {
         }
         modelInput.value = profile.model || PRESETS[pKey].model;
         urlInput.value = profile.router || PRESETS[pKey].router;
+        syncModelChoices();
       } else {
         savedKey = "";
         keyInput.required = true;
@@ -1247,7 +1493,7 @@ class LawCheckController {
           keyInput.setAttribute("aria-describedby", "provider-key-hint");
         }
         modelInput.value = "";
-        selectPreset("openai");
+        selectPreset(DEFAULT_PRESET);
       }
       resetKeyVisibility();
       dirty = false;
@@ -1430,7 +1676,7 @@ class LawCheckController {
     return li;
   }
 
-  _appendAi(text, summary, { save = true, reveal = true } = {}) {
+  _appendAi(text, summary, { save = true, reveal = true, steps = [] } = {}) {
     const li = document.createElement("li");
     li.className = "lc-msg lc-msg-ai";
     const label = document.createElement("p");
@@ -1447,8 +1693,24 @@ class LawCheckController {
       foot.textContent = summary.text;
       li.appendChild(foot);
     }
+    const shown = Array.isArray(steps) ? steps.filter((line) => typeof line === "string").slice(0, MAX_STEPS) : [];
+    if (shown.length) {
+      // The agents' work, step by step, so a person can see who did what before the answer.
+      const details = document.createElement("details");
+      details.className = "lc-steps";
+      const summaryEl = document.createElement("summary");
+      summaryEl.textContent = `How the agents worked: ${shown.length} ${shown.length === 1 ? "step" : "steps"}`;
+      const list = document.createElement("ol");
+      for (const line of shown) {
+        const item = document.createElement("li");
+        item.textContent = line;
+        list.appendChild(item);
+      }
+      details.append(summaryEl, list);
+      li.appendChild(details);
+    }
     this._appendItem(li, { reveal });
-    if (save) this._save({ t: "ai", text: shorten(text, 12000), summary: summary || null });
+    if (save) this._save({ t: "ai", text: shorten(text, 12000), summary: summary || null, steps: shown });
     return li;
   }
 
@@ -1672,7 +1934,7 @@ class LawCheckController {
         this._appendUser(item, { save: false, reveal: false });
         kept.push(item);
       } else if (item.t === "ai" && typeof item.text === "string") {
-        this._appendAi(item.text, item.summary, { save: false, reveal: false });
+        this._appendAi(item.text, item.summary, { save: false, reveal: false, steps: item.steps });
         kept.push(item);
       } else if (item.t === "divider" && typeof item.text === "string") {
         this._appendDivider(item.text, { save: false, reveal: false });
@@ -2048,6 +2310,9 @@ class LawCheckController {
           agents.hidden = false;
           if (this.openAgentsView) agents.open = true;
         }
+        // The runtime's own view of the agents and its trace, empty until it has started.
+        const app = $("agent-app");
+        if (app) app.hidden = false;
         return true;
       } catch {
         return false;
@@ -2095,20 +2360,26 @@ class LawCheckController {
         return;
       }
       let result = null;
+      const steps = [];
       for await (const event of this.runtime.engine.streamTurn(text, {})) {
         if (event.type === "turn.completed") {
           result = event.result;
           continue;
         }
         if (event.visibility === "developer" || event.type === "agent.output.delta") continue;
-        status.update(statusLineForEvent(event));
+        const step = stepLineForEvent(event);
+        if (step && steps.length < MAX_STEPS) steps.push(step);
+        const line = statusLineForEvent(event);
+        const who = KNOWN_AGENTS[String(event.source?.agent || "").toLowerCase()];
+        if (line) status.update(who ? `${who}: ${line}` : line);
       }
+      turn.steps = steps;
       if (!result) throw new Error("The turn ended without an answer.");
       // Every receipt the agents fetched is verified and drawn before the answer is shown under them.
       await Promise.allSettled(this.pendingAgentWork);
       status.remove();
       const answer = cleanAnswerText(result.text) || "The AI gave no written answer.";
-      this._appendAi(answer, this._answerSummary(turn));
+      this._appendAi(answer, this._answerSummary(turn), { steps: turn.steps });
       this._announce(
         turn.checked > 0
           ? `Answer ready. ${turn.checked} ${turn.checked === 1 ? "quote" : "quotes"} checked: ${turn.found} found, ${turn.notFound} not found.`

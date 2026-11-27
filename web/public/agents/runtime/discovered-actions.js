@@ -1,6 +1,8 @@
 // Static, publisher-approved HTTP descriptions. Never evaluate website/model code.
+// Changed by agentic-web. See README.md in this folder for what changed.
 import { cloneData, validateData } from "./actions.js";
 import { sha256Hex } from "./web-crypto.js";
+import { trustedHtml } from "./trusted-types.js";
 
 function url(value) {
   const u = new URL(value);
@@ -40,10 +42,12 @@ async function formFingerprint(form) {
 async function formRequest(request, args, signal) {
   const response = await fetch(url(request.page), options(signal));
   if (!response.ok) throw new Error(`Cannot refresh source form: HTTP ${response.status}. No submission sent.`);
-  const doc = new DOMParser().parseFromString(await read(response, 2_000_000), "text/html");
+  const doc = new DOMParser().parseFromString(trustedHtml(await read(response, 2_000_000)), "text/html");
   const source = doc.forms[request.index];
   if (!source || await formFingerprint(source) !== request.fingerprint) throw new Error("Source form changed. Rebuild with --action-refresh and review it. No submission sent.");
-  const form = document.importNode(source, true);
+  // Fill a copy that stays in the parsed page, where nothing loads or runs. A copy in
+  // the live page would load the form's images and run their event handlers.
+  const form = source.cloneNode(true);
   for (const node of form.querySelectorAll("input,textarea,select")) {
     if (!node.name || node.disabled) continue;
     const value = args[node.name];
@@ -95,7 +99,7 @@ function evidence(text, contentType) {
     } catch { return { note: "Response declared JSON but could not be parsed." }; }
   }
   if (contentType.includes("html")) {
-    const doc = new DOMParser().parseFromString(text, "text/html");
+    const doc = new DOMParser().parseFromString(trustedHtml(text), "text/html");
     doc.querySelectorAll("script,style,form,iframe,object").forEach(n => n.remove());
     return doc.body.textContent.trim().slice(0, 16000);
   }

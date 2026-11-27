@@ -1,7 +1,10 @@
 // sandbox.js — host side of the coded-tool sandbox (the ToolSandbox intrinsic).
+// Changed by agentic-web. See README.md in this folder for what changed.
 //
 // Spawns the worker (same-origin as the page, so it is trusted host glue) and
 // brokers requests to it. The worker is where untrusted tool code actually runs.
+
+import { trustedScriptUrl } from "./trusted-types.js";
 
 export class ToolSandbox {
   constructor({ workerUrl, trace }) {
@@ -32,7 +35,7 @@ export class ToolSandbox {
 
   _ensure() {
     if (this.worker) return;
-    this.worker = new Worker(this.workerUrl, { type: "module" });
+    this.worker = new Worker(trustedScriptUrl(this.workerUrl), { type: "module" });
     this.worker.onmessage = (e) => {
       const { id, kind, ok, result, slyData, error, progress, message } = e.data;
       const p = this.pending.get(id);
