@@ -40,7 +40,7 @@ On a paid or approved plan, owners and admins also confirm a second factor here.
 
 `https://api.open.alvary.ai/mcp` is a stateless Streamable HTTP endpoint that accepts `POST` only (`GET` and `DELETE` return `405 Method Not Allowed` with `Allow: POST`).
 
-- **MCP `2026-07-28`**: Supports unauthenticated `server/discover` for capability discovery, requires matching `MCP-Protocol-Version: 2026-07-28`, `Mcp-Method` and (on `tools/call`) `Mcp-Name` headers plus `params._meta`, and returns `resultType: "complete"` with a short summary in `content[0].text` and typed JSON in `structuredContent`.
+- **MCP `2026-07-28`**: Supports unauthenticated `server/discover` for capability discovery, requires matching `MCP-Protocol-Version: 2026-07-28`, `Mcp-Method` and (on `tools/call`) `Mcp-Name` headers plus `params._meta`, and returns `resultType: "complete"` with serialized JSON in `content[0].text` and typed JSON in `structuredContent`.
 - **MCP `2025-06-18` (and `2025-03-26` compatibility)**: Negotiates with `initialize` and returns the JSON payload in `content[0].text`.
 
 For request headers, error codes, `server/discover` and all thirteen tool definitions, see [MCP tools](/docs/api/mcp).

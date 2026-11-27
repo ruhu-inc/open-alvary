@@ -419,7 +419,7 @@ def test_output_schemas_validate_all_11_sqlite_tools_and_2026_error_envelopes(st
         result = resp.json()["result"]
         assert result["resultType"] == "complete", tool_name
         assert result["isError"] is False, (tool_name, result)
-        assert len(result["content"][0]["text"].encode("utf-8")) <= 2048
+        assert json.loads(result["content"][0]["text"]) == result["structuredContent"]
         jsonschema.Draft202012Validator(OUTPUT_SCHEMAS[tool_name]).validate(result["structuredContent"])
 
     # Empty scoped searches also validate against OUTPUT_SCHEMAS (with scoped notice populated).

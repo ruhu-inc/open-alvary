@@ -1841,7 +1841,7 @@ def create_router(
                     id_,
                     {
                         "resultType": "complete",
-                        "content": [{"type": "text", "text": _summary_text(params["name"], payload)}],
+                        "content": [{"type": "text", "text": json.dumps(payload, ensure_ascii=False)}],
                         "structuredContent": payload,
                         "isError": False,
                     },
