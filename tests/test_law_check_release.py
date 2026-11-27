@@ -1,5 +1,5 @@
-"""What Law check needs to be released: the plan's record list agrees with the list the page shows, and the
-release script writes a limits file the service can load."""
+"""What Law check needs to be released: the plan covers every published text, and the release script writes a
+limits file the service can load."""
 
 import json
 from datetime import UTC, datetime, timedelta
@@ -20,18 +20,13 @@ def _law_check_plan() -> dict:
     return plan
 
 
-def test_the_plans_record_list_is_the_list_the_page_shows():
-    """The plan row comes from accounts/tiers.json (scripts.seed) and nothing else fills its list: with
-    `[]` every check answered `unavailable` while the page listed three records as covered."""
-    listed = _law_check_plan()["allowance"]["source_ids"]
-    shown = [
-        r["source_id"] for r in json.loads((ROOT / "web/public/agents/records.json").read_text())["records"]
-    ]
-    assert listed and len(set(listed)) == len(listed)
-    assert sorted(listed) == sorted(shown)
-    # Each is a record of the catalogue, under that id.
-    held = {s["id"] for s in json.loads((ROOT / "ingestion/catalogue/ng.json").read_text())["sources"]}
-    assert set(listed) <= held
+def test_the_plan_covers_every_published_text():
+    """Owner, 2026-11-27: Law check works for every text Open Alvary publishes, as a lasting feature of the
+    site. The plan names no record list (`source_ids`), so the keyed MCP serves Law check whatever the
+    public site serves; records.json holds only the page's worked examples."""
+    assert "source_ids" not in _law_check_plan()["allowance"]
+    examples = json.loads((ROOT / "web/public/agents/records.json").read_text())["records"]
+    assert examples and all(r.get("example") for r in examples)
 
 
 def test_the_plan_sets_what_the_server_part_relies_on():

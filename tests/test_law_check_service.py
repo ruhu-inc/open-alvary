@@ -811,7 +811,8 @@ def test_refusals_are_in_law_checks_own_words(cleared, store):
     missing = _call(client, "get_anchor", {"anchor_id": "no-such-part"}).json()["result"]
     assert missing["structuredContent"] == {"code": "unavailable"}
     assert missing["content"][0]["text"] == (
-        "unavailable: Law check does not cover this record. See https://open.alvary.ai/agents/records.json"
+        "unavailable: Open Alvary does not publish this text, or this part of it. "
+        "The published texts are listed at https://open.alvary.ai/browse"
     )
 
     def inner(code, text, **structured):

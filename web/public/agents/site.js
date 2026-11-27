@@ -302,6 +302,22 @@ export function cleanAnswerText(raw) {
   return text;
 }
 
+/** "A", "A and B", "A, B and C". */
+export function listInWords(names) {
+  if (names.length <= 1) return names.join("");
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+const SCOPE_CODE = /^[a-z]{2,3}(?:[-_][a-z0-9]{1,8})*$/i;
+
+/** The jurisdiction and language a check may send: each only when it is a well-formed code. */
+export function pickClaimScope(jurisdiction, language) {
+  const scope = {};
+  if (typeof jurisdiction === "string" && SCOPE_CODE.test(jurisdiction)) scope.jurisdiction = jurisdiction.toLowerCase();
+  if (typeof language === "string" && SCOPE_CODE.test(language)) scope.language = language.toLowerCase();
+  return scope;
+}
+
 /** A fixed line for each step of a turn. Tool and section names are model text, so none is shown. */
 export function statusLineForEvent(event) {
   const name = String(event?.tool?.name || "").toLowerCase();
@@ -437,6 +453,9 @@ function shorten(text, max) {
 class LawCheckController {
   constructor() {
     this.records = [];
+    // Each published law the catalogue search has suggested, by title, with its country, so a check
+    // names the law's own country, never one assumed.
+    this.lawInfo = new Map();
     this.jwks = null;
     this.items = []; // what the thread holds, as saved in the tab: user, ai, result, divider
     this.cardByReceiptId = new Map();
@@ -674,10 +693,7 @@ class LawCheckController {
     document.addEventListener("oa-check-alternative", (event) => {
       const { alternative, claim } = event.detail || {};
       if (!alternative) return;
-      const nextClaim = {
-        jurisdiction: claim?.jurisdiction || "ng",
-        language: claim?.language || "en",
-      };
+      const nextClaim = pickClaimScope(claim?.jurisdiction, claim?.language);
       if (alternative.anchor_id) {
         nextClaim.anchor_id = alternative.anchor_id;
       } else {
@@ -704,7 +720,7 @@ class LawCheckController {
 
     // How many of Law check's laws have their text published now, from the site's own record answers
     // (has_full_text): the list names the laws Law check may check, not whether their text is out yet.
-    this._countPublished(this.records);
+    this._countPublished();
 
     if (datalist) {
       datalist.replaceChildren();
@@ -716,24 +732,25 @@ class LawCheckController {
     }
   }
 
-  async _countPublished(records) {
+  async _countPublished() {
+    // Law check covers every text Open Alvary publishes (owner, 2026-11-27); the line says how many,
+    // from the site's own live count, and names no number when that count cannot be read.
     const summary = document.getElementById("coverage-summary");
-    if (!summary || !records.length) return;
-    const answers = await Promise.all(
-      records.map((rec) =>
-        fetch(`/site/v1/sources/${encodeURIComponent(rec.source_id)}`, { headers: { Accept: "application/json" } })
-          .then((r) => (r.ok ? r.json() : null))
-          .catch(() => null),
-      ),
-    );
-    // Said only when every answer came back; otherwise the line names the laws and no number.
-    if (answers.some((a) => a === null)) {
-      summary.textContent = "Nigerian laws.";
-      return;
+    if (!summary) return;
+    try {
+      const resp = await fetch("/site/v1/stats", { headers: { Accept: "application/json" } });
+      if (!resp.ok) return;
+      const catalogue = (await resp.json())?.catalogue || {};
+      const count = Number(catalogue.verified_texts);
+      const names = (Array.isArray(catalogue.jurisdictions) ? catalogue.jurisdictions : [])
+        .map((j) => (typeof j?.name === "string" ? j.name.trim() : ""))
+        .filter((name) => name && name.length <= 60);
+      if (!Number.isInteger(count) || count < 1) return;
+      const where = names.length ? ` from ${listInWords(names)}` : "";
+      summary.textContent = `Laws and judgments${where}: ${count.toLocaleString("en")} published texts.`;
+    } catch {
+      // The line keeps its general wording.
     }
-    const published = answers.filter((a) => a.has_full_text === true).length;
-    summary.textContent =
-      published === 0 ? "Nigerian laws; none published yet." : `Nigerian laws; ${published} published so far.`;
   }
 
   _setFieldError(control, message, { announce = false } = {}) {
@@ -798,7 +815,7 @@ class LawCheckController {
     $("mode-quote")?.addEventListener("click", () => this._setMode("quote", { focus: true }));
     $("mode-ask")?.addEventListener("click", () => this._setMode("ask", { focus: true }));
 
-    // Live suggestions from search_catalogue, for laws beyond the short list in records.json.
+    // Live suggestions from search_catalogue, across every published text.
     // Each search spends one of the visitor's calls, so: none while the typed law is already
     // suggested, one at most every 1.5 seconds, and a newer search cancels an older one.
     let searchTimer = null;
@@ -844,7 +861,12 @@ class LawCheckController {
           const seen = new Set([...datalist.options].map((o) => o.value.split(",")[0].trim().toLowerCase()));
           for (const item of items) {
             const title = typeof item?.title === "string" ? item.title.trim() : "";
-            if (!title || seen.has(title.toLowerCase())) continue;
+            // Only a text Open Alvary publishes can be checked, so a record without one is not suggested.
+            if (!title || item?.has_full_text !== true) continue;
+            if (!this.lawInfo.has(title.toLowerCase())) {
+              this.lawInfo.set(title.toLowerCase(), { jurisdiction: item.jurisdiction_id });
+            }
+            if (seen.has(title.toLowerCase())) continue;
             seen.add(title.toLowerCase());
             const opt = document.createElement("option");
             // The law only: the visitor names the section, the page never guesses one.
@@ -925,8 +947,17 @@ class LawCheckController {
   }
 
   _claimDefaults(citation) {
-    const rec = this.records.find((r) => citation.toLowerCase().includes(String(r.title || "").toLowerCase()));
-    return { jurisdiction: rec?.jurisdiction || "ng", language: rec?.language || "en" };
+    // The law's own country and language when the page knows them (a worked example, or a law the
+    // catalogue search suggested); otherwise neither is sent, and the check finds the law by its name.
+    const cited = String(citation || "").toLowerCase();
+    const rec = this.records.find((r) => r.title && cited.startsWith(String(r.title).toLowerCase()));
+    if (rec) return pickClaimScope(rec.jurisdiction, rec.language);
+    let best = null;
+    for (const [title, info] of this.lawInfo) {
+      if (cited.startsWith(title) && (!best || title.length > best.title.length)) best = { title, ...info };
+    }
+    // The country only: a law may be published in several languages, and the quote may be from any of them.
+    return best ? pickClaimScope(best.jurisdiction, null) : {};
   }
 
   async _onSubmit() {
@@ -2284,12 +2315,12 @@ class LawCheckController {
   }
 
   _appendUnavailableNotice() {
-    const titles = this.records.map((rec) => rec.title).filter(Boolean);
-    if (titles.length && titles.length <= 12) {
-      this._appendNotice("Law check does not cover this record.", "grey", { list: [`It covers: ${titles.join("; ")}.`] });
-    } else {
-      this._appendNotice("Law check does not cover this record. See Coverage in the menu for what Open Alvary publishes.", "grey");
-    }
+    // Law check covers every published text, so this means Open Alvary has no published text of it.
+    this._appendNotice(
+      "Open Alvary does not publish this text, or this part of it. Check the law's name and the section, or look the law up among the published texts.",
+      "grey",
+      { actions: [{ label: "Browse published texts", onClick: () => window.open("/browse", "_blank", "noopener") }] },
+    );
   }
 
   // ---- A question answered by the visitor's AI, on the challenge runtime -------------------------

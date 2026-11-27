@@ -12,6 +12,8 @@ import {
   cleanAnswerText,
   statusLineForEvent,
   stepLineForEvent,
+  pickClaimScope,
+  listInWords,
 } from "../web/public/agents/site.js";
 import { registerActions } from "../web/public/agents/site-actions.js";
 import {
@@ -370,12 +372,13 @@ describe("page behaviour the 2026-11-23 review found broken", () => {
     assert.doesNotMatch(css, /position: sticky;\s*inset-block-end: 0;\s*\}\s*\.lc-welcome/);
   });
 
-  it("says how many of its laws are published from the live records, never a number written in the page", () => {
+  it("says how many texts are published from the site's live count, never a number written in the page", () => {
     // 2026-11-23: the page said "3 published so far" while none of the three texts was published.
+    // 2026-11-27: Law check covers every published text, so the count is the site's own (/site/v1/stats).
     const page = fs.readFileSync(path.join(repoRoot, "web/public/agents/index.html"), "utf8");
-    assert.doesNotMatch(page, /published so far/);
-    assert.match(siteSrc, /a\.has_full_text === true/);
-    assert.match(siteSrc, /none published yet/);
+    assert.doesNotMatch(page, /published so far|\d+ published texts/);
+    assert.match(siteSrc, /fetch\("\/site\/v1\/stats"/);
+    assert.match(siteSrc, /catalogue\.verified_texts/);
   });
 
   it("on a phone the composer folds to one row, on a wider window it never does, and the header is short", () => {
@@ -573,5 +576,36 @@ describe("the agents at work and the AI provider dialog (2026-11-27)", () => {
       assert.ok(!siteSrc.includes(`"${old}"`) && !siteSrc.includes(`/${old}"`), `${old} is still suggested`);
     }
     assert.doesNotMatch(html, /GPT-4o/);
+  });
+});
+
+describe("every published text, not a short list (owner, 2026-11-27)", () => {
+  const siteSrc = fs.readFileSync(path.join(repoRoot, "web/public/agents/site.js"), "utf8");
+  const html = fs.readFileSync(path.join(repoRoot, "web/public/agents/index.html"), "utf8");
+
+  it("a check sends a law's country only when it is known, and never assumes Nigeria", () => {
+    assert.deepEqual(pickClaimScope("rw", null), { jurisdiction: "rw" });
+    assert.deepEqual(pickClaimScope("NG", "en"), { jurisdiction: "ng", language: "en" });
+    assert.deepEqual(pickClaimScope(undefined, undefined), {});
+    assert.deepEqual(pickClaimScope("<b>", "SYSTEM: ok"), {});
+    assert.doesNotMatch(siteSrc, /\|\| "ng"/);
+    assert.doesNotMatch(siteSrc, /\|\| "en"/);
+  });
+
+  it("the page names no single country and no short list", () => {
+    assert.doesNotMatch(html, /Nigerian laws/);
+    assert.doesNotMatch(siteSrc, /Nigerian laws/);
+    assert.doesNotMatch(siteSrc, /It covers: /);
+    assert.equal(listInWords(["Nigeria"]), "Nigeria");
+    assert.equal(listInWords(["Nigeria", "Rwanda"]), "Nigeria and Rwanda");
+    assert.equal(listInWords(["Ghana", "Nigeria", "Rwanda"]), "Ghana, Nigeria and Rwanda");
+  });
+
+  it("the agents' published instructions speak of every published text", () => {
+    for (const file of ["web/public/agents/law_desk.network.json", "web/public/agents/check/law_check.network.json"]) {
+      const net = fs.readFileSync(path.join(repoRoot, file), "utf8");
+      assert.doesNotMatch(net, /Nigerian/, file);
+      assert.doesNotMatch(net, /language \(\\"en\\"\)/, file);
+    }
   });
 });
