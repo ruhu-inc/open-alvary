@@ -64,8 +64,8 @@ INSTRUCTIONS = (
     "Check get_relationships and check_currentness before relying on a provision. "
     "Distinguish records without a published text from cleared full text: a catalogue record does not "
     "grant reuse rights; check each source's rights status. "
-    "Zero results or unavailable means Open Alvary does not hold or publish the text, never that a law "
-    "does not exist. "
+    "Zero results or unavailable means Open Alvary does not hold or publish the text within your plan's "
+    "active jurisdictions, never that a law does not exist. "
     "Do not give legal advice, and do not harvest a whole Act part-by-part. "
     "Usage guide: https://open.alvary.ai/docs/ai-tools"
 )
@@ -982,7 +982,7 @@ def create_router(
     allowed_hosts: frozenset[str] | None = None,
     front_door_id: str | None = None,
     tools_page_size: int = 25,
-    tool_timeout: float = 10.0,
+    tool_timeout: float = 25.0,
 ) -> APIRouter:
     """``reach`` gives the organisation's plan (api.reach): its jurisdictions at the plan's limits, every
     other jurisdiction at the Starter rate, or refused on Starter."""
@@ -1464,7 +1464,11 @@ def create_router(
         meta_version = meta.get("io.modelcontextprotocol/protocolVersion") if isinstance(meta, dict) else None
 
         header_version = request.headers.get("mcp-protocol-version")
-        if header_version is not None and header_version not in ACCEPTED_HEADER_VERSIONS:
+        if (
+            header_version is not None
+            and header_version not in ACCEPTED_HEADER_VERSIONS
+            and method != "initialize"
+        ):
             return JSONResponse(
                 status_code=400,
                 content=_error(
@@ -1479,7 +1483,9 @@ def create_router(
             )
 
         is_2026 = (
-            header_version == "2026-07-28" or meta_version == "2026-07-28" or method == "server/discover"
+            header_version == "2026-07-28"
+            or meta_version == "2026-07-28"
+            or (method == "server/discover" and request.headers.get("mcp-method") is not None)
         )
 
         if is_2026:

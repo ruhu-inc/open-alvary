@@ -268,6 +268,15 @@ def test_2026_discover_ping_wire_errors_2025_03_26_and_paginated_tools_list(stor
         "code": "unsupported_protocol_version",
         "supportedVersions": ["2026-07-28", "2025-06-18"],
     }
+    # 1b. Unknown MCP-Protocol-Version header on initialize negotiates down to 2025-06-18
+    init_future = rpc(
+        client,
+        "initialize",
+        {"protocolVersion": "2025-11-25"},
+        **{"MCP-Protocol-Version": "2025-11-25"},
+    )
+    assert init_future.status_code == 200
+    assert init_future.json()["result"]["protocolVersion"] == "2025-06-18"
     # 2. unsupported_method_for_version (initialize under 2026-07-28)
     init26 = rpc26(client, "initialize", {"protocolVersion": "2026-07-28"})
     assert init26.status_code == 400
@@ -278,9 +287,24 @@ def test_2026_discover_ping_wire_errors_2025_03_26_and_paginated_tools_list(stor
     assert note26.status_code == 400
     assert note26.json()["error"]["code"] == -32600
     assert note26.json()["error"]["data"] == {"code": "notifications_unsupported"}
-    # 4. header_mismatch (missing header, wrong method, missing/wrong Mcp-Name, stray Mcp-Name, header vs _meta)
-    no_hdr_disc = client.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "server/discover"})
+    # 4. Legacy probe of server/discover without 2026-07-28 headers falls back with -32601;
+    #    2026-07-28 header_mismatch rejects mismatched/missing mirror headers.
+    legacy_disc = client.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "server/discover"})
+    assert legacy_disc.status_code == 200 and legacy_disc.json()["error"]["code"] == -32601
+    no_hdr_disc = client.post(
+        "/mcp",
+        json={"jsonrpc": "2.0", "id": 1, "method": "server/discover"},
+        headers={"Mcp-Method": "server/discover"},
+    )
     assert no_hdr_disc.status_code == 400 and no_hdr_disc.json()["error"]["data"] == {
+        "code": "header_mismatch"
+    }
+    no_method_disc = client.post(
+        "/mcp",
+        json={"jsonrpc": "2.0", "id": 1, "method": "server/discover"},
+        headers={"MCP-Protocol-Version": "2026-07-28"},
+    )
+    assert no_method_disc.status_code == 400 and no_method_disc.json()["error"]["data"] == {
         "code": "header_mismatch"
     }
     wrong_method = rpc26(client, "ping", headers={"Mcp-Method": "tools/list"})

@@ -1,6 +1,6 @@
 ---
 title: Connect AI tools
-description: Connect Claude, Claude Code, Codex or Antigravity to the Open Alvary catalogue over MCP, with no API key.
+description: Connect Claude, Claude Code or Codex to the Open Alvary catalogue over MCP, with no API key.
 ---
 
 AI tools that speak MCP (the Model Context Protocol) can search and read the published Open Alvary catalogue for you. You add Open Alvary to the tool once, sign in in your browser, and approve it for your organisation; after that, ask questions in your own words and the tool calls Open Alvary when it needs to.
@@ -23,7 +23,7 @@ You need an Open Alvary account with active access (the free Starter plan is eno
 
 ![Connect an app, Claude tab: the steps and the MCP address with a Copy button](/guide/connect-claude.webp)
 
-For agent workflows in Claude Code, Codex and Antigravity, the public plugin and skills repository at [github.com/ruhu-inc/open-alvary-skills](https://github.com/ruhu-inc/open-alvary-skills) bundles the MCP configuration and guided legal-research skills.
+For agent workflows in Claude Code and Codex, the public plugin and skills repository at [github.com/ruhu-inc/open-alvary-skills](https://github.com/ruhu-inc/open-alvary-skills) bundles the MCP configuration and guided legal-research skills.
 
 ## Approve the tool
 
@@ -78,7 +78,7 @@ The tool has thirteen read-only [tools](/docs/api/mcp) and picks them itself. Fo
 - "What changed in the Open Alvary catalogue for Nigeria recently?"
 - "How many records does the catalogue hold for Nigeria, and how many have a cleared text?"
 
-Records without a published text return catalogue metadata, rights status and links to the official source rather than searchable full text. Zero results means Open Alvary does not hold or publish the text, never that a law does not exist. The AI tool writes its own summaries and does not give legal advice; the official published copy always prevails.
+Records without a published text return catalogue metadata, rights status and links to the official source rather than searchable full text. Zero results means Open Alvary does not hold or publish the text within your plan's active jurisdictions, never that a law does not exist. The AI tool writes its own summaries and does not give legal advice; the official published copy always prevails.
 
 ## Manage connected tools
 

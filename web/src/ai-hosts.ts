@@ -103,10 +103,10 @@ export const AI_HOSTS: readonly AiHost[] = [
     name: "Antigravity",
     summary: "Install the Open Alvary plugin with agy plugin install, then approve in your browser.",
     audience: "agent",
-    status: "verified",
+    status: "deferred",
     authMethod: "oauth_cimd",
     pluginRepoUrl: PLUGIN_REPO_URL,
-    consentNote: "Shows Verified publisher on the Open Alvary approval page.",
+    consentNote: "Deferred pending live OAuth client verification and publisher pinning.",
     installSteps: [
       {
         label: "Install the Open Alvary plugin (MCP server and legal research skills):",

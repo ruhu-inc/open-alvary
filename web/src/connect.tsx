@@ -135,6 +135,7 @@ function HostPicker({ hosts }: { hosts: AiHost[] }) {
               role="tab"
               className="connect-tab"
               aria-selected={isSelected}
+              aria-controls={`${idPrefix}-panel-${host.id}`}
               tabIndex={isSelected ? 0 : -1}
               onClick={() => selectAt(index)}
               onKeyDown={(event) => onTabKeyDown(event, index)}
@@ -146,6 +147,7 @@ function HostPicker({ hosts }: { hosts: AiHost[] }) {
       </div>
 
       <div
+        id={`${idPrefix}-panel-${active.id}`}
         className="connect-panel"
         role="tabpanel"
         aria-labelledby={`${idPrefix}-tab-${active.id}`}
@@ -229,8 +231,8 @@ export function ConnectPage() {
         <h2>Starter plan jurisdiction scope</h2>
         <p>
           The free Starter plan reads the published law of one jurisdiction — Nigeria by default,
-          together with applicable regional African bodies. An organisation owner can switch that
-          jurisdiction at any time under{" "}
+          together with applicable regional African bodies. An organisation owner can change that
+          jurisdiction once a month under{" "}
           <a href="/console/access" className="connect-inline-link">
             Plan and limits
           </a>
@@ -272,8 +274,8 @@ export function ConnectPage() {
               links to the official source — not searchable full text.
             </li>
             <li>
-              Zero results means Open Alvary does not hold or publish the text, never that a law
-              does not exist.
+              Zero results means Open Alvary does not hold or publish the text within your
+              plan&rsquo;s active jurisdictions, never that a law does not exist.
             </li>
             <li>
               AI tools write their own summaries and do not give legal advice. The official

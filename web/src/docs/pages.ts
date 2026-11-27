@@ -38,7 +38,7 @@ const data = (v?: number) => (!v ? "" : v >= 1e9 ? `${n(v / 1e9)} GB` : `${n(v /
 function plansTable(plans: Plan[]): string {
   const rows = [...plans].sort((a, b) => a.listing.order - b.listing.order);
   return [
-    "| Plan | Price | Requests a minute | Burst | At once | Data a day | Countries | Monitors | Webhooks |",
+    "| Plan | Price | Requests a minute | Burst | At once | Data a day | Jurisdictions | Monitors | Webhooks |",
     "|---|---|---|---|---|---|---|---|---|",
     ...rows.map((p) => {
       const a = p.allowance;

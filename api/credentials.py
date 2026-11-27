@@ -166,7 +166,9 @@ def jsonrpc_problem(
     if retry_after is not None:
         headers["Retry-After"] = str(retry_after)
         data["retry_after_seconds"] = retry_after
-    message = detail or DETAIL.get(code, "Request refused.")
+    message = detail or (
+        "Too many requests." if code == "rate_limited" else DETAIL.get(code, "Request refused.")
+    )
     if code == "rate_limited":
         if retry_after is not None:
             unit = "second" if retry_after == 1 else "seconds"
