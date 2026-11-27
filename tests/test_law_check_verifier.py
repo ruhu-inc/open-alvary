@@ -699,6 +699,79 @@ def _build_test_catalogue(store, base_catalogue: Corpus) -> LegacyCatalogue:
     # Only new_hash is approved -> ver-repl-old is replaced (not public)!
     corpus.rights.append(_make_rights("ng-replaced-act", [new_hash]))
 
+    # 7. Two texts of one Act whose s. 1 has the very same words (the Nigeria Tax Act's two readings)
+    same_s1 = "1. This Act may be cited as the Two Readings Act and applies throughout the federation."
+    readings = {
+        "ver-two-1": (same_s1 + "\n2. The first reading's section two.", date(2015, 1, 1), date(2020, 1, 1)),
+        "ver-two-2": (same_s1 + "\n2. The second reading's section two, amended.", date(2020, 1, 1), None),
+    }
+    corpus.sources.append(
+        Source(
+            id="ng-two-readings",
+            jurisdiction_id="ng",
+            authority_id=auth_id,
+            document_type="act",
+            title="Two Readings Act",
+            citation="Two Readings Act",
+            year=2015,
+            language="en",
+            legal_status="current",
+            canonical_url="https://official.example.ng/two-readings",
+        )
+    )
+    hashes = []
+    for vid, (text, start, until) in readings.items():
+        digest = sha256(text.encode()).hexdigest()
+        hashes.append(digest)
+        corpus.versions.append(
+            SourceVersion(
+                id=vid,
+                source_id="ng-two-readings",
+                canonical_url=f"https://official.example.ng/two-readings/{vid}",
+                retrieved_at=NOW,
+                raw_hash=digest,
+                content_hash=digest,
+                canonical_text=text,
+                parser="fixture",
+                language="en",
+                effective_from=start,
+                effective_until=until,
+                verification_status="verified",
+                content_verifier="reviewer",
+                content_verified_at=NOW,
+            )
+        )
+        s2_at = text.encode().index(b"\n2.")
+        corpus.structure.extend(
+            [
+                StructureNode(
+                    id=f"anc-{vid}-s1",
+                    source_id="ng-two-readings",
+                    version_id=vid,
+                    kind="section",
+                    locator="sec_1",
+                    label="1",
+                    order=0,
+                    start_byte=0,
+                    end_byte=s2_at,
+                    source_hash=digest,
+                ),
+                StructureNode(
+                    id=f"anc-{vid}-s2",
+                    source_id="ng-two-readings",
+                    version_id=vid,
+                    kind="section",
+                    locator="sec_2",
+                    label="2",
+                    order=1,
+                    start_byte=s2_at + 1,
+                    end_byte=len(text.encode()),
+                    source_hash=digest,
+                ),
+            ]
+        )
+    corpus.rights.append(_make_rights("ng-two-readings", hashes))
+
     store.save(corpus)
     conn = store.engine.connect()
     return LegacyCatalogue(LegacyRepository(conn))
@@ -1127,3 +1200,114 @@ def test_a_citation_naming_records_on_and_off_the_list_is_answered_for_those_on_
         today=TODAY,
     )
     assert _assert_valid_response(both, signer).status == "ambiguous"
+
+
+def test_the_quotes_words_decide_which_of_several_texts_is_checked(
+    cat: LegacyCatalogue, signer: ReceiptSigner
+):
+    """A citation naming a part in more than one text of a record (Rwanda's three language editions, two
+    readings of one Act) is checked in the text whose words hold the quote; never chosen otherwise."""
+    amended = "Amended 2022 wording of the Multi Version Act section one for testing."
+    receipt = _assert_valid_response(
+        verify_claim(
+            cat, {"citation": "Multi Version Act, s. 1", "quote": amended}, signer=signer, today=TODAY
+        ),
+        signer,
+    )
+    assert receipt.status == "words_found" and receipt.part.version_id == "ver-multi-2"
+    original = "Original 2015 wording of the Multi Version Act section one for testing."
+    receipt = _assert_valid_response(
+        verify_claim(
+            cat, {"citation": "Multi Version Act, s. 1", "quote": original}, signer=signer, today=TODAY
+        ),
+        signer,
+    )
+    assert receipt.part.version_id == "ver-multi-1" and receipt.findings.quote == "exact"
+    # Words in neither text, or no quote at all: both texts are still listed for the caller to choose.
+    for quote in ("Wording found in neither text of the Multi Version Act at all.", None):
+        claim = {"citation": "Multi Version Act, s. 1", **({"quote": quote} if quote else {})}
+        receipt = _assert_valid_response(verify_claim(cat, claim, signer=signer, today=TODAY), signer)
+        assert receipt.status == "ambiguous" and len(receipt.alternatives) == 2
+    # A quote too short is refused as it is for one part.
+    with pytest.raises(VerifyToolError) as error:
+        verify_claim(
+            cat, {"citation": "Multi Version Act, s. 1", "quote": "Amended 2022"}, signer=signer, today=TODAY
+        )
+    assert error.value.code == "quote_too_short"
+    # Two records sharing a name stay a choice for the caller, words or not.
+    receipt = _assert_valid_response(
+        verify_claim(
+            cat,
+            {
+                "citation": "Shared Act, s. 1",
+                "quote": "Shared Act provision text of sufficient length for checking.",
+            },
+            signer=signer,
+            today=TODAY,
+        ),
+        signer,
+    )
+    assert receipt.status == "ambiguous"
+
+
+def test_the_same_words_in_two_texts_are_checked_in_the_one_in_force(
+    cat: LegacyCatalogue, signer: ReceiptSigner
+):
+    quote = "This Act may be cited as the Two Readings Act and applies throughout the federation."
+    receipt = _assert_valid_response(
+        verify_claim(cat, {"citation": "Two Readings Act, s. 1", "quote": quote}, signer=signer, today=TODAY),
+        signer,
+    )
+    assert receipt.part.version_id == "ver-two-2" and receipt.findings.quote == "exact"
+    assert receipt.status in ("words_found", "matches")
+    # On a date the first reading was in force, that one is read.
+    receipt = _assert_valid_response(
+        verify_claim(
+            cat,
+            {"citation": "Two Readings Act, s. 1", "quote": quote, "as_of": "2017-03-01"},
+            signer=signer,
+            today=TODAY,
+        ),
+        signer,
+    )
+    assert receipt.part.version_id == "ver-two-1"
+
+
+def test_a_published_record_with_a_part_law_check_cannot_read_is_a_part_not_found(
+    cat: LegacyCatalogue, signer: ReceiptSigner
+):
+    """The record is in the catalogue, so "not in catalogue" would be wrong."""
+    receipt = _assert_valid_response(
+        verify_claim(
+            cat, {"citation": "Freedom of Information Act 2011, Chapter Q"}, signer=signer, today=TODAY
+        ),
+        signer,
+    )
+    assert receipt.status == "part_not_found" and receipt.part is None
+    for citation in ("Imaginary Act 2099, Chapter Q", "Withdrawn Record Act 2019, Chapter Q"):
+        receipt = _assert_valid_response(
+            verify_claim(cat, {"citation": citation}, signer=signer, today=TODAY), signer
+        )
+        assert receipt.status == "not_in_catalogue"
+    # Off a caller's list, the record is not named for it.
+    receipt = _assert_valid_response(
+        verify_claim(
+            cat,
+            {"citation": "Repealed Licensing Act 1999, Chapter Q"},
+            signer=signer,
+            allowed_source_ids={"ng-foi-act-2011"},
+            today=TODAY,
+        ),
+        signer,
+    )
+    assert receipt.status == "not_in_catalogue"
+
+
+def test_a_long_citation_is_accepted_up_to_600_characters(cat: LegacyCatalogue, signer: ReceiptSigner):
+    long_title = "Imaginary Act " + "approving the ratification of a long agreement " * 10
+    receipt = _assert_valid_response(
+        verify_claim(cat, {"citation": long_title[:590] + ", s. 1"}, signer=signer, today=TODAY), signer
+    )
+    assert receipt.status == "not_in_catalogue"
+    with pytest.raises(ValueError, match="1 to 600"):
+        verify_claim(cat, {"citation": "x" * 601}, signer=signer, today=TODAY)

@@ -54,7 +54,7 @@ TOOLS = [
                 "query": {
                     "type": "string",
                     "minLength": 1,
-                    "maxLength": 200,
+                    "maxLength": 500,
                     "description": "Words to find, such as a title or a citation. Every word must appear; case "
                     "and punctuation don't matter.",
                 },
@@ -394,7 +394,7 @@ TOOLS = [
                 "citation": {
                     "type": "string",
                     "minLength": 1,
-                    "maxLength": 300,
+                    "maxLength": 600,
                     "description": "The citation, such as FOI Act 2011, s. 1(1).",
                 },
                 "as_of": {
@@ -527,7 +527,7 @@ TOOLS = [
                 "citation": {
                     "type": "string",
                     "minLength": 1,
-                    "maxLength": 300,
+                    "maxLength": 600,
                     "description": "A citation such as 'Freedom of Information Act 2011, s. 1(1)'. One of "
                     "citation or anchor_id is required.",
                 },
@@ -827,7 +827,7 @@ def create_router(
             if name == "search_catalogue" and set(arguments) <= {"query", "limit", "jurisdiction"}:
                 query, limit = arguments.get("query"), arguments.get("limit", 10)
                 jurisdiction = arguments.get("jurisdiction")
-                if not isinstance(query, str) or not 1 <= len(query) <= 200:
+                if not isinstance(query, str) or not 1 <= len(query) <= 500:
                     return None
                 if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 25:
                     return None
@@ -970,7 +970,7 @@ def create_router(
                 as_of, language = _date(arguments.get("as_of")), _language(arguments.get("language"))
                 if (
                     not isinstance(citation, str)
-                    or not 1 <= len(citation) <= 300
+                    or not 1 <= len(citation) <= 600
                     or as_of is False
                     or language is False
                 ):
