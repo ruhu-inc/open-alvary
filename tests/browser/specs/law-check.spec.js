@@ -79,6 +79,18 @@ test.describe("checking a quote, with no AI and no key", () => {
     expect(page.outside).toEqual([]);
   });
 
+  test("an example clicked before the list of laws arrives still runs", async ({ page }) => {
+    // A slow line: the list of laws comes two seconds after the page is ready.
+    await page.route("**/agents/records.json", async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      await route.continue();
+    });
+    await page.goto("/agents/");
+    await page.locator("#try-true-quote").click();
+    await expect(bands(page).first()).toContainText("Quoted words found");
+    await expect(page.getByText("The examples could not be loaded")).toHaveCount(0);
+  });
+
   test("a message that is plainly a citation and a quote is checked without AI", async ({ page }) => {
     await page.goto("/agents/#ask");
     await ask(page, `${CITATION}: "${TRUE_QUOTE}"`);

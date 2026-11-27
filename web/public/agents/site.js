@@ -526,7 +526,8 @@ class LawCheckController {
       return;
     }
 
-    this._loadRecords();
+    // The examples wait for this: a click before the list arrives runs once it has.
+    this.recordsReady = this._loadRecords();
     this._restoreThread();
     this._syncInitialRoute();
   }
@@ -894,7 +895,9 @@ class LawCheckController {
       this._onSubmit();
     });
 
-    const runExample = (altered) => {
+    const runExample = async (altered) => {
+      // A judge may click an example before Law check's list of laws has arrived.
+      if (!this.records.some((r) => r.example)) await this.recordsReady;
       const rec = this.records.find((r) => r.example) || null;
       if (!rec) {
         this._appendNotice("The examples could not be loaded. Type a law, a section and the quoted words.", "grey");
