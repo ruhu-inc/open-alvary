@@ -1,7 +1,8 @@
 repository: https://github.com/cognizant-ai-labs/agentic-web
 path: skills/agentify-website/runtime/
-commit: f154be8
+commit: 90d561d
+release: 0.2.2 plus five later runtime fixes (Trusted Types, IME Enter, inert form copy)
 license: Apache-2.0
 vendored_unchanged: true
-tree_sha256: a439d5c3779adf33e9dc087a93b84de50f1cad25d96ff649f5175c81d8ab71c3
+tree_sha256: df2673986bf09a6421221a582b0f3d5dd2f3f10be03fe9ef25ef340f52e84456
 verify_command: find . -type f ! -name 'PIN.txt' | LC_ALL=C sort | xargs shasum -a 256 | shasum -a 256

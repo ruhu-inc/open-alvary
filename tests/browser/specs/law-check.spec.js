@@ -392,6 +392,57 @@ test.describe("the AI key", () => {
   });
 });
 
+test.describe("choosing an AI provider and model", () => {
+  test("Otari comes first with its sign-in, and each provider offers current models to pick", async ({ page }) => {
+    await page.goto("/agents/");
+    await page.locator("#open-provider-modal").click();
+    const dialog = page.locator("#provider-dialog");
+    await expect(dialog.locator(".lc-preset-btn").first()).toHaveAttribute("data-preset", "otari");
+    await expect(dialog.locator('[data-preset="otari"]')).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator("#provider-connect-btn")).toHaveText("Connect with Otari");
+    await expect(page.locator("#provider-model-input")).toHaveValue("alibaba/qwen3.8-flash");
+
+    await dialog.locator('[data-preset="openrouter"]').click();
+    await expect(page.locator("#provider-connect-btn")).toHaveText("Connect with OpenRouter");
+    const chips = page.locator("#provider-model-choices .lc-model-chip");
+    expect(await chips.count()).toBeGreaterThan(4);
+    await chips.filter({ hasText: "DeepSeek" }).click();
+    await expect(page.locator("#provider-model-input")).toHaveValue("deepseek/deepseek-v4.1-flash");
+    await expect(chips.filter({ hasText: "DeepSeek" })).toHaveAttribute("aria-pressed", "true");
+
+    // A model the visitor typed stays when the provider changes; a suggested one is replaced.
+    await dialog.locator('[data-preset="gemini"]').click();
+    await expect(page.locator("#provider-model-input")).toHaveValue("models/gemini-3.8-flash");
+    await page.locator("#provider-model-input").fill("my-own-model");
+    await dialog.locator('[data-preset="openai"]').click();
+    await expect(page.locator("#provider-model-input")).toHaveValue("my-own-model");
+    await expect(page.locator("#provider-connect")).toBeHidden();
+  });
+
+  test("Show all models asks the chosen provider and offers its whole list", async ({ page }) => {
+    let asked = null;
+    await page.route("https://openrouter.ai/api/v1/models", (route) => {
+      asked = route.request().headers();
+      route.fulfill({ json: { data: [{ id: "lab/model-one" }, { id: "lab/model-two" }, { id: "lab/model-one" }] } });
+    });
+    await page.goto("/agents/");
+    await page.locator("#open-provider-modal").click();
+    await page.locator('#provider-dialog [data-preset="openrouter"]').click();
+    await page.locator("#provider-models-btn").click();
+    await expect(page.locator("#provider-models-status")).toHaveText("2 models listed. Type in the Model field to search them.");
+    await expect(page.locator("#provider-model-options option")).toHaveCount(2);
+    // OpenRouter lists its models to anyone, so no key went with the request.
+    expect(asked?.authorization).toBeUndefined();
+
+    // Another provider lists its models only with a key, and the page says so before asking.
+    await page.locator('#provider-dialog [data-preset="openai"]').click();
+    await expect(page.locator("#provider-model-options option")).toHaveCount(0);
+    await page.locator("#provider-models-btn").click();
+    await expect(page.locator("#provider-models-status")).toContainText("Paste your key first");
+    expect(page.outside).toEqual([]);
+  });
+});
+
 test.describe("asking the AI, on the challenge runtime with a scripted model", () => {
   test("the agents check the quote, the card comes first, then the answer and the count @smoke", async ({ page }) => {
     await useScriptedProvider(page);
@@ -423,12 +474,18 @@ test.describe("asking the AI, on the challenge runtime with a scripted model", (
       "This answer: 1 quote checked, 1 found, 0 not found. Sentences without a result card were not checked.",
     );
     await expect(page.locator("#agents-disclosure")).toBeVisible();
+    // Under the answer, the agents' steps in order, named from Open Alvary's own network file.
+    const steps = answer.locator(".lc-steps");
+    await expect(steps.locator("summary")).toContainText(/How the agents worked: \d+ steps?/);
+    await steps.locator("summary").click();
+    await expect(steps.locator("li").filter({ hasText: "check_claim" }).first()).toBeVisible();
     expect(page.outside).toEqual([]);
 
     await page.reload();
     await expect(page.locator(".lc-msg-ai")).toHaveCount(1);
     await expect(bands(page)).toHaveCount(1);
     await expect(page.locator(".lc-divider").last()).toHaveText("Earlier in this tab. The AI does not remember it.");
+    await expect(page.locator(".lc-msg-ai .lc-steps")).toHaveCount(1);
   });
 
   test("a quote the AI got wrong is shown as not found, and counted so", async ({ page }) => {

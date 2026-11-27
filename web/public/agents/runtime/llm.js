@@ -52,11 +52,14 @@ export function browserMockCompletion(messages = [], tools = []) {
 // Authorization.
 
 export class LlmClient {
-  constructor({ baseUrl, apiKey, trace, mock }) {
+  constructor({ baseUrl, apiKey, trace, mock, publisherFunded }) {
     this.baseUrl = (baseUrl || "").replace(/\/$/, "");
-    this.apiKey = apiKey || "";
     this.trace = trace;
     this.mock = !!mock;
+    // A publisher-funded router is paid for by the site. It needs no key and
+    // never receives the visitor's.
+    this.publisherFunded = !!publisherFunded;
+    this.apiKey = this.publisherFunded ? "" : apiKey || "";
   }
 
   // messages: [{role, content, tool_calls?, tool_call_id?, name?}]
@@ -68,7 +71,7 @@ export class LlmClient {
     // placeholder "demo" to a live provider (which returns a confusing 401). This
     // happens e.g. when a shared/reloaded URL keeps the proxy router but no saved
     // BYOK profile/key is available in this browser.
-    if (!this.mock && (!this.apiKey || this.apiKey === "demo")) {
+    if (!this.mock && !this.publisherFunded && (!this.apiKey || this.apiKey === "demo")) {
       throw new Error(`An AI provider key is required for ${hostOf(this.baseUrl) || "the configured provider"}. Open ⚙ AI model settings, paste your key, then select Save and start. Your key stays in this browser and is sent only to the configured provider.`);
     }
     assertModelForRouter(model, this.mock, hostOf(this.baseUrl));
@@ -79,7 +82,7 @@ export class LlmClient {
       mock: this.mock,
       routerHost: hostOf(this.baseUrl),
       endpoint: `${this.baseUrl}/chat/completions`,
-      keySource: this.apiKey ? "local BYOK (not shown)" : "none",
+      keySource: this.publisherFunded ? "none: paid for by this site" : this.apiKey ? "local BYOK (not shown)" : "none",
       toolNames: (tools || []).map((t) => t.function.name),
     });
 
@@ -128,6 +131,13 @@ export class LlmClient {
       });
       if (!resp.ok) {
         const txt = await resp.text().catch(() => "");
+        // A publisher-funded router's plain-text refusal (its free allowance is used
+        // up, say) is written for the visitor, so show it as it is. The trace keeps the
+        // status, and an empty body falls back to the usual message.
+        if (this.publisherFunded && txt.trim() && (resp.headers.get("Content-Type") || "").startsWith("text/plain")) {
+          this.trace?.update(span, { httpStatus: resp.status });
+          throw new Error(txt.slice(0, 300));
+        }
         throw new Error(`LLM HTTP ${resp.status}: ${txt.slice(0, 300)}`);
       }
 

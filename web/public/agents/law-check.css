@@ -887,6 +887,53 @@ main:focus {
 .lc-agents-disclosure[hidden] {
   display: none;
 }
+.lc-agents-intro {
+  margin-top: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 16px;
+  text-align: left;
+  line-height: 1.55;
+}
+.lc-agents-intro p {
+  margin: 0 0 10px;
+}
+.lc-agents-intro p:last-child {
+  margin-bottom: 0;
+}
+.lc-agents-roles {
+  margin: 0 0 10px;
+  padding-inline-start: 20px;
+}
+.lc-agents-roles li + li {
+  margin-top: 4px;
+}
+.lc-agents-intro code {
+  overflow-wrap: anywhere;
+  font-size: 12.5px;
+}
+
+/* The agents' steps under an AI answer */
+.lc-steps {
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--grey-fg);
+}
+.lc-steps > summary {
+  cursor: pointer;
+  font-weight: 500;
+  min-block-size: 28px;
+  padding-block: 4px;
+}
+.lc-steps ol {
+  margin: 6px 0 0;
+  padding-inline-start: 22px;
+  line-height: 1.5;
+}
+.lc-steps li + li {
+  margin-top: 3px;
+}
 
 /* ---- The composer, docked at the bottom of the window --------------------------------------- */
 /* The composer is the last thing in the column. With a thread above it, it is the bottom of the
@@ -1206,6 +1253,9 @@ main:focus {
 }
 
 /* Challenge runtime: tokens and required overrides (§10.5) */
+#agent-app[hidden] {
+  display: none;
+}
 #agent-app {
   --ns-font: "DM Sans", system-ui, -apple-system, sans-serif;
   --ns-bg: #ffffff;
@@ -1485,6 +1535,72 @@ dialog.lc-dialog::backdrop {
 .lc-preset-btn[aria-pressed="true"] .lc-preset-sub {
   color: #d4d4d4;
 }
+.lc-connect {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding-bottom: 14px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid #e5e5e5;
+}
+.lc-connect[hidden] {
+  display: none;
+}
+.lc-connect .lc-hint {
+  margin: 0;
+}
+.lc-connect .lc-hint[data-tone="warn"] {
+  color: #8a4b00;
+}
+.lc-model-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.lc-model-choices[hidden] {
+  display: none;
+}
+.lc-model-chip {
+  padding: 5px 11px;
+  border: 1px solid #d4d4d4;
+  border-radius: 999px;
+  background: #fafafa;
+  color: #1a1a1a;
+  font: inherit;
+  font-size: 12.5px;
+  min-block-size: 32px;
+  cursor: pointer;
+}
+.lc-model-chip:hover {
+  border-color: #8c8c8c;
+  background: #ffffff;
+}
+.lc-model-chip[aria-pressed="true"] {
+  background: #1a1a1a;
+  border-color: #1a1a1a;
+  color: #ffffff;
+}
+.lc-model-list-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin-top: 8px;
+}
+.lc-model-list-row .lc-hint {
+  margin: 0;
+  flex: 1 1 200px;
+}
+.lc-btn-small {
+  padding: 5px 11px;
+  font-size: 13px;
+  min-block-size: 32px;
+}
+.lc-btn-small[hidden] {
+  display: none;
+}
 .lc-dialog-form {
   display: flex;
   flex-direction: column;
@@ -1678,6 +1794,7 @@ dialog.lc-dialog::backdrop {
 
 /* Forced colours: states drawn with a background alone would vanish */
 @media (forced-colors: active) {
+  .lc-model-chip[aria-pressed="true"],
   .lc-preset-btn[aria-pressed="true"] {
     outline: 3px solid Highlight;
     outline-offset: -3px;

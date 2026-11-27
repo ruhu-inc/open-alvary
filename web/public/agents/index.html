@@ -139,16 +139,30 @@
           <div class="lc-starter-pills">
             <button type="button" class="lc-starter-pill" id="try-true-quote">Try a true quote</button>
             <button type="button" class="lc-starter-pill" id="try-altered-quote">Try with one word changed</button>
-            <button type="button" class="lc-starter-pill" id="try-question" hidden>Ask what a section says</button>
+            <button type="button" class="lc-starter-pill lc-starter-ask" id="try-question" data-question="Who can ask for information under the Freedom of Information Act 2011? Quote the section.">Ask: who can request information?</button>
+            <button type="button" class="lc-starter-pill lc-starter-ask" id="try-question-2" data-question="Under the Freedom of Information Act 2011, how long does a public institution have to answer a request? Quote the section.">Ask: how long to answer a request?</button>
           </div>
         </div>
 
         <ol class="lc-thread-list" id="thread-list"></ol>
 
         <!-- The challenge runtime's own view of the agents and its trace. Its chat is not shown: this page draws the thread. -->
-        <details class="lc-disclosure lc-agents-disclosure" id="agents-disclosure" hidden>
-          <summary>Show the agents at work</summary>
-          <div id="agent-app">
+        <details class="lc-disclosure lc-agents-disclosure" id="agents-disclosure">
+          <summary>The agents behind Ask AI</summary>
+          <div class="lc-agents-intro">
+            <p>Ask AI is three agents that run in your browser, on the AI provider and key you choose:</p>
+            <ol class="lc-agents-roles">
+              <li><strong>Law desk</strong> talks with you and writes the answer.</li>
+              <li><strong>Finder</strong> searches the published laws and copies the exact words, using Open Alvary's tools.</li>
+              <li><strong>Verifier</strong> sends each quote to Open Alvary's check. Code on Open Alvary's server, not an AI, compares the words and signs a receipt.</li>
+            </ol>
+            <p>Each answer lists the steps the agents took. Their instructions are public, like a page's source:
+              <a href="./law_desk.network.json">law_desk</a>. Other agent sites can call Open Alvary's
+              <a href="./check/law_check.network.json">law_check</a> network by its address,
+              <code>https://open.alvary.ai/agents/check/law_check</code>, and it runs on their visitor's own key.</p>
+            <p>Ask AI works best with a model that calls tools well. Qwen3.8 Flash on Otari is suggested. Checking a quote needs no AI at all.</p>
+          </div>
+          <div id="agent-app" hidden>
             <div data-ns-slot="header"></div>
             <div data-ns-slot="agents"></div>
             <div data-ns-slot="chat" hidden></div>
@@ -254,25 +268,25 @@
       </p>
 
       <div class="lc-provider-presets" role="group" aria-label="Choose AI provider">
-        <button type="button" class="lc-preset-btn" data-preset="openai" aria-pressed="true">
+        <button type="button" class="lc-preset-btn" data-preset="otari" aria-pressed="true">
+          <span class="lc-preset-name">Otari</span>
+          <span class="lc-preset-sub">Suggested · sign in</span>
+        </button>
+        <button type="button" class="lc-preset-btn" data-preset="openrouter" aria-pressed="false">
+          <span class="lc-preset-name">OpenRouter</span>
+          <span class="lc-preset-sub">Many models · sign in</span>
+        </button>
+        <button type="button" class="lc-preset-btn" data-preset="gemini" aria-pressed="false">
+          <span class="lc-preset-name">Gemini</span>
+          <span class="lc-preset-sub">Google AI Studio</span>
+        </button>
+        <button type="button" class="lc-preset-btn" data-preset="openai" aria-pressed="false">
           <span class="lc-preset-name">OpenAI</span>
-          <span class="lc-preset-sub">GPT-4o mini</span>
+          <span class="lc-preset-sub">GPT-6 family</span>
         </button>
         <button type="button" class="lc-preset-btn" data-preset="anthropic" aria-pressed="false">
           <span class="lc-preset-name">Claude</span>
           <span class="lc-preset-sub">Anthropic</span>
-        </button>
-        <button type="button" class="lc-preset-btn" data-preset="gemini" aria-pressed="false">
-          <span class="lc-preset-name">Gemini</span>
-          <span class="lc-preset-sub">Google AI</span>
-        </button>
-        <button type="button" class="lc-preset-btn" data-preset="openrouter" aria-pressed="false">
-          <span class="lc-preset-name">OpenRouter</span>
-          <span class="lc-preset-sub">Many models</span>
-        </button>
-        <button type="button" class="lc-preset-btn" data-preset="otari" aria-pressed="false">
-          <span class="lc-preset-name">Otari</span>
-          <span class="lc-preset-sub">Hosted router</span>
         </button>
         <button type="button" class="lc-preset-btn" data-preset="custom" aria-pressed="false">
           <span class="lc-preset-name">Custom</span>
@@ -281,6 +295,12 @@
       </div>
 
       <form id="provider-form" class="lc-dialog-form" novalidate>
+        <div class="lc-connect" id="provider-connect" hidden>
+          <button type="button" class="lc-btn-primary" id="provider-connect-btn">Connect with Otari</button>
+          <p class="lc-hint" id="provider-connect-hint">Sign in on the provider's own page and approve a key with a spending limit. Nothing to copy. Or paste a key below.</p>
+          <p class="lc-hint" id="provider-connect-status" role="status" hidden></p>
+        </div>
+
         <div class="lc-field">
           <label for="provider-key-input">API key</label>
           <p class="lc-hint" id="provider-key-hint">
@@ -308,7 +328,8 @@
 
         <div class="lc-field">
           <label for="provider-model-input">Model</label>
-          <p class="lc-hint" id="provider-model-hint">Pre-filled for the chosen provider; edit if you prefer another model.</p>
+          <p class="lc-hint" id="provider-model-hint">Ask AI needs a model that can call tools. Pick one, or type any model your provider offers.</p>
+          <div class="lc-model-choices" id="provider-model-choices" role="group" aria-label="Suggested models"></div>
           <input
             id="provider-model-input"
             name="model"
@@ -316,10 +337,16 @@
             class="lc-input"
             required
             autocomplete="off"
+            list="provider-model-options"
             aria-invalid="false"
             data-error="provider-model-error"
-            aria-describedby="provider-model-hint"
+            aria-describedby="provider-model-hint provider-models-status"
           />
+          <datalist id="provider-model-options"></datalist>
+          <div class="lc-model-list-row">
+            <button type="button" class="lc-btn-secondary lc-btn-small" id="provider-models-btn">Show all models</button>
+            <p class="lc-hint" id="provider-models-status" role="status"></p>
+          </div>
           <p class="lc-error" id="provider-model-error" hidden></p>
         </div>
 
