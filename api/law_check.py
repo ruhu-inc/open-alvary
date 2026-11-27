@@ -301,7 +301,10 @@ LAW_CHECK_TOOLS = [
 # Law check's own words for the refusals it passes on. The keyed MCP's texts speak to an app that holds a
 # key (REST paths to read instead, the console, a plan's countries); a visitor has none of those.
 BUSY = "Law check is busy right now. Try again in {seconds} seconds."
-NOT_COVERED = "Law check does not cover this record. See https://open.alvary.ai/agents/records.json"
+NOT_COVERED = (
+    "Open Alvary does not publish this text, or this part of it. "
+    "The published texts are listed at https://open.alvary.ai/browse"
+)
 CANNOT_ANSWER = "Law check cannot answer right now. Try again shortly."
 TOO_LARGE = {
     "get_anchor": "this part holds more than 8 KiB of words; name a smaller part.",

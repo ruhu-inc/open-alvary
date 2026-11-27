@@ -114,6 +114,59 @@ test.describe("checking a quote, with no AI and no key", () => {
   });
 });
 
+test.describe("every published text", () => {
+  /** Answer the page's catalogue search with one record, and note what each check sends. */
+  async function withSearchAnswer(page, item) {
+    const sent = [];
+    await page.route("**/agents/mcp", async (route) => {
+      const body = JSON.parse(route.request().postData() || "{}");
+      const name = body?.params?.name;
+      if (name === "search_catalogue") {
+        const text = JSON.stringify({ total: 1, items: [item] });
+        return route.fulfill({ json: { jsonrpc: "2.0", id: body.id, result: { content: [{ type: "text", text }], isError: false } } });
+      }
+      if (name === "check_claim") sent.push(body.params.arguments);
+      return route.continue();
+    });
+    return sent;
+  }
+
+  test("a Rwandan law the search suggests is checked as Rwandan, not as Nigerian", async ({ page }) => {
+    const sent = await withSearchAnswer(page, {
+      id: "rw-law-000-2099", title: "Law No 000/2099 on Example Matters", jurisdiction_id: "rw", language: "en", has_full_text: true,
+    });
+    await page.goto("/agents/#check");
+    await page.locator("#citation-input").fill("Law No 000/2099");
+    await expect(page.locator("#law-suggestions option[value='Law No 000/2099 on Example Matters, ']")).toHaveCount(1);
+    await checkQuote(page, "Every person has the right to an example of this kind of wording.", "Law No 000/2099 on Example Matters, Article 1");
+    await expect.poll(() => sent.length).toBe(1);
+    expect(sent[0].jurisdiction).toBe("rw");
+    expect(sent[0].language).toBeUndefined();
+    // Not published here, so the page says so and points to the published texts.
+    await expect(page.locator(".lc-msg-note, oa-receipt").last()).toBeVisible();
+  });
+
+  test("a law typed with no suggestion is checked with no country assumed", async ({ page }) => {
+    const sent = await withSearchAnswer(page, {
+      id: "ng-x", title: "A Record With No Text", jurisdiction_id: "ng", language: "en", has_full_text: false,
+    });
+    await page.goto("/agents/#check");
+    await page.locator("#citation-input").fill("A Record With No Text");
+    // A record whose text is not published is not suggested: it cannot be checked.
+    await page.waitForTimeout(1800);
+    await expect(page.locator("#law-suggestions option[value^='A Record With No Text']")).toHaveCount(0);
+    await checkQuote(page, "Some words that are long enough to be checked as a quote here.", "Some Other Act 1999, s. 2");
+    await expect.poll(() => sent.length).toBe(1);
+    expect(sent[0].jurisdiction).toBeUndefined();
+  });
+
+  test("the heading speaks of every published text, never one country's laws", async ({ page }) => {
+    await page.goto("/agents/");
+    await expect(page.locator("#coverage-summary")).not.toContainText("Nigerian");
+    await expect(page.locator("#coverage-summary")).toContainText("Laws and judgments");
+  });
+});
+
 test.describe("the result card", () => {
   test("Hide result works from the keyboard and keeps the focus @smoke", async ({ page }) => {
     await page.goto("/agents/");

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-11-22",
+  "updated_at": "2026-11-27",
   "records": [
     {
       "source_id": "ng-foi-act-2011",
@@ -14,22 +14,7 @@
         "true_quote": "Notwithstanding anything contained in any other Act, law or regulation, the right of any person to access or request information, whether or not contained in any written form, which is in the custody or possession of any public official, agency or institution howsoever described, is established.",
         "altered_quote": "Notwithstanding anything contained in any other Act, law or regulation, the right of any citizen to access or request information, whether or not contained in any written form, which is in the custody or possession of any public official, agency or institution howsoever described, is established."
       }
-    },
-    {
-      "source_id": "ng-cbn-act-2007",
-      "title": "Central Bank of Nigeria Act 2007",
-      "jurisdiction": "ng",
-      "language": "en",
-      "document_type": "act",
-      "year": 2007
-    },
-    {
-      "source_id": "ng-isa-2025",
-      "title": "Investments and Securities Act 2025",
-      "jurisdiction": "ng",
-      "language": "en",
-      "document_type": "act",
-      "year": 2025
     }
-  ]
+  ],
+  "note": "Worked examples for the Law check page. Law check itself covers every text Open Alvary publishes."
 }

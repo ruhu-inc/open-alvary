@@ -217,7 +217,7 @@
   {
     "id": "law-check",
     "name": "Law check",
-    "description": "Open Alvary's own Law check service: MCP-only access over its approved record list, without withdrawal disclosure.",
+    "description": "Open Alvary's own Law check service: MCP-only access over every published text, without withdrawal disclosure.",
     "includes": [
       "mcp"
     ],
@@ -232,12 +232,7 @@
       "shared_watches": false,
       "webhook_endpoints": 0,
       "withdrawals": "not_told",
-      "anchor_text_bytes": 8192,
-      "source_ids": [
-        "ng-foi-act-2011",
-        "ng-cbn-act-2007",
-        "ng-isa-2025"
-      ]
+      "anchor_text_bytes": 8192
     },
     "published": false,
     "listing": {
