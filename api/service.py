@@ -569,7 +569,14 @@ def _origin(request: Request) -> str:
 # The slim image's MIME table lacks these: without them, pictures opened on their own download
 # instead of showing, and Markdown would not be text.
 mimetypes.add_type("image/webp", ".webp")
+mimetypes.add_type("image/x-icon", ".ico")
 mimetypes.add_type("text/markdown", ".md")
+
+# Brand icons stay directly reachable on the API host (HTTP 200, no 308 redirect) so MCP clients and
+# favicon resolvers for api.open.alvary.ai show Open Alvary's mark instead of falling back to alvary.ai.
+API_HOST_ICONS = frozenset(
+    {"favicon.ico", "favicon.svg", "favicon-32.png", "apple-touch-icon.png", "icon-192.png", "icon-512.png"}
+)
 
 
 class WebsiteFiles(StaticFiles):
@@ -589,7 +596,7 @@ class WebsiteFiles(StaticFiles):
         self.elsewhere = elsewhere
 
     async def get_response(self, path: str, scope):
-        if self.elsewhere is not None:
+        if self.elsewhere is not None and path not in API_HOST_ICONS:
             host = dict(scope.get("headers") or []).get(b"host", b"").decode("latin-1")
             if host.rsplit(":", 1)[0].lower() == self.elsewhere[0]:
                 query = scope.get("query_string", b"").decode("latin-1")

@@ -56,7 +56,23 @@ class _CursorError(Exception):
         self.message = message
 
 
-SERVER_INFO = {"name": "open-alvary", "title": "Open Alvary public legal catalogue", "version": "0.1.0"}
+SERVER_INFO = {
+    "name": "open-alvary",
+    "title": "Open Alvary public legal catalogue",
+    "version": "0.1.0",
+    "icons": [
+        {
+            "src": "https://open.alvary.ai/icon-512.png",
+            "mimeType": "image/png",
+            "sizes": ["512x512"],
+        },
+        {
+            "src": "https://open.alvary.ai/favicon.svg",
+            "mimeType": "image/svg+xml",
+            "sizes": ["any"],
+        },
+    ],
+}
 
 INSTRUCTIONS = (
     "Read-only public legal catalogue for African jurisdictions. "
