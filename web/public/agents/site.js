@@ -153,6 +153,44 @@ function matchesMcpUrl(input, mcpPath) {
  * from `/agents/mcp` without altering the Response stream returned to callers.
  */
 /**
+ * OpenAI's GPT-6 models refuse tools on /v1/chat/completions unless the request sets
+ * reasoning_effort to "none" (GPT-6.1 Terra and GPT-6 Luna, tried with a real key 2026-11-28), and
+ * the vendored runtime sends no such field. When OpenAI refuses a tool request for that reason, it
+ * is sent once more with "none", and every later request for that model carries it from the start.
+ * Nothing else is changed, and no other provider sees the field. (GPT-6.2 Sol and Astra refuse
+ * "none" too: they take tools only through OpenAI's Responses API, so the page does not offer them.)
+ */
+export function installOpenAiToolFix({ targetGlobal = globalThis } = {}) {
+  const originalFetch = targetGlobal.fetch;
+  if (typeof originalFetch !== "function") return;
+  const needsNone = new Set();
+  targetGlobal.fetch = async function lawCheckOpenAiToolFix(input, init) {
+    const url = typeof input === "string" ? input : input?.url || "";
+    const method = (init?.method || "GET").toUpperCase();
+    if (method !== "POST" || !/^https:\/\/api\.openai\.com\/v1\/chat\/completions\b/.test(url) || typeof init?.body !== "string") {
+      return originalFetch.call(this, input, init);
+    }
+    let body;
+    try {
+      body = JSON.parse(init.body);
+    } catch {
+      return originalFetch.call(this, input, init);
+    }
+    if (!Array.isArray(body?.tools) || !body.tools.length || "reasoning_effort" in body) {
+      return originalFetch.call(this, input, init);
+    }
+    const withNone = () => originalFetch.call(this, input, { ...init, body: JSON.stringify({ ...body, reasoning_effort: "none" }) });
+    if (needsNone.has(body.model)) return withNone();
+    const resp = await originalFetch.call(this, input, init);
+    if (resp.status !== 400) return resp;
+    const said = await resp.clone().text().catch(() => "");
+    if (!/reasoning_effort/i.test(said) || !/none/i.test(said)) return resp;
+    needsNone.add(body.model);
+    return withNone();
+  };
+}
+
+/**
  * Lets the page stop an AI answer. While a turn runs, every call to an AI provider (a POST to
  * ".../chat/completions") and to Law check's own tools carries the turn's signal, so Stop, or the
  * time limit, ends the calls in flight and refuses the next ones. The vendored runtime is not
@@ -223,6 +261,8 @@ export function providerErrorNotice(error, { model = "" } = {}) {
         }, then try again. One question can take 10 to 15 requests, so a free key runs out quickly.`;
   } else if ([500, 502, 503, 504, 529].includes(status) || /overloaded|unavailable|high demand/i.test(raw)) {
     text = "Your AI provider is busy and could not answer just now. Try again in a minute, or choose another model in the AI settings.";
+  } else if (/\/v1\/responses|reasoning_effort/i.test(raw)) {
+    text = `The model${named} takes tools only through a newer OpenAI interface that Law check does not use yet. Choose another model in the AI settings: GPT-6.1 Terra and GPT-6 Luna work.`;
   } else if (status === 400) {
     text = `Your AI provider refused the request. The model${named} may not support tools: choose another in the AI settings.`;
   } else {
@@ -758,6 +798,7 @@ class LawCheckController {
       },
     });
 
+    installOpenAiToolFix();
     this.turnStopper = installTurnStopper();
 
     this.panelWide?.addEventListener?.("change", () => this._syncPanel());
@@ -1478,14 +1519,16 @@ class LawCheckController {
       openai: {
         name: "OpenAI",
         router: "https://api.openai.com/v1",
-        model: "gpt-6.2-sol",
+        // GPT-6.2 Sol and Astra take tools only through OpenAI's Responses API, which the runtime does
+        // not speak: on /v1/chat/completions they refuse every request with tools, whatever the
+        // reasoning effort (tried with a real key, 2026-11-28). Luna and Terra take tools there with
+        // reasoning_effort "none", which installOpenAiToolFix adds when OpenAI asks for it.
+        model: "gpt-6.1-terra",
         keyUrl: "https://platform.openai.com/api-keys",
         keyLabel: "OpenAI",
         models: [
-          { id: "gpt-6-luna", label: "GPT-6 Luna · low cost" },
           { id: "gpt-6.1-terra", label: "GPT-6.1 Terra" },
-          { id: "gpt-6.2-sol", label: "GPT-6.2 Sol" },
-          { id: "gpt-6.2-astra", label: "GPT-6.2 Astra" },
+          { id: "gpt-6-luna", label: "GPT-6 Luna · low cost" },
         ],
       },
       anthropic: {

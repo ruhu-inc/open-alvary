@@ -18,6 +18,7 @@ import {
   sentLength,
   passagesInQuotes,
   providerErrorNotice,
+  installOpenAiToolFix,
 } from "../web/public/agents/site.js";
 import { registerActions } from "../web/public/agents/site-actions.js";
 import {
@@ -687,6 +688,45 @@ describe("what a person testing the page found (2026-11-28)", () => {
     assert.match(providerErrorNotice(new Error('LLM HTTP 401: {"error":{"message":"invalid x-api-key"}}')).text, /did not accept the key/);
     assert.match(providerErrorNotice(new Error("LLM HTTP 404: model not found"), { model: "models/x-1" }).text, /\u201cx-1\u201d/);
     assert.doesNotMatch(providerErrorNotice(new Error("LLM HTTP 500: {}")).text, /\{/);
+  });
+
+  it("names OpenAI's models that cannot use tools here, and suggests only ones that can", () => {
+    const sol = providerErrorNotice(
+      new Error(
+        "LLM HTTP 400: {\"error\":{\"message\":\"Function tools with reasoning_effort are not supported for gpt-6.2-sol in /v1/chat/completions. To use function tools, use /v1/responses or set reasoning_effort to 'none'.\"}}",
+      ),
+      { model: "gpt-6.2-sol" },
+    );
+    assert.match(sol.text, /\u201cgpt-6.2-sol\u201d takes tools only through a newer OpenAI interface/);
+    assert.match(sol.text, /GPT-6.1 Terra and GPT-6 Luna work/);
+    assert.match(siteSrc, /model: "gpt-6.1-terra",/);
+    assert.doesNotMatch(siteSrc, /\{ id: "gpt-6.2-(sol|astra)"/);
+  });
+
+  it("asks OpenAI again with reasoning_effort none when a GPT-6 model refuses tools, and only then", async () => {
+    const sent = [];
+    const refusal =
+      "Function tools with reasoning_effort are not supported for gpt-6.1-terra in /v1/chat/completions. To use function tools, use /v1/responses or set reasoning_effort to 'none'.";
+    const fake = {
+      fetch: async (url, init) => {
+        const body = JSON.parse(init.body);
+        sent.push({ url, effort: body.reasoning_effort });
+        if (url.includes("openai.com") && body.reasoning_effort !== "none") return new Response(JSON.stringify({ error: { message: refusal } }), { status: 400 });
+        return new Response("ok", { status: 200 });
+      },
+    };
+    installOpenAiToolFix({ targetGlobal: fake });
+    const tools = [{ type: "function", function: { name: "t", parameters: {} } }];
+    const ask = (url) =>
+      fake.fetch(url, { method: "POST", body: JSON.stringify({ model: "gpt-6.1-terra", messages: [], tools }) });
+    assert.equal((await ask("https://api.openai.com/v1/chat/completions")).status, 200);
+    assert.deepEqual(sent.map((s) => s.effort), [undefined, "none"]);
+    // The same model then carries it from the start.
+    await ask("https://api.openai.com/v1/chat/completions");
+    assert.deepEqual(sent.slice(2).map((s) => s.effort), ["none"]);
+    // Another provider never sees the field.
+    await ask("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions");
+    assert.equal(sent.at(-1).effort, undefined);
   });
 
   it("never offers one provider's saved key to another", () => {
