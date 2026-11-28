@@ -221,7 +221,11 @@ def test_starter_reads_its_one_country_and_is_refused_any_other(api):
 
     assert not call("get_source", {"source_id": "ng-foi-act-2011"})["isError"]
     outside = call("search_catalogue", {"query": "information", "jurisdiction": "RW"})
-    assert outside["isError"] and outside["structuredContent"] == {"code": "jurisdiction_not_included"}
+    assert outside["isError"] and outside["structuredContent"] == {
+        "code": "jurisdiction_not_included",
+        "retryable": False,
+        "manage_url": "https://open.alvary.ai/console/access",
+    }
     assert "about another" in outside["content"][0]["text"]
     # Another country chosen: the first is refused in turn.
     accounts.change_countries(person, organisation, ["rw"])
@@ -340,7 +344,7 @@ def test_mcp_needs_a_credential_and_answers_tools_within_the_access(api):
     assert not found["isError"] and "Freedom of Information" in found["content"][0]["text"]
     assert client.get("/mcp", headers=headers).status_code == 405  # no server-initiated stream
     [usage] = accounts.usage(person, organisation)
-    assert usage["class"] == "mcp" and usage["requests"] == 4  # the GET counts too
+    assert usage["class"] == "mcp" and usage["requests"] == 3  # pre-auth GET /mcp does not count
 
 
 def test_mcp_searches_the_plans_countries_and_reads_others_at_the_starter_rate(api):
@@ -427,3 +431,205 @@ def test_a_records_history_comes_from_checked_links_a_page_at_a_time(api):
     for bad in ({"kind": "parent_of"}, {"limit": 0}, {"cursor": "nonsense"}):
         refused = client.get(path, params=bad, headers=headers)
         assert refused.status_code == 400 and refused.json()["code"] == "invalid_input", bad
+
+
+META_2026 = {
+    "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+    "io.modelcontextprotocol/clientCapabilities": {},
+}
+
+
+def _rpc26(client, method, params=None, id_=1, headers=None):
+    body_params = dict(params or {})
+    if method != "server/discover" and "_meta" not in body_params:
+        body_params["_meta"] = META_2026
+    body = {"jsonrpc": "2.0", "id": id_, "method": method}
+    if body_params:
+        body["params"] = body_params
+    hdrs = {"MCP-Protocol-Version": "2026-07-28", "Mcp-Method": method}
+    if method == "tools/call" and isinstance(body_params.get("name"), str):
+        hdrs["Mcp-Name"] = body_params["name"]
+    if headers:
+        hdrs.update(headers)
+    return client.post("/mcp", json=body, headers=hdrs)
+
+
+def test_mcp_pre_auth_405_prm_docs_and_postgres_discover_check_constraint(api, pg_engine):
+    client, accounts, person, organisation = api
+    grant(accounts, organisation)
+    headers = key(accounts, person, organisation)
+
+    # Pre-auth 405 Method Not Allowed (Allow: POST) for GET, DELETE, PUT, PATCH both unauth & auth.
+    for method in ("GET", "DELETE", "PUT", "PATCH"):
+        unauth = client.request(method, "/mcp")
+        assert unauth.status_code == 405 and unauth.headers["allow"] == "POST", method
+        auth = client.request(method, "/mcp", headers=headers)
+        assert auth.status_code == 405 and auth.headers["allow"] == "POST", method
+    assert accounts.usage(person, organisation) == []
+
+    # PRM resource_documentation URLs differ for /api/v1 vs /mcp (and bare PRM).
+    v1_prm = client.get("/.well-known/oauth-protected-resource/api/v1").json()
+    mcp_prm = client.get("/.well-known/oauth-protected-resource/mcp").json()
+    bare_prm = client.get("/.well-known/oauth-protected-resource").json()
+    assert v1_prm["resource_documentation"] == "https://open.alvary.ai/docs"
+    assert mcp_prm["resource_documentation"] == "https://open.alvary.ai/docs/ai-tools"
+    assert bare_prm == mcp_prm
+
+    # Unauthenticated server/discover succeeds against real PostgreSQL AdmissionStore (CHECK constraint).
+    disc = _rpc26(client, "server/discover", id_="disc-pg-1")
+    assert disc.status_code == 200 and disc.headers["x-request-id"]
+    res = disc.json()["result"]
+    assert res["resultType"] == "complete"
+    assert res["supportedVersions"] == ["2026-07-28", "2025-06-18"]
+    assert res["ttlMs"] == 0 and res["cacheScope"] == "public"
+    assert accounts.usage(person, organisation) == []  # zero org quota consumed
+    with pg_engine.connect() as conn:
+        buckets = accounts.namespace.qualified(conn, "policy", "admission_bucket")
+        leases = accounts.namespace.qualified(conn, "policy", "admission_lease")
+        keys_in_db = (
+            conn.execute(text(f"SELECT scope_key FROM {buckets} WHERE scope_key LIKE 'discover:%'"))
+            .scalars()
+            .all()
+        )
+        assert keys_in_db and all(k.startswith("discover:") for k in keys_in_db)
+        open_leases = conn.execute(
+            text(f"SELECT COUNT(*) FROM {leases} WHERE scope_key LIKE 'discover:%'")
+        ).scalar()
+        assert open_leases == 0
+
+
+def test_postgres_mcp_changes_output_schemas_statement_timeout_and_e2e_flows(
+    api, pg_engine, cleared, monkeypatch
+):
+    import jsonschema
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+
+    from api.mcp_schemas import OUTPUT_SCHEMAS
+
+    client, accounts, person, organisation = api
+    # Save cleared corpus so PostgreSQL change_event rows exist for list_changes & get_change.
+    store = Store(pg_engine)
+    store.save(cleared)
+
+    # Configure receipt signing key for check_claim end-to-end.
+    priv = ec.generate_private_key(ec.SECP256R1())
+    pem = priv.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    ).decode()
+    monkeypatch.setenv("ALVARY_RECEIPT_SIGNING_KEY", pem)
+
+    # Set up Starter tier and byte-limited tier.
+    starter_tier = {
+        **TIER,
+        "id": "starter",
+        "name": "Starter",
+        "allowance": TIER["allowance"] | {"jurisdictions": 1, "bytes_per_day": 50_000},
+    }
+    tiny_bytes_tier = {
+        **TIER,
+        "id": "tiny-bytes",
+        "name": "Tiny Bytes",
+        "allowance": TIER["allowance"] | {"bytes_per_day": 30},
+    }
+    accounts.set_tiers([TIER, starter_tier, tiny_bytes_tier])
+    grant(accounts, organisation, tier="pilot", scope={"all": True})
+    headers = key(accounts, person, organisation)
+
+    # Verify SET LOCAL statement_timeout = '10s' executes inside MCP PostgreSQL sessions.
+    seen_timeouts: list[str] = []
+
+    def track_timeout(connection, cursor, statement, *_):
+        if "statement_timeout" in statement:
+            seen_timeouts.append(statement)
+
+    event.listen(pg_engine, "before_cursor_execute", track_timeout)
+    try:
+        listed = _rpc26(
+            client,
+            "tools/call",
+            {"name": "list_changes", "arguments": {"limit": 5}},
+            id_="chg-1",
+            headers=headers,
+        )
+    finally:
+        event.remove(pg_engine, "before_cursor_execute", track_timeout)
+    assert any("SET LOCAL statement_timeout = '10s'" in s for s in seen_timeouts)
+
+    # Validate list_changes and get_change against OUTPUT_SCHEMAS (Draft 2020-12).
+    assert listed.status_code == 200
+    lres = listed.json()["result"]
+    assert lres["resultType"] == "complete" and lres["isError"] is False
+    jsonschema.Draft202012Validator(OUTPUT_SCHEMAS["list_changes"]).validate(lres["structuredContent"])
+    assert lres["structuredContent"]["events"]
+    event_id = lres["structuredContent"]["events"][0]["event_id"]
+
+    one = _rpc26(
+        client,
+        "tools/call",
+        {"name": "get_change", "arguments": {"event_id": event_id}},
+        id_="chg-2",
+        headers=headers,
+    )
+    assert one.status_code == 200
+    ores = one.json()["result"]
+    assert ores["resultType"] == "complete" and ores["isError"] is False
+    jsonschema.Draft202012Validator(OUTPUT_SCHEMAS["get_change"]).validate(ores["structuredContent"])
+
+    # Withdraw text via rights status change and confirm keyed 2026-07-28 get_anchor returns withdrawn.
+    withdrawn_corpus = cleared.model_copy(deep=True)
+    withdrawn_corpus.rights[0].status = "RIGHTS_UNDER_REVIEW"
+    store.save(withdrawn_corpus)
+    w_resp = _rpc26(
+        client,
+        "tools/call",
+        {"name": "get_anchor", "arguments": {"anchor_id": "test-node"}},
+        id_="wd-1",
+        headers=headers,
+    )
+    assert w_resp.status_code == 200
+    wres = w_resp.json()["result"]
+    assert wres["resultType"] == "complete" and wres["isError"] is True
+    assert wres["structuredContent"] == {"code": "withdrawn"}
+
+    # Restore cleared text, switch org to Starter (covering rw), verify check_claim Starter refusal + usage refusal tracking.
+    store.save(cleared)
+    accounts.revoke_access("op", organisation, "switch")
+    grant(accounts, organisation, tier="starter", scope={"jurisdictions": ["rw"]})
+    cc_refused = _rpc26(
+        client,
+        "tools/call",
+        {"name": "check_claim", "arguments": {"anchor_id": "test-node"}},
+        id_="cc-1",
+        headers=headers,
+    )
+    assert cc_refused.status_code == 200
+    cc_res = cc_refused.json()["result"]
+    assert cc_res["resultType"] == "complete" and cc_res["isError"] is True
+    assert cc_res["structuredContent"] == {
+        "code": "jurisdiction_not_included",
+        "retryable": False,
+        "manage_url": "https://open.alvary.ai/console/access",
+    }
+    assert "currently Rwanda, rw" in cc_res["content"][0]["text"]
+    mcp_usage = [u for u in accounts.usage(person, organisation) if u["class"] == "mcp"]
+    assert mcp_usage and mcp_usage[0]["refusals"].get("jurisdiction_not_included", 0) >= 1
+
+    # ByteLedger bytes_per_day 429 echoes jsonrpc_id and includes retry seconds + help URL.
+    accounts.revoke_access("op", organisation, "switch-bytes")
+    grant(accounts, organisation, tier="tiny-bytes", scope={"all": True})
+    b429 = _rpc26(
+        client,
+        "tools/call",
+        {"name": "get_coverage", "arguments": {}},
+        id_="bytes-id-9",
+        headers=headers,
+    )
+    assert b429.status_code == 429
+    b_body = b429.json()
+    assert b_body["id"] == "bytes-id-9" and b_body["error"]["code"] == 10003
+    assert "Retry after " in b_body["error"]["message"]
+    assert "https://open.alvary.ai/docs/errors#rate_limited" in b_body["error"]["message"]
+    assert b_body["error"]["data"]["retryable"] is True and b_body["error"]["data"]["schema_version"] == "1"

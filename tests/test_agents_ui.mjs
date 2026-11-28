@@ -14,6 +14,11 @@ import {
   stepLineForEvent,
   pickClaimScope,
   listInWords,
+  stripOuterQuotes,
+  sentLength,
+  passagesInQuotes,
+  providerErrorNotice,
+  installOpenAiToolFix,
 } from "../web/public/agents/site.js";
 import { registerActions } from "../web/public/agents/site-actions.js";
 import {
@@ -23,6 +28,9 @@ import {
   bandHeadlineForReceipt,
   safeLinkHref,
   wordDifference,
+  marksOnlyDifference,
+  sectionHash,
+  sectionHref,
 } from "../web/public/agents/receipt-card.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -607,5 +615,122 @@ describe("every published text, not a short list (owner, 2026-11-27)", () => {
       assert.doesNotMatch(net, /Nigerian/, file);
       assert.doesNotMatch(net, /language \(\\"en\\"\)/, file);
     }
+  });
+});
+
+describe("what a person testing the page found (2026-11-28)", () => {
+  const siteSrc = fs.readFileSync(path.join(repoRoot, "web/public/agents/site.js"), "utf8");
+  const section =
+    "(1) Notwithstanding anything contained in any other Act, law or regulation, the right of any person to access or request information, whether or not contained in any written form, which is in the custody or possession of any public official, agency or institution howsoever described, is established.";
+
+  it("takes off quotation marks wrapped around a pasted quote, and only those", () => {
+    assert.equal(stripOuterQuotes('"the right of any person to access"'), "the right of any person to access");
+    assert.equal(stripOuterQuotes("\u201cthe right of any person\u201d."), "the right of any person");
+    assert.equal(stripOuterQuotes("\u00abdroit de toute personne\u00bb"), "droit de toute personne");
+    assert.equal(stripOuterQuotes("the right \u201cof\u201d any person"), "the right \u201cof\u201d any person");
+    assert.equal(stripOuterQuotes('"person" means any "citizen"'), '"person" means any "citizen"');
+    assert.equal(stripOuterQuotes("  plain words  "), "plain words");
+  });
+
+  it("counts a field's length the same way in the counter and the error", () => {
+    assert.equal(sentLength("  word  "), 4);
+    assert.match(siteSrc, /const len = sentLength\(input\.value\)/);
+    assert.doesNotMatch(siteSrc, /That is \$\{\[\.\.\.input\.value\]\.length\}/);
+  });
+
+  it("says when only capital letters or punctuation differ, with the section's own words", () => {
+    const quote = "The right of any person to access or request information, whether.";
+    assert.equal(wordDifference(quote, section), null);
+    assert.equal(
+      marksOnlyDifference(quote, section),
+      "the right of any person to access or request information, whether",
+    );
+    assert.equal(marksOnlyDifference(quote.replace("person", "citizen"), section), null);
+    const receipt = { findings: { quote: "absent", opening_text: section }, part: { pinpoint: "s. 1(1)" } };
+    assert.equal(
+      wordsLineForReceipt(receipt, { quote }).text,
+      "Not found exactly as quoted in s. 1(1): the capital letters or punctuation differ",
+    );
+    assert.equal(
+      wordsLineForReceipt(receipt, { quote: quote.replace("person", "citizen") }).text,
+      "These words are not in s. 1(1) of the published text",
+    );
+    assert.equal(marksOnlyDifference("too short", section), null);
+  });
+
+  it("links a receipt to its section's place on the law's page", () => {
+    assert.equal(sectionHash("s. 1(1)"), "#section-1");
+    assert.equal(sectionHash("ss. 12A(3)"), "#section-12A");
+    assert.equal(sectionHash("art. 5"), "#article-5");
+    assert.equal(sectionHash("Article 27"), "#article-27");
+    assert.equal(sectionHash("Schedule 2"), "");
+    assert.equal(sectionHref("https://open.alvary.ai/sources/ng-foi-act-2011", "s. 1(1)"), "https://open.alvary.ai/sources/ng-foi-act-2011#section-1");
+    assert.equal(sectionHref("https://open.alvary.ai/sources/x#part-3", "s. 1"), "https://open.alvary.ai/sources/x#part-3");
+    assert.equal(sectionHref("javascript:alert(1)", "s. 1"), null);
+  });
+
+  it("pairs quotation marks in order, so the words between two short quotes are no passage", () => {
+    const answer =
+      'The memo says "any citizen", but FOI Act 2011, s. 1(1) (Nigeria) says "any person". It reads: "the right of any person to access or request information".';
+    assert.deepEqual(passagesInQuotes(answer), ["the right of any person to access or request information"]);
+    assert.deepEqual(passagesInQuotes("\u201cshort\u201d and \u201canother short one\u201d"), []);
+  });
+
+  it("says what went wrong with the AI provider in plain words, without its JSON", () => {
+    const busy = providerErrorNotice(
+      new Error('LLM HTTP 503: [{"error":{"code":503,"message":"The model is overloaded. Please try again later.","status":"UNAVAILABLE"}}]'),
+    );
+    assert.match(busy.text, /^Your AI provider is busy/);
+    assert.equal(busy.detail, "The model is overloaded. Please try again later.");
+    const quota = providerErrorNotice(new Error('LLM HTTP 429: [{"error":{"code":429,"message":"Quota exceeded. Please retry in 41.2s. trunc'));
+    assert.match(quota.text, /Wait about 42 seconds/);
+    assert.match(providerErrorNotice(new Error("LLM HTTP 429: GenerateRequestsPerDayPerProjectPerModel")).text, /today's allowance/);
+    assert.match(providerErrorNotice(new Error('LLM HTTP 401: {"error":{"message":"invalid x-api-key"}}')).text, /did not accept the key/);
+    assert.match(providerErrorNotice(new Error("LLM HTTP 404: model not found"), { model: "models/x-1" }).text, /\u201cx-1\u201d/);
+    assert.doesNotMatch(providerErrorNotice(new Error("LLM HTTP 500: {}")).text, /\{/);
+  });
+
+  it("names OpenAI's models that cannot use tools here, and suggests only ones that can", () => {
+    const sol = providerErrorNotice(
+      new Error(
+        "LLM HTTP 400: {\"error\":{\"message\":\"Function tools with reasoning_effort are not supported for gpt-6.2-sol in /v1/chat/completions. To use function tools, use /v1/responses or set reasoning_effort to 'none'.\"}}",
+      ),
+      { model: "gpt-6.2-sol" },
+    );
+    assert.match(sol.text, /\u201cgpt-6.2-sol\u201d takes tools only through a newer OpenAI interface/);
+    assert.match(sol.text, /GPT-6.1 Terra and GPT-6 Luna work/);
+    assert.match(siteSrc, /model: "gpt-6.1-terra",/);
+    assert.doesNotMatch(siteSrc, /\{ id: "gpt-6.2-(sol|astra)"/);
+  });
+
+  it("asks OpenAI again with reasoning_effort none when a GPT-6 model refuses tools, and only then", async () => {
+    const sent = [];
+    const refusal =
+      "Function tools with reasoning_effort are not supported for gpt-6.1-terra in /v1/chat/completions. To use function tools, use /v1/responses or set reasoning_effort to 'none'.";
+    const fake = {
+      fetch: async (url, init) => {
+        const body = JSON.parse(init.body);
+        sent.push({ url, effort: body.reasoning_effort });
+        if (url.includes("openai.com") && body.reasoning_effort !== "none") return new Response(JSON.stringify({ error: { message: refusal } }), { status: 400 });
+        return new Response("ok", { status: 200 });
+      },
+    };
+    installOpenAiToolFix({ targetGlobal: fake });
+    const tools = [{ type: "function", function: { name: "t", parameters: {} } }];
+    const ask = (url) =>
+      fake.fetch(url, { method: "POST", body: JSON.stringify({ model: "gpt-6.1-terra", messages: [], tools }) });
+    assert.equal((await ask("https://api.openai.com/v1/chat/completions")).status, 200);
+    assert.deepEqual(sent.map((s) => s.effort), [undefined, "none"]);
+    // The same model then carries it from the start.
+    await ask("https://api.openai.com/v1/chat/completions");
+    assert.deepEqual(sent.slice(2).map((s) => s.effort), ["none"]);
+    // Another provider never sees the field.
+    await ask("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions");
+    assert.equal(sent.at(-1).effort, undefined);
+  });
+
+  it("never offers one provider's saved key to another", () => {
+    assert.match(siteSrc, /const profileForChoice = \(\) =>/);
+    assert.doesNotMatch(siteSrc, /const existing = byok\.getSelectedByokProfile\(\);/);
   });
 });

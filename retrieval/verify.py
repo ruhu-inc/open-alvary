@@ -5,6 +5,7 @@ import os
 import re
 import time
 import unicodedata
+from collections.abc import Callable
 from datetime import UTC, date, datetime
 
 from api.catalogue import LegacyCatalogue, SourceUnavailable, _in_force, _speaks
@@ -45,6 +46,16 @@ _ELLIPSIS_TRAIL = re.compile(r"(?:\s|…|\.\.\.)+$")
 _ELLIPSIS_SPLIT = re.compile(r"(?:…|\.\.\.)+")
 
 _CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+
+
+class InvalidClaimArguments(ValueError):
+    """check_claim's arguments are wrong. The message says which one and how, and is safe to send back."""
+
+
+# Optional arguments that mean "not sent" when they arrive empty. Some AI models send every argument a
+# tool lists, with "" or null for the ones they have no value for (Gemini through its OpenAI-compatible
+# endpoint does), and refusing those would fail their first check every time.
+BLANK_MEANS_ABSENT = frozenset({"citation", "anchor_id", "as_of", "jurisdiction", "language"})
 
 
 class VerifyToolError(Exception):
@@ -327,36 +338,43 @@ def match_quote(part_text: str, quote: str) -> dict:
 def _validate_arguments(arguments: dict, today: date) -> tuple[dict, dict]:
     """Validate check_claim arguments per §7. Returns ``(parsed, echoed_claim)``."""
     if not isinstance(arguments, dict):
-        raise ValueError("Arguments must be a JSON object")
+        raise InvalidClaimArguments("Arguments must be a JSON object")
     unknown = set(arguments) - ALLOWED_ARGUMENTS
     if unknown:
-        raise ValueError(f"Unknown argument(s): {', '.join(sorted(unknown))}")
+        raise InvalidClaimArguments(f"Unknown argument(s): {', '.join(sorted(unknown))}")
+    arguments = {
+        name: value
+        for name, value in arguments.items()
+        if not (
+            name in BLANK_MEANS_ABSENT and (value is None or (isinstance(value, str) and not value.strip()))
+        )
+    }
 
     citation = arguments.get("citation")
     anchor_id = arguments.get("anchor_id")
     if citation is None and anchor_id is None:
-        raise ValueError("One of citation or anchor_id is required")
+        raise InvalidClaimArguments("One of citation or anchor_id is required")
     if "citation" in arguments and "anchor_id" in arguments:
         # With both, the part is found by anchor_id and the citation would be digested unchecked: a
         # receipt for one section could then be shown beside a claim naming another.
-        raise ValueError("Send citation or anchor_id, not both")
+        raise InvalidClaimArguments("Send citation or anchor_id, not both")
 
     echoed: dict[str, object] = {}
 
     if "citation" in arguments:
         if not isinstance(citation, str) or not (1 <= len(citation) <= 600) or not citation.strip():
-            raise ValueError("citation must be a non-empty string of 1 to 600 characters")
+            raise InvalidClaimArguments("citation must be a non-empty string of 1 to 600 characters")
         echoed["citation"] = citation
 
     if "anchor_id" in arguments:
         if not isinstance(anchor_id, str) or not (1 <= len(anchor_id) <= 160) or not anchor_id.strip():
-            raise ValueError("anchor_id must be a non-empty string of 1 to 160 characters")
+            raise InvalidClaimArguments("anchor_id must be a non-empty string of 1 to 160 characters")
         echoed["anchor_id"] = anchor_id
 
     quote = arguments.get("quote")
     if "quote" in arguments:
         if not isinstance(quote, str) or not (1 <= len(quote) <= 2000):
-            raise ValueError("quote must be a string of 1 to 2,000 characters")
+            raise InvalidClaimArguments("quote must be a string of 1 to 2,000 characters")
         echoed["quote"] = quote
 
     as_of: date | None = None
@@ -369,12 +387,12 @@ def _validate_arguments(arguments: dict, today: date) -> tuple[dict, dict]:
             try:
                 as_of = date.fromisoformat(raw_as_of)
             except ValueError as exc:
-                raise ValueError("as_of must be a valid ISO date (YYYY-MM-DD)") from exc
+                raise InvalidClaimArguments("as_of must be a valid ISO date (YYYY-MM-DD)") from exc
             echoed["as_of"] = raw_as_of
         else:
-            raise ValueError("as_of must be an ISO date string (YYYY-MM-DD)")
+            raise InvalidClaimArguments("as_of must be an ISO date string (YYYY-MM-DD)")
         if as_of > today:
-            raise ValueError("as_of must not be after today in UTC")
+            raise InvalidClaimArguments("as_of must not be after today in UTC")
 
     jurisdiction = arguments.get("jurisdiction")
     if "jurisdiction" in arguments:
@@ -383,7 +401,7 @@ def _validate_arguments(arguments: dict, today: date) -> tuple[dict, dict]:
             or not (2 <= len(jurisdiction) <= 40)
             or not JURISDICTION_RE.fullmatch(jurisdiction)
         ):
-            raise ValueError("jurisdiction must be a valid jurisdiction code (e.g. 'ng')")
+            raise InvalidClaimArguments("jurisdiction must be a valid jurisdiction code (e.g. 'ng')")
         echoed["jurisdiction"] = jurisdiction
 
     language = arguments.get("language")
@@ -393,13 +411,13 @@ def _validate_arguments(arguments: dict, today: date) -> tuple[dict, dict]:
             or not (2 <= len(language) <= 20)
             or not LANGUAGE_RE.fullmatch(language)
         ):
-            raise ValueError("language must be a valid language tag (e.g. 'en')")
+            raise InvalidClaimArguments("language must be a valid language tag (e.g. 'en')")
         echoed["language"] = language
 
     reading = arguments.get("reading")
     if "reading" in arguments:
         if not isinstance(reading, str) or len(reading) > 600:
-            raise ValueError("reading must be a string of up to 600 characters")
+            raise InvalidClaimArguments("reading must be a string of up to 600 characters")
         echoed["reading"] = reading
 
     parsed = {
@@ -624,6 +642,42 @@ HOLDS_QUOTE = frozenset({"exact", "normalised", "with_omissions"})
 MAX_WORK_SPLITS = 4
 
 
+def _quote_words(text: str) -> set[str]:
+    return set(re.findall(r"[^\W_]+", normalize_quote(text).casefold()))
+
+
+def _closest_by_words(catalogue: LegacyCatalogue, candidates, quote: str):
+    """Where no text of one record holds ``quote``, the one text whose words are clearly the quote's own
+    language and passage: most of the quote's words are in it, and far more than in any other. An
+    English quote of one of Rwanda's articles is then answered "not found" in the English text, with
+    the words around it, rather than as a choice among three texts that look alike. None when no text
+    is clearly closest; the caller then lists them all, as before."""
+    wanted = _quote_words(quote)
+    if len(wanted) < 4:
+        return None
+    scored = []
+    for candidate in candidates:
+        row = catalogue.repository.node(candidate.anchor_id)
+        if row is None:
+            continue
+        node = NodeViewRecord.model_validate(row)
+        try:
+            version, _, _ = catalogue.version(node.version_id)
+        except SourceUnavailable:
+            continue
+        span_bytes, _ = catalogue._span(node, version)
+        if len(span_bytes) > MAX_PART_BYTES:
+            continue
+        share = len(wanted & _quote_words(span_bytes.decode("utf-8", errors="replace"))) / len(wanted)
+        scored.append((share, candidate))
+    if not scored:
+        return None
+    scored.sort(key=lambda pair: pair[0], reverse=True)
+    best_share, best = scored[0]
+    runner_up = scored[1][0] if len(scored) > 1 else 0.0
+    return best if best_share >= 0.6 and best_share - runner_up >= 0.25 else None
+
+
 def _choose_by_words(catalogue: LegacyCatalogue, candidates, quote: str, assessed_at: date):
     """The one candidate part whose published words hold ``quote``, where a citation names more than one
     part of a record (its texts in three languages, two readings of one Act): the words decide which part
@@ -665,24 +719,29 @@ def _choose_by_words(catalogue: LegacyCatalogue, candidates, quote: str, assesse
     return None
 
 
-def _names_a_record(catalogue: LegacyCatalogue, citation: str, allowed_source_ids) -> bool:
-    """Whether the words before one of the citation's last commas name a public record ("Law n° 1/2016
-    …, Chapter One A"): the record is in the catalogue though its part was not read, so the part is not
-    found rather than the record missing."""
+def _names_a_record(
+    catalogue: LegacyCatalogue, citation: str, allowed_source_ids, check_jurisdiction=None
+) -> list:
+    """The public records the words before one of the citation's last commas name ("Law n° 1/2016 …,
+    Chapter One A"), or an empty list: the record is in the catalogue though its part was not read, so
+    the part is not found rather than the record missing (or its text not yet published)."""
     at = len(citation)
     for _ in range(MAX_WORK_SPLITS):
         at = citation.rfind(",", 0, at)
         if at <= 0:
-            return False
+            return []
         work = citation[:at].strip(" ,;")
         if not work:
-            return False
+            return []
         matches = catalogue.citations(work).matches
         if allowed_source_ids is not None:
             matches = [m for m in matches if m.id in allowed_source_ids]
         if matches:
-            return True
-    return False
+            if check_jurisdiction is not None:  # a record outside a plan is answered as any other is
+                for match in matches:
+                    check_jurisdiction(match.jurisdiction_id)
+            return list(matches)
+    return []
 
 
 def verify_claim(
@@ -692,6 +751,7 @@ def verify_claim(
     signer: ReceiptSigner | None = None,
     allowed_source_ids: set[str] | None = None,
     today: date | None = None,
+    check_jurisdiction: Callable[[str], None] | None = None,
 ) -> dict:
     """Deterministically verify a legal claim against the public catalogue and return a signed receipt."""
     today_utc = today or datetime.now(UTC).date()
@@ -706,6 +766,9 @@ def verify_claim(
     as_of: date | None = parsed["as_of"]
     jurisdiction: str | None = parsed["jurisdiction"]
     language: str | None = parsed["language"]
+
+    if check_jurisdiction is not None and jurisdiction is not None:
+        check_jurisdiction(jurisdiction)
 
     assessed_at = as_of or today_utc
     date_sent = as_of is not None
@@ -747,8 +810,12 @@ def verify_claim(
             owner_source_id = node_row.get("source_id") or catalogue.repository.version_owner(
                 node_row["version_id"]
             )
-            if owner_source_id and catalogue._public({owner_source_id}):
-                _enforce_allowed_source(owner_source_id, allowed_source_ids)
+            if owner_source_id:
+                public_owner = catalogue._public({owner_source_id})
+                if public_owner:
+                    _enforce_allowed_source(owner_source_id, allowed_source_ids)
+                    if check_jurisdiction is not None:
+                        check_jurisdiction(public_owner[owner_source_id][0].jurisdiction_id)
 
         checker = Checker(catalogue, today=today_utc, withdrawn=None)
         check_page = checker.check(
@@ -802,10 +869,19 @@ def verify_claim(
 
                 res = _filter_citation_view(res, frozenset(allowed_source_ids))
 
+        if check_jurisdiction is not None:
+            for match in res.matches:
+                check_jurisdiction(match.jurisdiction_id)
+
         # Row 1: no public record named. A record named with a part Law check cannot read is a part not
         # found: the record is in the catalogue.
         if not res.matches:
-            if _names_a_record(catalogue, citation, allowed_source_ids):
+            named = _names_a_record(catalogue, citation, allowed_source_ids, check_jurisdiction)
+            if named:
+                # A record with no text published yet (a judgment under review, say) has no part to
+                # find: the text is not available, rather than its paragraph missing.
+                if not any(getattr(match, "has_full_text", True) for match in named):
+                    return finish("text_not_available")
                 return finish("part_not_found")
             return finish("not_in_catalogue")
 
@@ -867,6 +943,15 @@ def verify_claim(
                 if quote is not None and dated
                 else None
             )
+            # No text of the one record holds the quote: the text clearly closest to it is read, so the
+            # answer is "not found" there, with the words around it.
+            if (
+                chosen is None
+                and quote is not None
+                and prov.reason == "several_texts"
+                and len({c.source_id for c in dated}) == 1
+            ):
+                chosen = _closest_by_words(catalogue, dated, quote)
             if chosen is not None:
                 target_anchor_id = chosen.anchor_id
             elif prov.reason == "several_texts" and as_of is not None:
@@ -937,6 +1022,8 @@ def verify_claim(
         return finish("text_not_available")
 
     _enforce_allowed_source(source.id, allowed_source_ids)
+    if check_jurisdiction is not None:
+        check_jurisdiction(source.jurisdiction_id)
 
     # Row 4 when anchor_id was sent alongside a non-matching language
     if language is not None and not _speaks(version, language):

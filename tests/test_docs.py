@@ -149,3 +149,51 @@ def test_pictures_and_markdown_are_served_as_what_they_are(store, tmp_path):
     client = TestClient(create_service(store, tmp_path, frontend=tmp_path))
     assert client.get("/guide/x.webp").headers["content-type"] == "image/webp"
     assert client.get("/docs/x.md").headers["content-type"].startswith("text/markdown")
+
+
+def test_mcp_tools_json_matches_api_mcp():
+    from scripts.docs_reference import documents
+
+    assert (DOCS / "data" / "mcp-tools.json").read_text() == documents()["mcp-tools.json"]
+
+
+def test_ai_tools_doc_links_and_host_include():
+    ai_tools = CONTENT["ai-tools"]
+    assert "{{ai-hosts}}" in ai_tools
+    known = pages()
+    broken = []
+    for target in re.findall(r"\]\((/docs[^)\s]*|#[^)\s]+)\)", ai_tools):
+        path, _, anchor = target.partition("#")
+        slug = "ai-tools" if not path else path.removeprefix("/docs").strip("/")
+        if slug not in known:
+            broken.append(target)
+        elif anchor and known[slug] is not None and anchor not in known[slug]:
+            broken.append(f"{target} (no such heading)")
+    assert not broken, broken
+
+
+def test_ai_integration_surfaces_obey_standing_rules():
+    targets = [
+        WEB / "src" / "connect.tsx",
+        WEB / "src" / "ai-hosts.ts",
+        DOCS / "content" / "ai-tools.md",
+    ]
+    plan_scope_re = re.compile(
+        r"\b(starter|plan|plans|scope|allowance|limit|limits|tier|jurisdiction)\b", re.I
+    )
+    for path in targets:
+        text = path.read_text()
+        without_urls = re.sub(r"https?://\S+", "", text)
+        assert not re.search(r"(?<!Open )\bAlvary\b", without_urls), path.name
+        assert not re.search(r"\bcommercial\s+Alvary\b", text, re.I), path.name
+        assert "metadata-only" not in text.lower(), path.name
+        without_doc_routes = re.sub(r"/docs/[\w/-]+", "", text)
+        assert not re.search(r"\bbulk[- ]download\b|\bmirror(ing|ed|s)?\b", without_doc_routes, re.I), (
+            path.name
+        )
+        for lineno, line in enumerate(text.splitlines(), start=1):
+            if not plan_scope_re.search(line):
+                continue
+            cleaned = re.sub(r"\bcountry['’]s\s+law\b", "", line, flags=re.I)
+            cleaned = re.sub(r"\b(billing|location)\s+country\b", "", cleaned, flags=re.I)
+            assert not re.search(r"\bcountry\b", cleaned, re.I), f"{path.name}:{lineno}: {line.strip()}"

@@ -224,7 +224,9 @@ def test_the_public_service_serves_every_door_on_its_own_login(signed, monkeypat
             assert client.get(path, headers=headers).status_code == 200, path
         assert client.get("/api/v1/sources", headers={"Authorization": "Bearer oa_wrong"}).status_code == 401
         listed = client.post(
-            "/mcp", headers=headers, json={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}
+            "/mcp",
+            headers={**headers, "Host": "open.example.test"},
+            json={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}},
         )
         assert listed.status_code == 200 and "result" in listed.json()
         assert accounts.usage(who, organisation)[0]["requests"] >= 1
@@ -335,7 +337,9 @@ def test_on_two_logins_an_anonymous_request_never_reaches_the_consoles_and_the_c
         ):
             assert client.get(path, headers=headers).status_code == 200, path
         listed = client.post(
-            "/mcp", headers=headers, json={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}
+            "/mcp",
+            headers={**headers, "Host": "open.example.test"},
+            json={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}},
         )
         assert listed.status_code == 200 and "result" in listed.json()
         assert accounts.usage(who, organisation)[0]["requests"] >= 1

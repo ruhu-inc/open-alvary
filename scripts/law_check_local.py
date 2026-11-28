@@ -12,6 +12,8 @@ Two things make a whole question runnable away from the live site:
 - ``/test-llm/v1`` is a scripted stand-in for an AI provider. It asks for ``check_claim`` once and then
   answers, so a turn can be run with no key and no outside call. Put ``[altered]`` in the question to
   have it quote the section with one word changed, and ``[plain]`` to have it answer with no check.
+  ``[busy]``, ``[quota]`` and ``[slow]`` make it fail as a real provider does: overloaded, over its
+  limit, or not answering for a minute.
 
     .venv/bin/python -m scripts.law_check_local --port 8771
 
@@ -21,6 +23,7 @@ Then open http://127.0.0.1:8771/agents/ .
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import mimetypes
 import threading
@@ -217,6 +220,38 @@ async def scripted_model(request: Request) -> Response:
     answered = any(message.get("role") == "tool" for message in messages)
     altered = "[altered]" in said
     quote = ALTERED_QUOTE if altered else TRUE_QUOTE
+
+    # A provider having a bad moment, as the page must explain it: "[busy]" answers 503 as Gemini
+    # does when a model is overloaded, "[quota]" 429 with a wait, and "[slow]" keeps the request open
+    # for a minute, for the Stop button and the time limit.
+    if "[busy]" in said:
+        return JSONResponse(
+            [
+                {
+                    "error": {
+                        "code": 503,
+                        "message": "The model is overloaded. Please try again later.",
+                        "status": "UNAVAILABLE",
+                    }
+                }
+            ],
+            status_code=503,
+        )
+    if "[quota]" in said:
+        return JSONResponse(
+            [
+                {
+                    "error": {
+                        "code": 429,
+                        "message": "You exceeded your current quota. Please retry in 30.5s.",
+                        "status": "RESOURCE_EXHAUSTED",
+                    }
+                }
+            ],
+            status_code=429,
+        )
+    if "[slow]" in said:
+        await asyncio.sleep(60)
 
     if not answered and "[plain]" not in said:
         check = next((tool for tool in tools if "check_claim" in tool["name"]), None)

@@ -68,7 +68,7 @@ The [Quickstart](/docs/quickstart) walks through it, with pictures of the consol
 
 ## Connect an AI tool
 
-Claude, Claude Code, Codex, ChatGPT and other tools that speak MCP connect to `https://api.open.alvary.ai/mcp`. They sign you in, you approve them for your organisation, and they can then search and read the catalogue when you ask. No key is needed. See [Connect AI tools](/docs/ai-tools).
+Claude, Claude Code, Codex, Antigravity and other tools that speak MCP connect to `https://api.open.alvary.ai/mcp`. They sign you in, you approve them for your organisation, and they can then search and read the catalogue when you ask. No key is needed. See [Connect AI tools](/docs/ai-tools).
 
 ## Follow changes
 
@@ -111,7 +111,7 @@ If your application writes answers with a language model, [Retrieve evidence](/d
 - [Follow changes](/docs/changes) Keep a copy current, or be told when the catalogue changes.
 - [Download and mirror the data](/docs/mirror) Releases, their checksums, and catching up with the change feed.
 - [Webhooks](/docs/webhooks) Signed deliveries of your monitors' matches.
-- [Connect AI tools](/docs/ai-tools) Ask Claude, ChatGPT or Codex about the catalogue, with no key.
+- [Connect AI tools](/docs/ai-tools) Ask Claude, Claude Code, Codex or Antigravity about the catalogue, with no key.
 - [Pagination](/docs/pagination) Pages of records, and cursors through changes.
 :::
 

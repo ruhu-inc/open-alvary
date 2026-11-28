@@ -522,7 +522,8 @@ function sectionOf(slug: string): string {
 }
 
 export default function DocsSite({ path }: { path: string }) {
-  const slug = path.replace(/^\/docs\/?/, "").replace(/\/$/, "");
+  const rawSlug = path.replace(/^\/docs\/?/, "").replace(/\/$/, "");
+  const slug = rawSlug === "mcp" ? "ai-tools" : rawSlug;
   const page = pages.get(slug);
   const [lang, setLang] = useState(() => {
     const saved = read("docs-language");
@@ -530,6 +531,11 @@ export default function DocsSite({ path }: { path: string }) {
   });
   const [menu, setMenu] = useState(false);
   const blocks = page ? blocksOf(page) : [];
+  useEffect(() => {
+    if (rawSlug === "mcp") {
+      history.replaceState(null, "", "/docs/ai-tools" + location.hash);
+    }
+  }, [path]);
   useEffect(() => {
     document.title = page ? `${page.title} · Open Alvary docs` : "Page not found · Open Alvary docs";
     setMenu(false);

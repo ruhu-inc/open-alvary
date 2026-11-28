@@ -811,6 +811,48 @@ main:focus {
 .lc-notice-card ul {
   list-style: disc;
 }
+.lc-ai-text blockquote {
+  margin: 0 0 10px;
+  padding-inline-start: 14px;
+  border-inline-start: 3px solid var(--line);
+  font-family: Georgia, "Times New Roman", serif;
+}
+/* A passage the answer gives as the law's words, marked from this turn's signed checks */
+.lc-ai-text .lc-quote-mark {
+  padding-inline-start: 12px;
+  border-inline-start: 3px solid var(--line);
+}
+.lc-ai-text .lc-quote-found {
+  border-inline-start-color: var(--green-fg);
+}
+.lc-ai-text .lc-quote-missing {
+  border-inline-start-color: var(--ink);
+}
+.lc-ai-text .lc-quote-unchecked {
+  border-inline-start-style: dashed;
+  border-inline-start-color: var(--muted);
+}
+.lc-quote-label {
+  display: block;
+  margin-top: 4px;
+  font: 500 12px/1.4 "DM Sans", system-ui, -apple-system, sans-serif;
+  color: var(--muted);
+}
+.lc-quote-found > .lc-quote-label {
+  color: var(--green-fg);
+}
+.lc-quote-found > .lc-quote-label::before {
+  content: "✓ ";
+}
+.lc-quote-missing > .lc-quote-label {
+  color: var(--ink);
+}
+.lc-quote-missing > .lc-quote-label::before {
+  content: "✕ ";
+}
+.lc-quote-unchecked > .lc-quote-label::before {
+  content: "– ";
+}
 .lc-ai-text code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 14px;
@@ -1085,7 +1127,9 @@ main:focus {
 /* The note takes what room is left and wraps inside it, so the Send button never drops a row */
 .lc-composer-note {
   flex: 1 1 0;
-  min-inline-size: 0;
+  /* Never narrower than a few words: with no room beside the buttons, it takes a line of its own
+     rather than one letter a line. */
+  min-inline-size: min(12em, 100%);
   font-size: 13px;
   line-height: 1.35;
   color: var(--muted);

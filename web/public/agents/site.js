@@ -37,6 +37,9 @@ const CITATION_NEEDED = "Enter the law and section, for example Freedom of Infor
 const MCP_PATH = "/agents/mcp";
 const LOCAL_KEYS_PATH = "/.well-known/open-alvary-receipt-keys.json";
 const MAX_QUOTE_LEN = 2000;
+// The longest an AI answer may take before the page stops it. The runtime gives its agents 90
+// seconds; a provider that keeps a request open past that is stopped here.
+const AI_TURN_LIMIT_MS = 120_000;
 
 /**
  * Extract `{ receipt, claim }` from an MCP tools/call result object.
@@ -149,6 +152,156 @@ function matchesMcpUrl(input, mcpPath) {
  * Install the LC-16 fetch wrapper that observes `check_claim` MCP responses
  * from `/agents/mcp` without altering the Response stream returned to callers.
  */
+/**
+ * OpenAI's GPT-6 models refuse tools on /v1/chat/completions unless the request sets
+ * reasoning_effort to "none" (GPT-6.1 Terra and GPT-6 Luna, tried with a real key 2026-11-28), and
+ * the vendored runtime sends no such field. When OpenAI refuses a tool request for that reason, it
+ * is sent once more with "none", and every later request for that model carries it from the start.
+ * Nothing else is changed, and no other provider sees the field. (GPT-6.2 Sol and Astra refuse
+ * "none" too: they take tools only through OpenAI's Responses API, so the page does not offer them.)
+ */
+export function installOpenAiToolFix({ targetGlobal = globalThis } = {}) {
+  const originalFetch = targetGlobal.fetch;
+  if (typeof originalFetch !== "function") return;
+  const needsNone = new Set();
+  targetGlobal.fetch = async function lawCheckOpenAiToolFix(input, init) {
+    const url = typeof input === "string" ? input : input?.url || "";
+    const method = (init?.method || "GET").toUpperCase();
+    if (method !== "POST" || !/^https:\/\/api\.openai\.com\/v1\/chat\/completions\b/.test(url) || typeof init?.body !== "string") {
+      return originalFetch.call(this, input, init);
+    }
+    let body;
+    try {
+      body = JSON.parse(init.body);
+    } catch {
+      return originalFetch.call(this, input, init);
+    }
+    if (!Array.isArray(body?.tools) || !body.tools.length || "reasoning_effort" in body) {
+      return originalFetch.call(this, input, init);
+    }
+    const withNone = () => originalFetch.call(this, input, { ...init, body: JSON.stringify({ ...body, reasoning_effort: "none" }) });
+    if (needsNone.has(body.model)) return withNone();
+    const resp = await originalFetch.call(this, input, init);
+    if (resp.status !== 400) return resp;
+    const said = await resp.clone().text().catch(() => "");
+    if (!/reasoning_effort/i.test(said) || !/none/i.test(said)) return resp;
+    needsNone.add(body.model);
+    return withNone();
+  };
+}
+
+/**
+ * Lets the page stop an AI answer. While a turn runs, every call to an AI provider (a POST to
+ * ".../chat/completions") and to Law check's own tools carries the turn's signal, so Stop, or the
+ * time limit, ends the calls in flight and refuses the next ones. The vendored runtime is not
+ * changed. Returns ``{ begin(signal), end() }``.
+ */
+export function installTurnStopper({ targetGlobal = globalThis, mcpPath = MCP_PATH } = {}) {
+  const originalFetch = targetGlobal.fetch;
+  let active = null;
+  const handle = {
+    begin(signal) {
+      active = signal || null;
+    },
+    end() {
+      active = null;
+    },
+  };
+  if (typeof originalFetch !== "function") return handle;
+  const isTurnRequest = (input, init) => {
+    const method = (init?.method || (typeof input === "object" && input?.method) || "GET").toUpperCase();
+    if (method !== "POST") return false;
+    const url = typeof input === "string" ? input : input?.url || String(input || "");
+    return /\/chat\/completions(?:[?#]|$)/.test(url) || matchesMcpUrl(input, mcpPath);
+  };
+  targetGlobal.fetch = function lawCheckTurnStopper(input, init) {
+    const signal = active;
+    if (!signal || !isTurnRequest(input, init)) return originalFetch.call(this, input, init);
+    if (signal.aborted) return Promise.reject(new DOMException("The answer was stopped.", "AbortError"));
+    let combined = signal;
+    if (init?.signal) {
+      if (typeof AbortSignal.any === "function") combined = AbortSignal.any([init.signal, signal]);
+      else {
+        const both = new AbortController();
+        for (const s of [init.signal, signal]) s.addEventListener("abort", () => both.abort(s.reason), { once: true });
+        combined = both.signal;
+      }
+    }
+    return originalFetch.call(this, input, { ...(init || {}), signal: combined });
+  };
+  return handle;
+}
+
+/**
+ * What the page says when the AI provider could not answer, in plain words. ``error`` is what the
+ * runtime threw, often "LLM HTTP 429: {...}" with the provider's own JSON. Returns
+ * ``{ text, detail }``: ``detail`` is the provider's own message, without its JSON, or "".
+ */
+export function providerErrorNotice(error, { model = "" } = {}) {
+  const raw = String(error?.message || error || "").trim();
+  const status = Number(/\bLLM HTTP (\d{3})\b/.exec(raw)?.[1] || /"code"\s*:\s*(\d{3})/.exec(raw)?.[1] || 0);
+  // The provider's own words, even when the runtime cut its reply short mid-message.
+  const said = /"message"\s*:\s*"((?:[^"\\]|\\.)*)"?/.exec(raw)?.[1]?.replace(/\\n/g, " ").replace(/\\(.)/g, "$1");
+  const plain = raw.replace(/^LLM HTTP \d{3}:\s*/, "");
+  const detail = shortenWords(said || (/^[\[{]/.test(plain) ? "" : plain), 200);
+  const named = model ? ` \u201c${model.replace(/^models\//, "")}\u201d` : "";
+  let text;
+  if (error?.code === "LLM_NETWORK_ERROR" || /failed to fetch|networkerror|load failed/i.test(raw)) {
+    text = "Could not reach your AI provider. Check your connection, then try again.";
+  } else if (status === 401 || status === 403 || /api key not valid|invalid api key|invalid x-api-key|incorrect api key/i.test(raw)) {
+    text = "Your AI provider did not accept the key. Check that it is right and still active in the AI settings.";
+  } else if (status === 404 || /model.*(?:not found|does not exist)|no such model/i.test(raw)) {
+    text = `Your AI provider does not offer the model${named}. Choose another model in the AI settings.`;
+  } else if (status === 429 || /quota|rate limit|resource_exhausted|too many requests/i.test(raw)) {
+    const wait = Math.ceil(Number(/retry in (\d+(?:\.\d+)?)\s*s/i.exec(raw)?.[1] || 0));
+    text = /per ?day|daily|PerDay/i.test(raw)
+      ? "Your AI key has used up today's allowance with its provider. Try again tomorrow, or use a key with a higher limit."
+      : `Your AI key has reached its provider's limit for now. ${
+          wait > 0 && wait < 600 ? `Wait about ${wait} seconds` : "Wait a minute"
+        }, then try again. One question can take 10 to 15 requests, so a free key runs out quickly.`;
+  } else if ([500, 502, 503, 504, 529].includes(status) || /overloaded|unavailable|high demand/i.test(raw)) {
+    text = "Your AI provider is busy and could not answer just now. Try again in a minute, or choose another model in the AI settings.";
+  } else if (/\/v1\/responses|reasoning_effort/i.test(raw)) {
+    text = `The model${named} takes tools only through a newer OpenAI interface that Law check does not use yet. Choose another model in the AI settings: GPT-6.1 Terra and GPT-6 Luna work.`;
+  } else if (status === 400) {
+    text = `Your AI provider refused the request. The model${named} may not support tools: choose another in the AI settings.`;
+  } else {
+    text = "Your AI provider could not answer. Try again, or check the key and model in the AI settings.";
+  }
+  return { text, detail };
+}
+
+class TurnStopped extends Error {}
+class TurnTimedOut extends Error {}
+
+function isFoundStatus(status) {
+  return status === "matches" || status === "words_found" || status === "words_found_with_omissions";
+}
+
+function shortenWords(text, max) {
+  const words = String(text || "").replace(/\s+/g, " ").trim();
+  return words.length > max ? `${words.slice(0, max - 1).trimEnd()}\u2026` : words;
+}
+
+/**
+ * The passages a text puts in quotation marks, 40 characters or longer. Marks are paired in order,
+ * so the words between two short quotes ("any citizen", but … says "any person") are never taken
+ * for a passage.
+ */
+export function passagesInQuotes(text) {
+  const passages = [];
+  for (const m of String(text || "").matchAll(/["\u201c]([^"\u201c\u201d]*)["\u201d]/g)) {
+    const passage = m[1].trim();
+    if (passage.length >= 40 && passage.length <= 2000) passages.push(passage);
+  }
+  return passages;
+}
+
+/** The passages a visitor's message puts in quotation marks: at most three are checked. */
+export function quotedInMessage(text) {
+  return passagesInQuotes(text).slice(0, 3);
+}
+
 export function installCheckClaimInterceptor({
   targetGlobal = globalThis,
   mcpPath = MCP_PATH,
@@ -271,6 +424,47 @@ export function parseCitationAndQuote(text) {
     return null;
   }
   return { citation, quote };
+}
+
+// Quotation marks that may open and close a pasted quote, each with the marks that may close it.
+const QUOTE_PAIRS = {
+  '"': ['"', "”", "“"],
+  "“": ["”", '"'],
+  "„": ["”", "“", '"'],
+  "‘": ["’", "'"],
+  "'": ["'", "’"],
+  "«": ["»"],
+};
+
+/**
+ * The quoted words without quotation marks wrapped around the whole of them, as a quote is often
+ * pasted from a memo ("…" or "…".). The marks are not part of the law's words, so the check would
+ * otherwise never find them. Marks inside the words are kept.
+ */
+export function stripOuterQuotes(text) {
+  const raw = String(text ?? "").trim();
+  const chars = [...raw];
+  if (chars.length < 3) return raw;
+  const closers = QUOTE_PAIRS[chars[0]];
+  if (!closers) return raw;
+  let end = chars.length - 1;
+  // A full stop or comma written after the closing mark goes with it.
+  if (/[.,;]/.test(chars[end]) && closers.includes(chars[end - 1])) end -= 1;
+  if (!closers.includes(chars[end]) || end < 2) return raw;
+  const inner = chars.slice(1, end);
+  // '"person" means any "citizen"' starts and ends with a mark but is not wrapped in one: when the
+  // words carry marks of the same kind, nothing is taken off.
+  if (inner.some((c) => c === chars[0] || closers.includes(c))) return raw;
+  return inner.join("").trim() || raw;
+}
+
+/** How many characters a field sends: the words without the spaces around them. */
+export function sentLength(value) {
+  return [...String(value ?? "").trim()].length;
+}
+
+function tooLongMessage(length, max) {
+  return `That is ${length.toLocaleString("en")} characters. Shorten it to ${max.toLocaleString("en")} or fewer.`;
 }
 
 /** A saved proof pasted as text: the `{receipt, claim}` export or a bare receipt. */
@@ -412,13 +606,70 @@ function appendInline(parent, text) {
   if (last < text.length) parent.appendChild(document.createTextNode(text.slice(last)));
 }
 
+// Words for comparing an answer's passage with a checked quote: letters and digits only, in order.
+function comparableWords(text) {
+  return String(text || "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+}
+
+// Passages an answer presents as the law's words: text in quotation marks of 40 characters or
+// more, and every quote block.
+function quotedPassages(block) {
+  if (block.tagName === "BLOCKQUOTE") return [block.textContent];
+  return passagesInQuotes(block.textContent);
+}
+
+const QUOTE_MARKS = {
+  found: "Open Alvary found these words in the published text",
+  missing: "Open Alvary did not find these words in the published text",
+  unchecked: "Open Alvary did not check these words",
+};
+
 /**
- * Draw the AI's text as paragraphs and lists. Text only: no HTML, links or images from the
- * model are ever made into elements.
+ * Mark each passage of an answer that quotes a law: found or not found by a check of this turn,
+ * or not checked at all. ``quotes`` are the turn's checks, ``{quote, found}``. The mark is the
+ * page's, from the signed results, never the model's text.
  */
-export function renderAnswerText(container, text) {
+export function markAnswerQuotes(container, quotes = []) {
+  const checks = (Array.isArray(quotes) ? quotes : [])
+    .filter((q) => typeof q?.quote === "string" && comparableWords(q.quote).length >= 20)
+    .map((q) => ({ words: comparableWords(q.quote), found: Boolean(q.found) }));
+  for (const block of container.querySelectorAll(":scope > p, :scope > blockquote, :scope > ul > li, :scope > ol > li")) {
+    const passages = quotedPassages(block);
+    if (!passages.length) continue;
+    let mark = "found";
+    for (const passage of passages) {
+      const words = comparableWords(passage);
+      const check = checks.find((c) => words.includes(c.words) || c.words.includes(words));
+      const state = !check ? "unchecked" : check.found ? "found" : "missing";
+      // One passage not found, then one not checked, outweighs the others.
+      if (state === "missing" || (state === "unchecked" && mark === "found")) mark = state;
+    }
+    block.classList.add("lc-quote-mark", `lc-quote-${mark}`);
+    const label = document.createElement("span");
+    label.className = "lc-quote-label";
+    label.textContent = QUOTE_MARKS[mark];
+    block.appendChild(label);
+  }
+}
+
+/**
+ * Draw the AI's text as paragraphs, lists and quote blocks. Text only: no HTML, links or images
+ * from the model are ever made into elements.
+ */
+export function renderAnswerText(container, text, { quotes = null } = {}) {
   container.replaceChildren();
   const blocks = String(text || "").replace(/\r\n?/g, "\n").split(/\n{2,}/);
+  const paragraph = (lines) => {
+    const p = document.createElement("p");
+    lines.forEach((line, i) => {
+      if (i > 0) p.appendChild(document.createElement("br"));
+      appendInline(p, line.replace(/^#{1,6}\s+/, ""));
+    });
+    container.appendChild(p);
+  };
   for (const block of blocks) {
     const lines = block.split("\n").filter((line) => line.trim());
     if (!lines.length) continue;
@@ -434,13 +685,34 @@ export function renderAnswerText(container, text) {
       container.appendChild(list);
       continue;
     }
-    const p = document.createElement("p");
-    lines.forEach((line, i) => {
-      if (i > 0) p.appendChild(document.createElement("br"));
-      appendInline(p, line.replace(/^#{1,6}\s+/, ""));
-    });
-    container.appendChild(p);
+    // Lines that start with ">" are a quote block; the lines around them stay paragraphs.
+    let run = [];
+    let quoting = false;
+    const flush = () => {
+      if (!run.length) return;
+      if (quoting) {
+        const quote = document.createElement("blockquote");
+        run.forEach((line, i) => {
+          if (i > 0) quote.appendChild(document.createElement("br"));
+          appendInline(quote, line);
+        });
+        container.appendChild(quote);
+      } else {
+        paragraph(run);
+      }
+      run = [];
+    };
+    for (const line of lines) {
+      const isQuote = /^\s*>/.test(line);
+      if (isQuote !== quoting) {
+        flush();
+        quoting = isQuote;
+      }
+      run.push(isQuote ? line.replace(/^\s*>\s?/, "") : line);
+    }
+    flush();
   }
+  if (quotes) markAnswerQuotes(container, quotes);
 }
 
 const $ = (id) => document.getElementById(id);
@@ -512,7 +784,8 @@ class LawCheckController {
     if (typeof document === "undefined") return;
     if (!$("composer-form")) return;
 
-    // 1. Install the LC-16 fetch wrapper at once, before any runtime loads.
+    // 1. Install the LC-16 fetch wrapper at once, before any runtime loads, and the turn stopper
+    // (Stop and the time limit) around it.
     installCheckClaimInterceptor({
       onCheckClaim: ({ envelope, arguments: args }) => {
         if (this.directCallCount > 0) return; // the page's own check handles its own result
@@ -524,6 +797,9 @@ class LawCheckController {
         this._handleInterceptedAgentError(errInfo);
       },
     });
+
+    installOpenAiToolFix();
+    this.turnStopper = installTurnStopper();
 
     this.panelWide?.addEventListener?.("change", () => this._syncPanel());
     this._bindMobileNav();
@@ -563,11 +839,20 @@ class LawCheckController {
   }
 
   _setMode(mode, { updateHash = true, focus = false, chosen = true } = {}) {
+    const previous = this.mode;
     this.mode = mode === "ask" ? "ask" : "quote";
     if (chosen) this.modeChosen = true;
     const quote = this.mode === "quote";
     const input = $("composer-input");
     const citation = $("citation-input");
+    // Each mode keeps its own draft: a question is never sent as quoted words, nor quoted words as a
+    // question, and switching back brings the draft back.
+    if (previous && previous !== this.mode && input) {
+      this._drafts = this._drafts || {};
+      this._drafts[previous] = input.value;
+      input.value = this._drafts[this.mode] || "";
+      this._drafts[this.mode] = "";
+    }
     const label = $("composer-label");
     $("mode-quote")?.setAttribute("aria-pressed", quote ? "true" : "false");
     $("mode-ask")?.setAttribute("aria-pressed", quote ? "false" : "true");
@@ -601,10 +886,17 @@ class LawCheckController {
     const quote = this.mode === "quote";
     // A phone's row has room for one word beside the mode switch.
     const narrow = Boolean(globalThis.matchMedia?.("(max-width: 520px)").matches);
-    send.textContent = this.isBusy
-      ? quote ? "Checking…" : "Working…"
-      : quote ? (narrow ? "Check" : "Check quote") : "Send";
-    const blocked = this.isBusy || this.isPaused || Boolean(this.rateLimitTimer) || this.overLimit;
+    // While an AI answer is coming, the button stops it.
+    const stoppable = Boolean(this.aiTurnStop);
+    send.textContent = stoppable
+      ? "Stop"
+      : this.isBusy
+        ? quote ? "Checking…" : "Working…"
+        : quote ? (narrow ? "Check" : "Check quote") : "Send";
+    send.classList.toggle("is-stop", stoppable);
+    if (stoppable) send.setAttribute("aria-label", "Stop the answer");
+    else send.removeAttribute("aria-label");
+    const blocked = !stoppable && (this.isBusy || this.isPaused || Boolean(this.rateLimitTimer) || this.overLimit);
     if (blocked) send.setAttribute("aria-disabled", "true");
     else send.removeAttribute("aria-disabled");
     if (note) {
@@ -625,12 +917,12 @@ class LawCheckController {
     const input = $("composer-input");
     const counter = $("quote-counter");
     if (!input || !counter) return 0;
-    const len = [...input.value].length;
+    const len = sentLength(input.value);
     const max = this.mode === "quote" ? MAX_QUOTE_LEN : MAX_QUESTION_LEN;
     const showAt = max - 200;
     if (len >= showAt) {
       counter.hidden = false;
-      counter.textContent = `${len} of ${max} characters`;
+      counter.textContent = `${len.toLocaleString("en")} of ${max.toLocaleString("en")} characters`;
       counter.classList.toggle("over-limit", len > max);
     } else {
       counter.hidden = true;
@@ -894,7 +1186,7 @@ class LawCheckController {
       this._updateCounter();
       if (this.overLimit) {
         const max = this.mode === "quote" ? MAX_QUOTE_LEN : MAX_QUESTION_LEN;
-        this._setFieldError(input, `That is ${[...input.value].length} characters. Shorten it to ${max} or fewer.`);
+        this._setFieldError(input, tooLongMessage(sentLength(input.value), max));
       } else if (input.getAttribute("aria-invalid") === "true" && input.value.trim()) {
         this._setFieldError(input, null);
       }
@@ -915,6 +1207,12 @@ class LawCheckController {
     form.addEventListener("submit", (e) => {
       e.preventDefault();
       this._onSubmit();
+    });
+    // The Send button is Stop while an answer is coming. Enter in the box does not stop it.
+    $("composer-send")?.addEventListener("click", (e) => {
+      if (!this.aiTurnStop) return;
+      e.preventDefault();
+      this._stopAiTurn();
     });
 
     const runExample = async (altered) => {
@@ -980,11 +1278,11 @@ class LawCheckController {
       const citation = citationInput.value.trim();
       const citationOk = Boolean(citation);
       this._setFieldError(citationInput, citationOk ? null : CITATION_NEEDED);
+      // Quotation marks around the whole quote are not the law's words: they are left out.
+      const quote = stripOuterQuotes(text);
       let quoteMessage = null;
-      if (!text) quoteMessage = "Paste the quoted words to check.";
-      else if ([...text].length > MAX_QUOTE_LEN) {
-        quoteMessage = `That is ${[...text].length} characters. Shorten it to ${MAX_QUOTE_LEN} or fewer.`;
-      }
+      if (!quote) quoteMessage = "Paste the quoted words to check.";
+      else if (sentLength(quote) > MAX_QUOTE_LEN) quoteMessage = tooLongMessage(sentLength(quote), MAX_QUOTE_LEN);
       this._setFieldError(input, quoteMessage);
       if (!citationOk || quoteMessage) {
         (citationOk ? input : citationInput).focus();
@@ -992,9 +1290,9 @@ class LawCheckController {
         return;
       }
       if (serviceBlocked) return;
-      const claim = { citation, quote: text, ...this._claimDefaults(citation) };
+      const claim = { citation, quote, ...this._claimDefaults(citation) };
       this._beginTurn();
-      this._appendUser({ cite: citation, quote: text });
+      this._appendUser({ cite: citation, quote });
       this._clearComposerText();
       await this._runDirectCheck(claim, { source: "form" });
       return;
@@ -1221,14 +1519,16 @@ class LawCheckController {
       openai: {
         name: "OpenAI",
         router: "https://api.openai.com/v1",
-        model: "gpt-6.2-sol",
+        // GPT-6.2 Sol and Astra take tools only through OpenAI's Responses API, which the runtime does
+        // not speak: on /v1/chat/completions they refuse every request with tools, whatever the
+        // reasoning effort (tried with a real key, 2026-11-28). Luna and Terra take tools there with
+        // reasoning_effort "none", which installOpenAiToolFix adds when OpenAI asks for it.
+        model: "gpt-6.1-terra",
         keyUrl: "https://platform.openai.com/api-keys",
         keyLabel: "OpenAI",
         models: [
-          { id: "gpt-6-luna", label: "GPT-6 Luna · low cost" },
           { id: "gpt-6.1-terra", label: "GPT-6.1 Terra" },
-          { id: "gpt-6.2-sol", label: "GPT-6.2 Sol" },
-          { id: "gpt-6.2-astra", label: "GPT-6.2 Astra" },
+          { id: "gpt-6-luna", label: "GPT-6 Luna · low cost" },
         ],
       },
       anthropic: {
@@ -1282,7 +1582,10 @@ class LawCheckController {
     const connectStatus = document.getElementById("provider-connect-status");
 
     let activePreset = DEFAULT_PRESET;
+    // The saved key for the provider now chosen in the dialog, never another provider's: a key goes
+    // only to the provider it was saved for. Each provider keeps its own saved profile.
     let savedKey = "";
+    let savedProfiles = [];
     let dirty = false;
     let byokMod = null;
     const loadByok = async () => {
@@ -1305,6 +1608,13 @@ class LawCheckController {
     const suggestedIds = new Set(
       Object.values(PRESETS).flatMap((preset) => [preset.model, ...preset.models.map((m) => m.id)]).filter(Boolean),
     );
+
+    // A model the page filled in, from a provider button or a saved profile, may be replaced when
+    // the provider changes; one the visitor typed may not.
+    const swappableModel = (value) => {
+      const current = String(value || "").trim();
+      return !current || suggestedIds.has(current) || savedProfiles.some((p) => p.model === current);
+    };
 
     const syncModelChoices = () => {
       const current = modelInput.value.trim();
@@ -1336,6 +1646,32 @@ class LawCheckController {
 
     const connectAvailable = () => Boolean(globalThis.isSecureContext && globalThis.crypto?.subtle && globalThis.top === globalThis.self);
 
+    const sameRouter = (a, b) => String(a || "").trim().replace(/\/+$/, "").toLowerCase() === String(b || "").trim().replace(/\/+$/, "").toLowerCase();
+    // The saved profile for the provider chosen now: a named provider by its address, a custom one
+    // only for the exact address typed.
+    const profileForChoice = () => {
+      if (activePreset === "custom") {
+        const url = urlInput.value.trim();
+        return url ? savedProfiles.find((p) => p.key && sameRouter(p.router, url)) || null : null;
+      }
+      return savedProfiles.find((p) => p.key && detectPreset(p.router) === activePreset) || null;
+    };
+    const showSavedKey = () => {
+      const profile = profileForChoice();
+      savedKey = profile?.key || "";
+      keyInput.required = !savedKey;
+      keyInput.placeholder = savedKey ? "Paste a new key to replace it" : "Paste your API key";
+      if (savedNote) {
+        savedNote.textContent = savedKey
+          ? `A key ending ${savedKey.slice(-4)} is saved for ${PRESETS[activePreset].name}. Leave the field empty to keep it.`
+          : "";
+        savedNote.hidden = !savedKey;
+        keyInput.setAttribute("aria-describedby", savedKey ? "provider-key-hint provider-key-saved" : "provider-key-hint");
+      }
+      if (removeBtn) removeBtn.hidden = !savedKey;
+      return profile;
+    };
+
     const selectPreset = (presetKey, { keepValues = false } = {}) => {
       activePreset = PRESETS[presetKey] ? presetKey : DEFAULT_PRESET;
       const info = PRESETS[activePreset];
@@ -1347,9 +1683,8 @@ class LawCheckController {
       if (!keepValues) {
         // Custom starts with an empty address, never the previous provider's.
         urlInput.value = info.router;
-        // A model the visitor typed is kept; only a suggested model is swapped.
-        const current = modelInput.value.trim();
-        if (!current || suggestedIds.has(current)) modelInput.value = info.model;
+        // A model the visitor typed is kept; only a suggested or saved model is swapped.
+        if (swappableModel(modelInput.value)) modelInput.value = info.model;
       }
       renderModelChoices(info);
       // The full list belongs to one provider; a new provider starts without it.
@@ -1377,6 +1712,12 @@ class LawCheckController {
         } else {
           keyHint.textContent = "Paste the API key for your OpenAI-compatible endpoint.";
         }
+      }
+      const saved = showSavedKey();
+      // A provider with a saved key comes back with the model saved beside it.
+      if (!keepValues && saved?.model) {
+        if (swappableModel(modelInput.value)) modelInput.value = saved.model;
+        syncModelChoices();
       }
     };
 
@@ -1456,6 +1797,8 @@ class LawCheckController {
     modelsBtn?.addEventListener("click", listModels);
     urlInput.addEventListener("input", () => {
       if (modelsBtn && activePreset === "custom") modelsBtn.hidden = !urlInput.value.trim();
+      // A custom key belongs to its address: a changed address shows the key saved for it, if any.
+      if (activePreset === "custom") showSavedKey();
     });
 
     const refreshProviderUi = async () => {
@@ -1466,13 +1809,14 @@ class LawCheckController {
         this.hasProviderKey = hasKey;
         if (pillLabel) {
           pillLabel.textContent = hasKey
-            ? `${profile.name || "AI"} · ${profile.model || "ready"}`
+            ? `${profile.name || "AI"} · ${String(profile.model || "ready").replace(/^models\//, "")}`
             : "Add AI key (optional)";
         }
         if (pillDot) {
           pillDot.classList.toggle("is-connected", hasKey);
         }
         this.providerName = hasKey ? profile.name || "your AI provider" : "";
+        this.providerModel = hasKey ? profile.model || "" : "";
         // A visitor who already saved a key and gave no address starts on Ask AI.
         if (hasKey && !this.modeChosen && this.mode !== "ask") {
           this._setMode("ask", { updateHash: false, chosen: false });
@@ -1501,31 +1845,20 @@ class LawCheckController {
       opener = event?.currentTarget instanceof HTMLElement ? event.currentTarget : openBtn;
       returnFocus = true;
       const profile = await refreshProviderUi();
+      try {
+        savedProfiles = (await loadByok()).loadByokStore().profiles || [];
+      } catch {
+        savedProfiles = [];
+      }
       keyInput.value = "";
       if (profile?.key) {
         const pKey = detectPreset(profile.router);
-        selectPreset(pKey, { keepValues: true });
-        // The saved key is never put back in the field: only its last four characters are shown.
-        savedKey = profile.key;
-        keyInput.required = false;
-        keyInput.placeholder = "Paste a new key to replace it";
-        if (savedNote) {
-          savedNote.textContent = `A key ending ${profile.key.slice(-4)} is saved. Leave the field empty to keep it.`;
-          savedNote.hidden = false;
-          keyInput.setAttribute("aria-describedby", "provider-key-hint provider-key-saved");
-        }
-        modelInput.value = profile.model || PRESETS[pKey].model;
         urlInput.value = profile.router || PRESETS[pKey].router;
+        // The saved key is never put back in the field: only its last four characters are shown.
+        selectPreset(pKey, { keepValues: true });
+        modelInput.value = profile.model || PRESETS[pKey].model;
         syncModelChoices();
       } else {
-        savedKey = "";
-        keyInput.required = true;
-        keyInput.placeholder = "Paste your API key";
-        if (savedNote) {
-          savedNote.hidden = true;
-          savedNote.textContent = "";
-          keyInput.setAttribute("aria-describedby", "provider-key-hint");
-        }
         modelInput.value = "";
         selectPreset(DEFAULT_PRESET);
       }
@@ -1581,8 +1914,12 @@ class LawCheckController {
 
     removeBtn?.addEventListener("click", async () => {
       const byok = await loadByok();
-      const profile = byok.getSelectedByokProfile();
+      // The key removed is the one for the provider shown in the dialog. If it was the one in use,
+      // no other provider's key is picked in its place: the visitor chooses again.
+      const profile = profileForChoice();
+      const wasSelected = profile?.id && profile.id === byok.getSelectedByokProfile()?.id;
       if (profile?.id) byok.deleteByokProfile(profile.id);
+      if (wasSelected) byok.selectByokProfile("");
       byok.saveTabByokSetup(null);
       savedKey = "";
       const chatStarted = this.runtimeLoaded || this.runtimeLoading;
@@ -1624,7 +1961,8 @@ class LawCheckController {
       }
 
       const byok = await loadByok();
-      const existing = byok.getSelectedByokProfile();
+      // Saved over this provider's own profile, so another provider's key is never replaced.
+      const existing = profileForChoice();
       const name = PRESETS[activePreset].name;
       byok.upsertByokProfile(
         { id: existing?.id, name, router, model, key },
@@ -1663,6 +2001,17 @@ class LawCheckController {
     if (newChat) newChat.hidden = false;
     if (reveal) this._reveal(li);
     return li;
+  }
+
+  // With nothing left in the thread, the page shows its welcome and examples again.
+  _showWelcomeIfEmpty() {
+    if ($("thread-list")?.children.length) return;
+    const welcome = $("welcome");
+    if (welcome) welcome.hidden = false;
+    $("lc-chat")?.classList.remove("has-thread");
+    document.body.classList.remove("lc-threaded");
+    const newChat = $("new-chat");
+    if (newChat) newChat.hidden = true;
   }
 
   _reveal(el) {
@@ -1710,7 +2059,7 @@ class LawCheckController {
     return li;
   }
 
-  _appendAi(text, summary, { save = true, reveal = true, steps = [] } = {}) {
+  _appendAi(text, summary, { save = true, reveal = true, steps = [], quotes = null } = {}) {
     const li = document.createElement("li");
     li.className = "lc-msg lc-msg-ai";
     const label = document.createElement("p");
@@ -1718,7 +2067,9 @@ class LawCheckController {
     label.textContent = "AI's answer. Only quotes with a result card were checked.";
     const body = document.createElement("div");
     body.className = "lc-ai-text";
-    renderAnswerText(body, text);
+    // Each quoted passage is marked from this turn's signed checks: found, not found or not checked.
+    const checks = Array.isArray(quotes) ? quotes.slice(0, 50) : null;
+    renderAnswerText(body, text, { quotes: checks });
     li.append(label, body);
     if (summary?.text) {
       const foot = document.createElement("p");
@@ -1744,7 +2095,15 @@ class LawCheckController {
       li.appendChild(details);
     }
     this._appendItem(li, { reveal });
-    if (save) this._save({ t: "ai", text: shorten(text, 12000), summary: summary || null, steps: shown });
+    if (save) {
+      this._save({
+        t: "ai",
+        text: shorten(text, 12000),
+        summary: summary || null,
+        steps: shown,
+        quotes: checks ? checks.map((q) => ({ quote: shorten(q.quote, 2000), found: Boolean(q.found) })) : null,
+      });
+    }
     return li;
   }
 
@@ -1836,7 +2195,14 @@ class LawCheckController {
       {
         actions: [
           { label: "Add AI key", primary: true, onClick: () => $("open-provider-modal")?.click() },
-          { label: "Check a quote instead", onClick: (item) => { item.remove(); this._setMode("quote", { focus: true }); } },
+          {
+            label: "Check a quote instead",
+            onClick: (item) => {
+              item.remove();
+              this._showWelcomeIfEmpty();
+              this._setMode("quote", { focus: true });
+            },
+          },
         ],
       },
     );
@@ -1859,7 +2225,9 @@ class LawCheckController {
     caption.textContent =
       entry.source === "agent"
         ? "Checked by Open Alvary, on a section the AI named"
-        : entry.source === "recheck"
+        : entry.source === "yours"
+          ? "Your quote, checked by Open Alvary on the section the AI found"
+          : entry.source === "recheck"
           ? "Saved proof, checked by Open Alvary"
           : "Checked by Open Alvary. No AI was used.";
     const card = document.createElement("oa-receipt");
@@ -1904,7 +2272,7 @@ class LawCheckController {
       const title = entry.receipt.part
         ? `${entry.receipt.part.title}, ${entry.receipt.part.pinpoint}`
         : entry.claim?.citation || entry.receipt.status;
-      const wl = wordsLineForReceipt(entry.receipt).text;
+      const wl = wordsLineForReceipt(entry.receipt, entry.claim).text;
       const rl = recordLinesForReceipt(entry.receipt)[0]?.text || "";
       this._announce(`${title}. ${wl}. ${rl}`);
     }
@@ -1968,7 +2336,9 @@ class LawCheckController {
         this._appendUser(item, { save: false, reveal: false });
         kept.push(item);
       } else if (item.t === "ai" && typeof item.text === "string") {
-        this._appendAi(item.text, item.summary, { save: false, reveal: false, steps: item.steps });
+        // Answers saved before quotes were marked carry no checks, and are drawn without marks.
+        const quotes = Array.isArray(item.quotes) ? item.quotes : null;
+        this._appendAi(item.text, item.summary, { save: false, reveal: false, steps: item.steps, quotes });
         kept.push(item);
       } else if (item.t === "divider" && typeof item.text === "string") {
         this._appendDivider(item.text, { save: false, reveal: false });
@@ -2051,7 +2421,11 @@ class LawCheckController {
     if (this.isBusy) return;
     this._beginTurn();
     this._appendUser({ text: `Saved proof (${label})` });
-    const incomplete = "This is not a complete receipt. Copy it again from where you saved it.";
+    // A chosen file is named as such: there is nothing to copy again.
+    const incomplete =
+      label === "pasted text"
+        ? "This is not a complete receipt. Copy it again from where you saved it."
+        : "This file is not a Law check proof. Choose the .json file that Save proof made.";
 
     let parsed;
     try {
@@ -2381,9 +2755,16 @@ class LawCheckController {
   }
 
   async _runAiTurn(text) {
+    // Stop (the Send button while an answer is coming) and the time limit both end the turn here.
+    const stop = new AbortController();
+    this.aiTurnStop = stop;
+    // The browser tests set a shorter limit on the page; nothing else does.
+    const limitMs = Number(globalThis.lawCheckTurnLimitMs) > 0 ? Number(globalThis.lawCheckTurnLimitMs) : AI_TURN_LIMIT_MS;
+    const limit = setTimeout(() => stop.abort("timeout"), limitMs);
+    this.turnStopper?.begin(stop.signal);
     this._setBusy(true);
     const status = this._appendStatus("Thinking…");
-    const turn = { checked: 0, found: 0, notFound: 0, failed: 0 };
+    const turn = { checked: 0, found: 0, notFound: 0, failed: 0, quotes: [], parts: [] };
     this.activeAgentTurn = turn;
     this.pendingAgentWork = [];
     try {
@@ -2395,7 +2776,20 @@ class LawCheckController {
       }
       let result = null;
       const steps = [];
-      for await (const event of this.runtime.engine.streamTurn(text, {})) {
+      const stream = this.runtime.engine.streamTurn(text, {});
+      const events = stream[Symbol.asyncIterator]();
+      const stopped = new Promise((resolve) => {
+        stop.signal.addEventListener("abort", () => resolve({ stopped: true }), { once: true });
+      });
+      for (;;) {
+        // The page stops waiting at once; the calls in flight are ended by the turn stopper.
+        const next = await Promise.race([events.next(), stopped]);
+        if (next.stopped) {
+          events.return?.()?.catch?.(() => {});
+          throw stop.signal.reason === "timeout" ? new TurnTimedOut() : new TurnStopped();
+        }
+        if (next.done) break;
+        const event = next.value;
         if (event.type === "turn.completed") {
           result = event.result;
           continue;
@@ -2411,33 +2805,96 @@ class LawCheckController {
       if (!result) throw new Error("The turn ended without an answer.");
       // Every receipt the agents fetched is verified and drawn before the answer is shown under them.
       await Promise.allSettled(this.pendingAgentWork);
+      this.turnStopper?.end();
       status.remove();
+      // A quote the visitor wrote in the question is checked too, on the section the agents found,
+      // so a wrong quote of theirs gets its own card and not only the AI's correction.
+      await this._checkVisitorQuotes(text, turn);
       const answer = cleanAnswerText(result.text) || "The AI gave no written answer.";
-      this._appendAi(answer, this._answerSummary(turn), { steps: turn.steps });
+      this._appendAi(answer, this._answerSummary(turn, answer), { steps: turn.steps, quotes: turn.quotes });
       this._announce(
         turn.checked > 0
           ? `Answer ready. ${turn.checked} ${turn.checked === 1 ? "quote" : "quotes"} checked: ${turn.found} found, ${turn.notFound} not found.`
           : "Answer ready. Nothing in this answer was checked.",
       );
     } catch (err) {
-      await Promise.allSettled(this.pendingAgentWork);
+      this.turnStopper?.end();
+      if (!(err instanceof TurnStopped || err instanceof TurnTimedOut)) await Promise.allSettled(this.pendingAgentWork);
       status.remove();
-      const detail = shorten(String(err?.message || "").replace(/\s+/g, " ").trim(), 240);
-      this._appendNotice(
-        `Your AI provider could not answer.${detail ? ` It said: ${detail}` : ""} Check the key and model, then try again.`,
-        "red",
-        { actions: [{ label: "AI key settings", onClick: () => $("open-provider-modal")?.click() }] },
-      );
+      // The AI starts the next question without this unfinished one.
+      if (err instanceof TurnStopped) {
+        this._appendNotice("Stopped. Your question is back in the box.", "grey");
+        this._putQuestionBack(text);
+        return;
+      }
+      const settings = { label: "AI key settings", onClick: () => $("open-provider-modal")?.click() };
+      if (err instanceof TurnTimedOut) {
+        this._appendNotice(
+          `Your AI provider took longer than ${
+            limitMs >= 60000 ? `${Math.round(limitMs / 60000)} minutes` : `${Math.round(limitMs / 1000)} seconds`
+          }, so the question was stopped. Try again, or choose a faster model in the AI settings.`,
+          "amber",
+          { actions: [settings] },
+        );
+        this._putQuestionBack(text);
+        return;
+      }
+      const notice = providerErrorNotice(err, { model: this.providerModel || "" });
+      this._appendNotice(notice.detail ? `${notice.text} The provider said: \u201c${notice.detail}\u201d` : notice.text, "red", {
+        actions: [settings],
+      });
+      this._putQuestionBack(text);
     } finally {
+      clearTimeout(limit);
+      this.turnStopper?.end();
+      this.aiTurnStop = null;
       this.activeAgentTurn = null;
       this.pendingAgentWork = [];
       this._setBusy(false);
     }
   }
 
-  _answerSummary(turn) {
+  _stopAiTurn() {
+    if (this.aiTurnStop && !this.aiTurnStop.signal.aborted) this.aiTurnStop.abort("stopped");
+  }
+
+  // A question that got no answer goes back in the box, unless something new was typed there.
+  _putQuestionBack(text) {
+    const input = $("composer-input");
+    if (!input || input.value.trim() || this.mode !== "ask") return;
+    input.value = text;
+    this._updateCounter();
+  }
+
+  async _checkVisitorQuotes(text, turn) {
+    const passages = quotedInMessage(text).filter((passage) => {
+      const words = comparableWords(passage);
+      return !turn.quotes.some((q) => comparableWords(q.quote) === words);
+    });
+    if (!passages.length) return;
+    const part = turn.parts[0];
+    if (!part) {
+      this._appendNotice(
+        "The quote in your question was not checked: the AI named no section for it. Use Check a quote to check it against a section you choose.",
+        "grey",
+      );
+      return;
+    }
+    for (const quote of passages) {
+      const claim = { anchor_id: part.anchor_id, quote, ...pickClaimScope(part.jurisdiction, null) };
+      const entry = await this._runDirectCheck(claim, { source: "yours" });
+      if (entry) turn.quotes.push({ quote, found: isFoundStatus(entry.receipt.status) });
+    }
+  }
+
+  _answerSummary(turn, answer = "") {
     if (turn.checked === 0 && turn.failed === 0) {
-      return { text: "Nothing in this answer was checked.", tone: "red" };
+      // A reply that quotes no law (a greeting, a question back) has nothing to check: said plainly,
+      // not as a warning. One that quotes a law unchecked is the warning.
+      const quotes = passagesInQuotes(answer).length > 0 || /^\s*>/m.test(answer);
+      return quotes
+        ? { text: "Nothing in this answer was checked.", tone: "red" }
+        : { text: "This answer quotes no law, so there was nothing to check.", tone: "" };
     }
     const parts = [`This answer: ${turn.checked} ${turn.checked === 1 ? "quote" : "quotes"} checked`];
     if (turn.checked > 0) parts.push(`${turn.found} found, ${turn.notFound} not found`);
@@ -2463,11 +2920,14 @@ class LawCheckController {
     if (this.activeAgentTurn) {
       this.activeAgentTurn.checked += 1;
       const status = envelope.receipt.status;
-      if (status === "matches" || status === "words_found" || status === "words_found_with_omissions") {
-        this.activeAgentTurn.found += 1;
-      } else {
-        this.activeAgentTurn.notFound += 1;
+      const found = isFoundStatus(status);
+      const part = envelope.receipt.part;
+      if (part?.anchor_id) {
+        this.activeAgentTurn.parts.push({ anchor_id: part.anchor_id, jurisdiction: envelope.receipt.claim?.jurisdiction });
       }
+      if (found) this.activeAgentTurn.found += 1;
+      else this.activeAgentTurn.notFound += 1;
+      if (typeof claim?.quote === "string") this.activeAgentTurn.quotes.push({ quote: claim.quote, found });
     }
   }
 

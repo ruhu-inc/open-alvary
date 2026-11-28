@@ -607,3 +607,203 @@ test.describe("accessibility rules", () => {
     expect(serious(await new AxeBuilder({ page }).include("#provider-dialog").analyze())).toEqual([]);
   });
 });
+
+test.describe("what a person testing the page found (2026-11-28)", () => {
+  test("a key is offered only to the provider it was saved for, and each provider keeps its own", async ({ page }) => {
+    // What reaches each provider is written down and stopped, so no key leaves this computer.
+    const sentTo = [];
+    await page.route(/^https:\/\/(api\.anthropic\.com|generativelanguage\.googleapis\.com)\//, (route) => {
+      const request = route.request();
+      sentTo.push({ host: new URL(request.url()).hostname, headers: JSON.stringify(request.headers()) });
+      route.abort();
+    });
+    await page.goto("/agents/");
+    const dialog = page.locator("#provider-dialog");
+    const key = page.locator("#provider-key-input");
+    const saved = page.locator("#provider-key-saved");
+
+    await page.locator("#open-provider-modal").click();
+    await dialog.locator('[data-preset="gemini"]').click();
+    await key.fill("gemini-test-key-AAAA");
+    await page.locator("#provider-save-btn").click();
+    await expect(page.locator("#provider-pill-label")).toHaveText("Google Gemini · gemini-3.8-flash");
+
+    // Another provider shows no saved key: saving or listing models would need one of its own.
+    await page.locator("#open-provider-modal").click();
+    await expect(saved).toContainText("A key ending AAAA is saved for Google Gemini");
+    await dialog.locator('[data-preset="anthropic"]').click();
+    await expect(saved).toBeHidden();
+    await expect(key).toHaveAttribute("placeholder", "Paste your API key");
+    await expect(page.locator("#provider-remove-btn")).toBeHidden();
+    await page.locator("#provider-models-btn").click();
+    await expect(page.locator("#provider-models-status")).toContainText("Paste your key first");
+    await page.locator("#provider-save-btn").click();
+    await expect(page.locator("#provider-key-error")).toContainText("Paste an API key");
+
+    // Saving Claude's key keeps Gemini's beside it.
+    await key.fill("claude-test-key-BBBB");
+    await page.locator("#provider-save-btn").click();
+    await expect(page.locator("#provider-pill-label")).toContainText("Claude");
+    await page.locator("#open-provider-modal").click();
+    await expect(saved).toContainText("A key ending BBBB is saved for Claude");
+    await dialog.locator('[data-preset="gemini"]').click();
+    await expect(saved).toContainText("A key ending AAAA is saved for Google Gemini");
+    await expect(page.locator("#provider-model-input")).toHaveValue("models/gemini-3.8-flash");
+    const store = await page.evaluate(() => JSON.parse(localStorage.getItem("nsweb-byok-profiles-v1")));
+    const keys = Object.fromEntries(store.profiles.map((p) => [new URL(p.router).hostname, p.key]));
+    expect(keys["generativelanguage.googleapis.com"]).toBe("gemini-test-key-AAAA");
+    expect(keys["api.anthropic.com"]).toBe("claude-test-key-BBBB");
+    // Gemini's key never went to Claude, nor Claude's to Google.
+    for (const { host, headers } of sentTo) {
+      if (host === "api.anthropic.com") expect(headers).not.toContain("gemini-test-key-AAAA");
+      else expect(headers).not.toContain("claude-test-key-BBBB");
+    }
+  });
+
+  test("quotation marks around a pasted quote are not counted as the law's words", async ({ page }) => {
+    await page.goto("/agents/");
+    await checkQuote(page, `“${TRUE_QUOTE}”`);
+    await expect(bands(page).first()).toContainText("Quoted words found");
+    await expect(page.locator(".lc-user-quote").first()).not.toContainText("““");
+  });
+
+  test("a quote that differs only in capitals or punctuation says so, with the section's words", async ({ page }) => {
+    await page.goto("/agents/");
+    await checkQuote(page, "The right of any person to access or request information, whether or not contained.");
+    await expect(bands(page).first()).toContainText("Quoted words not found");
+    const diff = page.locator("oa-receipt [data-ref='diff']").first();
+    await expect(diff).toBeVisible();
+    await expect(diff).toContainText("Your words are in the section, written differently");
+    await expect(page.locator("oa-receipt .lines").first()).toContainText("the capital letters or punctuation differ");
+    await expect(page.locator("oa-receipt .lines").first()).not.toContainText("These words are not in");
+    await expect(diff).toContainText("the right of any person to access or request information, whether or not contained");
+  });
+
+  test("the counter and the error count a long quote the same way", async ({ page }) => {
+    await page.goto("/agents/#check");
+    await messageBox(page).fill(`${"word ".repeat(420)}`);
+    await expect(page.locator("#quote-counter")).toHaveText("2,099 of 2,000 characters");
+    await expect(page.locator("#composer-error")).toHaveText("That is 2,099 characters. Shorten it to 2,000 or fewer.");
+  });
+
+  test("a section's links open the law's page at that section", async ({ page }) => {
+    await page.goto("/agents/");
+    await page.getByRole("button", { name: "Try a true quote" }).click();
+    await expect(bands(page).first()).toContainText("Quoted words found");
+    const link = page.locator("#receipt-panel a", { hasText: "Open the section" });
+    await expect(link).toHaveAttribute("href", /\/sources\/ng-foi-act-2011#section-1$/);
+  });
+
+  test("a section that is not found offers the section that holds it", async ({ page }) => {
+    await page.goto("/agents/");
+    await checkQuote(page, TRUE_QUOTE, "Freedom of Information Act 2011, s. 1(9)");
+    const nearest = page.locator("oa-receipt .nearest-box").first();
+    await expect(nearest).toContainText("Nearest enclosing section");
+    await nearest.getByRole("button").click();
+    await expect(bands(page)).toHaveCount(2);
+    await expect(bands(page).nth(1)).toContainText("Quoted words found");
+  });
+
+  test("Check a quote instead keeps the question out of the quote box and shows the examples again", async ({ page }) => {
+    await page.goto("/agents/#ask");
+    await ask(page, "Who can ask for information?");
+    await page.getByRole("button", { name: "Check a quote instead" }).click();
+    await expect(page.locator("#welcome")).toBeVisible();
+    await expect(page.locator("#mode-quote")).toHaveAttribute("aria-pressed", "true");
+    await expect(messageBox(page)).toHaveValue("");
+    await page.locator("#mode-ask").click();
+    await expect(messageBox(page)).toHaveValue("Who can ask for information?");
+  });
+
+  test("a proof file that is not one says so", async ({ page }) => {
+    await page.goto("/agents/");
+    await page.locator("#proof-file").setInputFiles({ name: "notes.json", mimeType: "application/json", buffer: Buffer.from("{not json") });
+    await expect(page.locator(".lc-msg-note").last()).toHaveText(/This file is not a Law check proof/);
+  });
+
+  test("each quoted passage of an answer says whether Open Alvary found it", async ({ page }) => {
+    await useScriptedProvider(page);
+    await ask(page, "What does section 1(1) of the Freedom of Information Act 2011 say?");
+    await expect(page.locator(".lc-msg-ai")).toHaveCount(1);
+    await expect(page.locator(".lc-msg-ai .lc-quote-found")).toContainText("Open Alvary found these words");
+
+    await ask(page, "What does section 1(1) say? [altered]");
+    await expect(page.locator(".lc-msg-ai")).toHaveCount(2);
+    await expect(page.locator(".lc-msg-ai").nth(1).locator(".lc-quote-missing")).toContainText("did not find these words");
+
+    await ask(page, "What does section 1(1) say? [plain]");
+    await expect(page.locator(".lc-msg-ai")).toHaveCount(3);
+    await expect(page.locator(".lc-msg-ai").nth(2).locator(".lc-quote-unchecked")).toContainText("did not check these words");
+
+    // The marks come back with the thread after a reload.
+    await page.reload();
+    await expect(page.locator(".lc-msg-ai .lc-quote-missing")).toHaveCount(1);
+  });
+
+  test("an answer's quote blocks are drawn as quotes, not as > signs", async ({ page }) => {
+    await page.goto("/agents/");
+    const html = await page.evaluate(async () => {
+      const { renderAnswerText } = await import("/agents/site.js");
+      const box = document.createElement("div");
+      renderAnswerText(box, "Section 1 states:\n> First line of the law.\n> Second line.\nAfter the quote.");
+      return box.innerHTML;
+    });
+    expect(html).toBe("<p>Section 1 states:</p><blockquote>First line of the law.<br>Second line.</blockquote><p>After the quote.</p>");
+  });
+});
+
+test.describe("when the AI provider has a bad moment (2026-11-28)", () => {
+  const notice = (page) => page.locator(".lc-msg-note").last();
+
+  test("a busy provider is named as busy, in plain words, with its own message and no JSON", async ({ page }) => {
+    await useScriptedProvider(page);
+    await ask(page, "What does section 1(1) say? [busy]");
+    await expect(notice(page)).toContainText("Your AI provider is busy and could not answer just now.");
+    await expect(notice(page)).toContainText("The model is overloaded. Please try again later.");
+    await expect(notice(page)).not.toContainText("{");
+    await expect(notice(page)).not.toContainText("Check the key");
+    await expect(messageBox(page)).toHaveValue("What does section 1(1) say? [busy]");
+  });
+
+  test("a key over its limit is told how long to wait", async ({ page }) => {
+    await useScriptedProvider(page);
+    await ask(page, "What does section 1(1) say? [quota]");
+    await expect(notice(page)).toContainText("Your AI key has reached its provider's limit for now. Wait about 31 seconds");
+  });
+
+  test("Stop ends an answer at once and puts the question back", async ({ page }) => {
+    await useScriptedProvider(page);
+    await ask(page, "What does section 1(1) say? [slow]");
+    await expect(send(page)).toHaveText("Stop");
+    await expect(send(page)).not.toHaveAttribute("aria-disabled", "true");
+    await send(page).click();
+    await expect(notice(page)).toHaveText(/Stopped\. Your question is back in the box\./);
+    await expect(send(page)).toHaveText("Send");
+    await expect(messageBox(page)).toHaveValue("What does section 1(1) say? [slow]");
+    await expect(page.locator(".lc-msg-status")).toHaveCount(0);
+  });
+
+  test("an answer that takes too long is stopped and says so", async ({ page }) => {
+    await useScriptedProvider(page);
+    await page.evaluate(() => {
+      globalThis.lawCheckTurnLimitMs = 1500;
+    });
+    await ask(page, "What does section 1(1) say? [slow]");
+    await expect(notice(page)).toContainText("took longer than 2 seconds, so the question was stopped");
+    await expect(send(page)).toHaveText("Send");
+  });
+
+  test("a quote in the question is checked too, on the section the AI found", async ({ page }) => {
+    await useScriptedProvider(page);
+    await ask(page, `Is this what section 1(1) says? "${ALTERED_QUOTE}"`);
+    await expect(page.locator(".lc-msg-ai")).toHaveCount(1);
+    await expect(bands(page)).toHaveCount(2);
+    await expect(page.locator(".lc-msg-caption").nth(1)).toHaveText("Your quote, checked by Open Alvary on the section the AI found");
+    await expect(bands(page).nth(1)).toContainText("Quoted words not found");
+    await expect(page.locator("oa-receipt [data-ref='quote-label']").nth(1)).toHaveText("Quote sent (yours)");
+    // The AI's own count stays about the AI's quotes.
+    await expect(page.locator(".lc-ai-summary")).toHaveText(
+      "This answer: 1 quote checked, 1 found, 0 not found. Sentences without a result card were not checked.",
+    );
+  });
+});

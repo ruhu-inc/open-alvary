@@ -77,6 +77,7 @@ export function docsFiles(): Plugin {
       );
       emit("llms-full.txt", ordered.map(portable).join("\n---\n\n"));
       emit("docs/index.json", JSON.stringify(ordered.map((page) => docPath(page.slug))));
+      emit("docs/mcp-tools.json", readFileSync(join(DOCS, "data", "mcp-tools.json"), "utf8"));
     },
   };
 }

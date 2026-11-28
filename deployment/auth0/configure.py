@@ -6,8 +6,9 @@
 What it keeps in line, by name, so reruns change nothing:
   - the API and MCP resources (https://api.<domain>/api/v1 and /mcp): corpus:read, 15-minute access
     tokens, refresh tokens allowed;
-  - each reviewed tool (Claude, Claude Code, ChatGPT, Codex: imported earlier by their metadata
-    documents) allowed on both resources for people signing in;
+  - each reviewed tool (Claude, Claude Code, Codex, plus any newly verified host in CIMD_CLIENTS;
+    ChatGPT is deferred under Branch B until Auth0 confirms permanent non-Enterprise private_key_jwt
+    in writing) allowed on both resources for people signing in;
   - the console's web application ("Open Alvary console") with its callback, using Google and email
     codes only;
   - for a local trial (--local-origin, http://localhost:8022 by default): local API and MCP resources
@@ -34,7 +35,12 @@ PRIVATE = ROOT / "private-staging" / "auth0"
 ACTION = "open-alvary-post-login"
 CONSOLE = "Open Alvary console"
 DELETION = "Open Alvary account deletion"  # Management API: delete:users only (MAC-14)
-TOOLS = ("Claude", "Claude Code", "ChatGPT", "Codex")
+TOOLS = ("Claude", "Claude Code", "Codex")
+# Newly verified host CIMD entries captured in Measurement 2: (display_name, exact_https_cimd_url).
+# Previewed read-only during dry-run; registered and granted corpus:read on --apply.
+CIMD_CLIENTS: tuple[tuple[str, str], ...] = (
+    ("Google Antigravity", "https://antigravity.google/oauth/client-metadata.json"),
+)
 CONNECTIONS = ("google-oauth2", "email")
 
 
@@ -84,8 +90,51 @@ def plan(
         fields="name,client_id,app_type,callbacks,allowed_logout_urls",
         include_fields="true",
     )
-    tools = [c for c in clients if c["name"] in TOOLS and c["client_id"].startswith(("tpc_", "https://"))]
     grants = {(g["client_id"], g["audience"]) for g in m.call("GET", "client-grants")}
+    by_id = {c["client_id"]: c for c in clients}
+    cimd_client_ids: set[str] = set()
+    for display_name, cimd_url in CIMD_CLIENTS:
+        preview = m.call("POST", "clients/cimd/preview", {"external_client_id": cimd_url})
+        existing_id = preview.get("client_id")
+        if existing_id and existing_id in by_id:
+            cimd_client_ids.add(existing_id)
+            continue
+
+        resource_audiences = tuple(resources.values())
+
+        def register_and_grant(name=display_name, url=cimd_url, audiences=resource_audiences):
+            registered = m.call("POST", "clients/cimd/register", {"external_client_id": url})
+            cid = registered["client_id"]
+            current_grants = {
+                (g["client_id"], g["audience"]) for g in m.call("GET", "client-grants", client_id=cid)
+            }
+            for audience in audiences:
+                if (cid, audience) not in current_grants:
+                    m.call(
+                        "POST",
+                        "client-grants",
+                        {
+                            "client_id": cid,
+                            "audience": audience,
+                            "scope": ["corpus:read"],
+                            "subject_type": "user",
+                        },
+                    )
+            return name
+
+        steps.append(
+            (
+                f"import CIMD client {display_name} ({cimd_url}) and allow on {len(resources)} resources",
+                register_and_grant,
+            )
+        )
+
+    tools = [
+        c
+        for c in clients
+        if (c["client_id"] in cimd_client_ids or c["name"] in TOOLS)
+        and c["client_id"].startswith(("tpc_", "https://"))
+    ]
     for tool in tools:
         for identifier in resources.values():
             if (tool["client_id"], identifier) not in grants:

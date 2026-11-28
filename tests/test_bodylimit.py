@@ -30,7 +30,92 @@ def test_each_route_has_its_limit():
     assert limit_for("/console/mail-events") == 64 * 1024
     assert limit_for("/console/oauth/api/decision") == 16 * 1024
     assert limit_for("/console/oauth/api/decisions") == DEFAULT
-    assert limit_for("/mcp") == DEFAULT
+    assert limit_for("/mcp") == 32 * 1024
+
+
+def test_mcp_body_over_32_kib_returns_jsonrpc_413_for_content_length_and_chunked():
+    from api.bodylimit import TooLarge, mcp_too_large_response
+
+    app = FastAPI()
+
+    @app.exception_handler(TooLarge)
+    async def handle_too_large(request: Request, exc: TooLarge):
+        return mcp_too_large_response(getattr(request.state, "request_id", None) or "req-chunked", exc.limit)
+
+    @app.post("/mcp")
+    async def mcp_echo(request: Request):
+        return {"read": len(await request.body())}
+
+    wrapped = BodyLimit(app)
+    # Content-Length > 32 KiB: refused before body is read, with JSON-RPC 10005 envelope.
+    client = TestClient(wrapped)
+    over = b"x" * (32 * 1024 + 1)
+    declared = client.post("/mcp", content=over, headers={"Content-Type": "application/json"})
+    assert declared.status_code == 413
+    assert declared.headers["content-type"] == "application/json"
+    assert declared.headers["cache-control"] == "no-store"
+    assert declared.headers["connection"] == "close"
+    rid = declared.headers["x-request-id"]
+    assert rid
+    body = declared.json()
+    assert body == {
+        "jsonrpc": "2.0",
+        "id": None,
+        "error": {
+            "code": 10005,
+            "message": "Request body exceeds 32,768 bytes.",
+            "data": {
+                "code": "request_too_large",
+                "retryable": False,
+                "request_id": rid,
+                "schema_version": "1",
+            },
+        },
+    }
+
+    # Chunked (no Content-Length) > 32 KiB: stopped at limit and returned in the same JSON-RPC 10005 shape.
+    receive, pulled = stream(chunks=8, size=16 * 1024)
+    sent = run(wrapped, "/mcp", receive)
+    assert sent[0]["status"] == 413
+    assert pulled["chunks"] <= 3
+    headers = {k.decode().lower(): v.decode() for k, v in sent[0]["headers"]}
+    assert headers["content-type"] == "application/json"
+    assert headers["cache-control"] == "no-store"
+    assert headers["connection"] == "close"
+    chunk_rid = headers["x-request-id"]
+    assert chunk_rid
+    chunk_body = json.loads(b"".join(m.get("body", b"") for m in sent[1:]))
+    assert chunk_body == {
+        "jsonrpc": "2.0",
+        "id": None,
+        "error": {
+            "code": 10005,
+            "message": "Request body exceeds 32,768 bytes.",
+            "data": {
+                "code": "request_too_large",
+                "retryable": False,
+                "request_id": chunk_rid,
+                "schema_version": "1",
+            },
+        },
+    }
+
+    # Also test unhandled TooLarge inside BodyLimit directly on /mcp (without route exception handler).
+    async def bare_app(scope, receive, send):
+        while True:
+            msg = await receive()
+            if not msg.get("more_body", False):
+                break
+
+    receive2, _ = stream(chunks=4, size=16 * 1024)
+    sent2 = run(BodyLimit(bare_app), "/mcp", receive2)
+    assert sent2[0]["status"] == 413
+    headers2 = {k.decode().lower(): v.decode() for k, v in sent2[0]["headers"]}
+    assert headers2["content-type"] == "application/json"
+    assert headers2["cache-control"] == "no-store"
+    assert headers2["connection"] == "close"
+    body2 = json.loads(sent2[-1]["body"])
+    assert body2["error"]["code"] == 10005 and body2["error"]["data"]["schema_version"] == "1"
 
 
 def stream(chunks: int, size: int = 64 * 1024):

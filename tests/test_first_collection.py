@@ -1,17 +1,22 @@
 """First-collection acquisition tool: manifest safety, furniture removal and OCR fallback."""
 
 import json
+from urllib.parse import urlsplit
 
 import pytest
 
-from ingestion.first_collection import extract_pdf, load_manifest, remove_running_headers
+from ingestion.first_collection import ALLOWED_HOSTS, extract_pdf, load_manifest, remove_running_headers
 
 
 def test_committed_manifest_is_allowlisted_and_unique():
     manifest = load_manifest()
     ids = [act["id"] for act in manifest["acts"]]
-    assert len(ids) == len(set(ids)) == 15
-    assert all(act["url"].startswith("https://placng.org/") for act in manifest["acts"])
+    # 15 Acts from PLAC's gazette mirror, and the Central Bank of Nigeria Act from the Bank's own site
+    # (checkpoint 18290ac6, 2026-11-26).
+    assert len(ids) == len(set(ids)) == 16
+    assert all(urlsplit(act["url"]).scheme == "https" for act in manifest["acts"])
+    assert all(urlsplit(act["url"]).hostname in ALLOWED_HOSTS for act in manifest["acts"])
+    assert sum(urlsplit(act["url"]).hostname == "placng.org" for act in manifest["acts"]) == 15
 
 
 @pytest.mark.parametrize(

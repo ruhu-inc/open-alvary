@@ -1041,9 +1041,10 @@ def test_a_withdrawn_repeal_corrects_its_one_event_whatever_withdrew_it(feed):
 def test_a_status_correction_says_what_it_was_and_only_for_fields_never_withheld(feed):
     store, client = feed
     work = "ng-foi-act-2011"
-    edit(store, lambda c: setattr(next(s for s in c.sources if s.id == work), "legal_status", "current"))
+    # The catalogue records the Act as current (checkpoint 18290ac6); the correction sets it back.
+    edit(store, lambda c: setattr(next(s for s in c.sources if s.id == work), "legal_status", "unknown"))
     [status] = of_type(client, "metadata_corrected")
-    assert status["changed_fields"] == ["legal_status"] and status["previous"] == {"legal_status": "unknown"}
+    assert status["changed_fields"] == ["legal_status"] and status["previous"] == {"legal_status": "current"}
     edit(store, lambda c: setattr(next(s for s in c.sources if s.id == work), "summary", "A new summary."))
     summary = of_type(client, "metadata_corrected")[-1]
     assert summary["changed_fields"] == ["summary"] and summary["previous"] == {}
@@ -1055,7 +1056,7 @@ def test_a_status_correction_says_what_it_was_and_only_for_fields_never_withheld
         status["supersedes"],
     )
     assert (status["event_revision"], status["supersedes"]) == (1, None)
-    assert client.get(f"/changes/{status['event_id']}").json()["previous"] == {"legal_status": "unknown"}
+    assert client.get(f"/changes/{status['event_id']}").json()["previous"] == {"legal_status": "current"}
 
 
 def rights_of(corpus, work):
@@ -1162,7 +1163,7 @@ def test_a_text_that_replaces_another_names_the_provisions_it_adds_removes_and_c
     edit(store, publish_replacement)
     [event] = [e for e in of_type(client, "text_version_published") if e["version"]["id"] == "test-version-2"]
     assert event["change_reason"] == "extraction_correction"  # read again from the same original file
-    assert event["work"]["legal_status"] == "unknown"  # as the catalogue has it now
+    assert event["work"]["legal_status"] == "current"  # as the catalogue has it now
     assert event["version_diff"] == {
         "prior_version_id": "test-version",
         "added": ["section/2"],

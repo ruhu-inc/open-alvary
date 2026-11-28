@@ -53,6 +53,14 @@ export type Tool = {
     properties: Record<string, Schema & { minLength?: number; maxLength?: number; maxItems?: number }>;
     required?: string[];
   };
+  annotations?: {
+    title?: string;
+    readOnlyHint?: boolean;
+    destructiveHint?: boolean;
+    idempotentHint?: boolean;
+    openWorldHint?: boolean;
+  };
+  outputSchema?: Record<string, unknown>;
 };
 // operationId → an example request (path values and query) and the answer it gave.
 export type Examples = Record<
@@ -341,10 +349,21 @@ function operationPage(path: string, methods: Methods, spec: Spec, examples: Exa
   };
 }
 
+function capabilityNotes(annotations?: Tool["annotations"]): string {
+  if (!annotations) return "";
+  const notes: string[] = [];
+  if (annotations.readOnlyHint) notes.push("read-only");
+  if (annotations.destructiveHint === false) notes.push("non-destructive");
+  if (annotations.idempotentHint) notes.push("idempotent");
+  if (annotations.openWorldHint === false) notes.push("catalogue-only (closed world)");
+  return notes.length ? `Capabilities: ${notes.join(", ")}.` : "";
+}
+
 function toolsPage(tools: Tool[], examples: Examples): ReferencePage {
   const lines = [
-    `The MCP server at \`${API_ORIGIN}/mcp\` gives AI tools these read-only tools. Each answers what the REST API answers for the same request, within your organisation's plan and the same shared limits, but in smaller pages: at most 25 records or changes, 10 passages, and 15 evidence units with 40,960 bytes of words. An answer larger than 60 KiB is refused with \`result_too_large\`, never shortened. To connect a tool, see [Connect AI tools](/docs/ai-tools).`,
-    "AI tools call them for you when you ask a question. To call one yourself, send a JSON-RPC `tools/call` with a key; no session is needed:",
+    `The stateless MCP server at \`${API_ORIGIN}/mcp\` accepts \`POST\` only (\`GET\` and \`DELETE\` return \`405 Method Not Allowed\` with \`Allow: POST\`) and gives AI tools these read-only tools. Each answers what the REST API answers for the same request, within your organisation's plan and the same shared limits, but in smaller pages: at most 25 records or changes, 10 passages, and 15 evidence units with 40,960 bytes of words. An answer larger than 60 KiB is refused with \`result_too_large\`, never shortened. To connect an AI tool, see [Connect AI tools](/docs/ai-tools).`,
+    "The server supports two MCP protocol eras: **`2026-07-28`** and **`2025-06-18`** (compatible with `2025-03-26`). Under `2026-07-28`, clients can call `server/discover` without credentials to inspect `supportedVersions`, `capabilities` and `instructions`; every `2026-07-28` request sends `MCP-Protocol-Version: 2026-07-28`, `Mcp-Method` (matching JSON-RPC `method`), `Mcp-Name` on `tools/call` (matching `params.name`), and `params._meta` (`io.modelcontextprotocol/protocolVersion` and `io.modelcontextprotocol/clientCapabilities`).",
+    "AI tools call these tools for you when you ask a question. To call one yourself under MCP `2026-07-28`, send a JSON-RPC `tools/call` with a key; no session is needed:",
     fence(
       "curl",
       [
@@ -352,33 +371,46 @@ function toolsPage(tools: Tool[], examples: Examples): ReferencePage {
         `-H "Authorization: Bearer $OPEN_ALVARY_KEY"`,
         `-H "Content-Type: application/json"`,
         `-H "Accept: application/json, text/event-stream"`,
-        `-d '{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "search_catalogue", "arguments": {"query": "constitution", "limit": 3}}}'`,
+        `-H "MCP-Protocol-Version: 2026-07-28"`,
+        `-H "Mcp-Method: tools/call"`,
+        `-H "Mcp-Name: search_catalogue"`,
+        `-d '{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "search_catalogue", "arguments": {"query": "constitution", "limit": 3}, "_meta": {"io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientCapabilities": {}}}}'`,
       ].join(" \\\n  "),
     ),
-    "The answer's `result.content[0].text` holds the same JSON as the REST answer. A refusal comes one of three ways, each with one of the [error codes](/docs/errors):",
+    "Under **`2026-07-28`**, every successful response includes `resultType: \"complete\"`: `tools/call` places the typed JSON payload in `result.structuredContent` and a short human-readable summary in `result.content[0].text`. Under **`2025-06-18`** (negotiated with `initialize`), `result.content[0].text` holds the full JSON answer as a string (the same fields as REST).",
+    "Machine-readable tool input and Draft 2020-12 `outputSchema` definitions are returned by `tools/list` and published statically at [`/docs/mcp-tools.json`](/docs/mcp-tools.json).",
+    "A refusal comes one of three ways, each with one of the [error codes](/docs/errors):",
     table(
       ["When", "The answer", "The code"],
       [
         [
-          "Before a tool runs: no key or an invalid one, no access, or an organisation limit used up (requests a minute, at once, data a day)",
-          "A JSON-RPC `error`, at the same HTTP status as REST. `error.code` is `-32600` (400), `10001` (401), `10002` (403), `10003` (429) or `10004` (503); a 401 also has `WWW-Authenticate`.",
+          "Before a tool runs: bad headers or request, no key or an invalid one, no access, oversized request body, or an organisation limit used up (requests a minute, at once, data a day)",
+          "A JSON-RPC `error`, at the same HTTP status as REST. `error.code` is `-32600` (400), `10001` (401), `10002` (403), `10003` (429), `10004` (503) or `10005` (413 `request_too_large`); a 401 also has `WWW-Authenticate`.",
           "`error.data.code`, with `error.data.retry_after_seconds` when you should wait",
         ],
         [
-          "The tool ran and failed: not found, an answer too large, the Starter-rate allowance outside your plan used up, or a cursor that is invalid or expired",
-          "A `result` with `isError: true` and a message in `content[0].text`.",
-          "`result.structuredContent.code`, with `retry_after_seconds` when you should wait",
+          "The tool ran and failed: not found, withdrawn, an answer too large, a Starter request outside your plan's jurisdiction (`jurisdiction_not_included`), the Starter-rate allowance outside a paid plan used up (`rate_limited`), or a cursor that is invalid or expired",
+          "A `result` with `isError: true` (and `resultType: \"complete\"` under `2026-07-28`) and an actionable message in `content[0].text`.",
+          "`result.structuredContent.code`, with `retry_after_seconds` when you should wait, or `retryable: false` and `manage_url` for `jurisdiction_not_included`",
         ],
         [
           "An unknown tool, or arguments it doesn't take",
-          "A JSON-RPC `error` with `error.code` `-32602`.",
-          "None: fix the call.",
+          "A JSON-RPC `error` with `error.code` `-32602` (HTTP `400` under `2026-07-28`, HTTP `200` under `2025-06-18`).",
+          "`error.data.code` (`invalid_input`) under `2026-07-28`: fix the call.",
         ],
       ],
     ),
   ];
   for (const tool of tools) {
-    lines.push(`## \`${tool.name}\` {#${tool.name}}`, `**${tool.title}.** ${tool.description}`);
+    const caps = capabilityNotes(tool.annotations);
+    const schemaNote = tool.outputSchema
+      ? "Output schema: inspect via `tools/list` or [`/docs/mcp-tools.json`](/docs/mcp-tools.json)."
+      : "";
+    lines.push(
+      `## \`${tool.name}\` {#${tool.name}}`,
+      `**${tool.title}.** ${tool.description}`,
+      ...[caps, schemaNote].filter(Boolean),
+    );
     const props = Object.entries(tool.inputSchema.properties);
     if (props.length) {
       const rows = props.map(([name, schema]) => {
@@ -399,7 +431,7 @@ function toolsPage(tools: Tool[], examples: Examples): ReferencePage {
     const example = examples[`mcp:${tool.name}`];
     if (example?.answer !== undefined)
       lines.push(
-        "Example answer (the text of `result.content[0]`):",
+        "Example answer (`result.structuredContent` in `2026-07-28`, or `result.content[0].text` in `2025-06-18`):",
         fence("json", JSON.stringify(example.answer, null, 2)),
       );
   }

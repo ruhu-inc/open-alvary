@@ -31,12 +31,13 @@ import {
   useAsync,
   when,
 } from "./ui";
+import { AI_HOSTS, formatCommand, hostListText, mcpUrl, verifiedHosts } from "../ai-hosts";
 
 export type PageProps = { me: Me; org: Organisation; refresh: () => void };
 
 const API_ORIGIN =
   location.hostname === "open.alvary.ai" ? "https://api.open.alvary.ai" : location.origin;
-const MCP_URL = API_ORIGIN + "/mcp";
+const MCP_URL = mcpUrl(location.origin);
 const MANAGERS = new Set(["owner", "admin"]);
 const BUILDERS = new Set(["owner", "admin", "developer"]);
 
@@ -140,7 +141,7 @@ export function Overview({ me, org }: PageProps) {
           </button>
           <button className="quick-card" type="button" onClick={() => go("/console/connect?app=claude")}>
             <Plug size={18} strokeWidth={1.7} aria-hidden="true" />
-            <b>Connect Claude or Codex</b>
+            <b>Connect {hostListText(verifiedHosts(), "or")}</b>
             <span>Ask questions over the corpus from your AI tools.</span>
           </button>
           <External className="quick-card" href="/docs" icon={false}>
@@ -1587,7 +1588,7 @@ export function Keys({ org }: PageProps) {
       <Heading
         title="API keys"
         org={org}
-        description="Keys let your code call the REST API and MCP. Claude, ChatGPT and Codex don't need one: they sign in themselves."
+        description={`Keys let your code call the REST API and MCP. ${hostListText(verifiedHosts(), "and")} don't need one: they sign in themselves.`}
         action={
           active && builder ? (
             <button className="btn" type="button" onClick={() => setCreating(true)}>
@@ -1996,7 +1997,7 @@ export function Apps({ org }: PageProps) {
       <Heading
         title="Connected apps"
         org={org}
-        description="Apps such as Claude, Claude Code and Codex that you've allowed to read the corpus for this organisation."
+        description={`Apps such as ${hostListText(verifiedHosts(), "and")} that you've allowed to read the corpus for this organisation.`}
         action={
           active && BUILDERS.has(org.role) ? (
             <button className="btn" type="button" onClick={() => go("/console/connect")}>
@@ -2052,7 +2053,7 @@ export function Apps({ org }: PageProps) {
         <div className="empty">
           <Plug size={28} strokeWidth={1.5} aria-hidden="true" />
           <h2>No apps connected</h2>
-          <p className="lede">Connect Claude, Claude Code or Codex to ask questions over the corpus.</p>
+          <p className="lede">Connect {hostListText(verifiedHosts(), "or")} to ask questions over the corpus.</p>
           {BUILDERS.has(org.role) ? (
             <button className="btn" type="button" onClick={() => go("/console/connect")}>
               Connect an app
@@ -2068,17 +2069,14 @@ export function Apps({ org }: PageProps) {
   );
 }
 
-const TABS = [
-  ["claude", "Claude"],
-  ["code", "Claude Code"],
-  ["codex", "Codex"],
-  ["rest", "Your own code"],
-] as const;
+const CONNECT_HOSTS = [...verifiedHosts(), ...AI_HOSTS.filter((host) => host.id === "rest")];
 
 export function Connect({ org }: PageProps) {
   const initial = new URLSearchParams(location.search).get("app");
-  const [tab, setTab] = useState<string>(TABS.some(([id]) => id === initial) ? initial! : "claude");
-  const command = `claude mcp add --transport http open-alvary ${MCP_URL}`;
+  const [tab, setTab] = useState<string>(
+    CONNECT_HOSTS.some((host) => host.id === initial) ? initial! : CONNECT_HOSTS[0].id,
+  );
+  const current = CONNECT_HOSTS.find((host) => host.id === tab) ?? CONNECT_HOSTS[0];
   return (
     <>
       <Heading
@@ -2089,65 +2087,27 @@ export function Connect({ org }: PageProps) {
       {org.access.state !== "active" ? <NeedsAccess what="Connected apps" org={org} /> : null}
       <CountryNotice org={org} />
       <div className="card">
-        <div className="tabs" role="tablist">
-          {TABS.map(([id, label]) => (
+        <div className="tabs" role="tablist" aria-label="AI tools">
+          {CONNECT_HOSTS.map((host) => (
             <button
-              key={id}
+              key={host.id}
               role="tab"
               type="button"
-              aria-selected={tab === id}
+              aria-selected={current.id === host.id}
               onClick={() => {
-                setTab(id);
-                history.replaceState(null, "", `/console/connect?app=${id}`);
+                setTab(host.id);
+                history.replaceState(null, "", `/console/connect?app=${host.id}`);
               }}
             >
-              {label}
+              {host.name}
             </button>
           ))}
         </div>
         <div role="tabpanel">
-          {tab === "claude" ? (
-            <ol className="steps">
-              <li>
-                In Claude, open <b>Settings → Connectors</b> and choose <b>Add custom connector</b>.
-              </li>
-              <li>
-                Paste this address and add it:
-                <CopyField value={MCP_URL} label="MCP address" />
-              </li>
-              <li>
-                Choose <b>Connect</b>. Claude sends you here to sign in and approve; choose this organisation.
-              </li>
-            </ol>
-          ) : null}
-          {tab === "code" ? (
-            <ol className="steps">
-              <li>
-                Add the server:
-                <CopyField value={command} label="Command" />
-              </li>
-              <li>
-                Run <code>/mcp</code> in Claude Code, choose <b>open-alvary</b> and <b>Authenticate</b>. Your browser
-                opens here to approve.
-              </li>
-            </ol>
-          ) : null}
-          {tab === "codex" ? (
-            <ol className="steps">
-              <li>
-                Add the server:
-                <CopyField value={`codex mcp add open-alvary --url ${MCP_URL}`} label="Command" />
-              </li>
-              <li>
-                Sign in:
-                <CopyField value="codex mcp login open-alvary" label="Command" />
-              </li>
-              <li>Approve in the browser window that opens.</li>
-            </ol>
-          ) : null}
-          {tab === "rest" ? (
+          {current.id === "rest" ? (
             <>
               <p>Create an API key, then call the REST API. MCP clients that accept a header can use the same key.</p>
+              <CopyField value={MCP_URL} label="MCP address" />
               <div className="code" dir="ltr">
                 {`curl ${API_ORIGIN}/api/v1/sources/ng-foi-act-2011 \\\n  -H "Authorization: Bearer $OPEN_ALVARY_KEY"`}
               </div>
@@ -2157,9 +2117,49 @@ export function Connect({ org }: PageProps) {
                 </button>
               </div>
             </>
-          ) : null}
+          ) : (
+            <>
+              <ol className="steps">
+                {current.installSteps.map((step, i) => {
+                  const formatted = step.command ? formatCommand(step.command, location.origin) : undefined;
+                  const fieldLabel = formatted === MCP_URL ? "MCP address" : `${current.name} command`;
+                  return (
+                    <li key={i}>
+                      {step.label}
+                      {formatted ? (
+                        step.copyable ? (
+                          <CopyField value={formatted} label={fieldLabel} />
+                        ) : (
+                          <code className="code" dir="ltr">
+                            {formatted}
+                          </code>
+                        )
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ol>
+              <p className="fine">{current.consentNote}</p>
+              {current.pluginRepoUrl ? (
+                <p className="fine">
+                  <External href={current.pluginRepoUrl}>Open Alvary plugin and agent skills on GitHub</External>
+                </p>
+              ) : null}
+            </>
+          )}
         </div>
       </div>
+      <p className="fine">
+        Review or disconnect tools at any time under{" "}
+        <button className="link" type="button" onClick={() => go("/console/apps")}>
+          Connected apps
+        </button>
+        . Manage included jurisdictions under{" "}
+        <button className="link" type="button" onClick={() => go("/console/access")}>
+          Plan and limits
+        </button>
+        .
+      </p>
     </>
   );
 }

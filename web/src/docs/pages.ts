@@ -3,6 +3,7 @@
 // TypeScript, used by the site and by the build (web/docs-files.ts), which publishes each page as
 // Markdown and the whole set as llms.txt.
 
+import { formatCommand, mcpUrl, verifiedHosts } from "../ai-hosts";
 import { errorsMarkdown } from "./errors";
 import { frontMatter } from "./markdown";
 import { type Examples, referenceOverview, referencePages, type Spec, type Tool } from "./reference";
@@ -37,7 +38,7 @@ const data = (v?: number) => (!v ? "" : v >= 1e9 ? `${n(v / 1e9)} GB` : `${n(v /
 function plansTable(plans: Plan[]): string {
   const rows = [...plans].sort((a, b) => a.listing.order - b.listing.order);
   return [
-    "| Plan | Price | Requests a minute | Burst | At once | Data a day | Countries | Monitors | Webhooks |",
+    "| Plan | Price | Requests a minute | Burst | At once | Data a day | Jurisdictions | Monitors | Webhooks |",
     "|---|---|---|---|---|---|---|---|---|",
     ...rows.map((p) => {
       const a = p.allowance;
@@ -60,6 +61,41 @@ function plansTable(plans: Plan[]): string {
   ].join("\n");
 }
 
+function aiHostsMarkdown(): string {
+  const endpoint = mcpUrl();
+  const hosts = verifiedHosts();
+  const authLabel = (method: string) =>
+    method === "oauth_cimd"
+      ? "OAuth in browser (Verified publisher)"
+      : method === "oauth_dcr"
+        ? "OAuth in browser"
+        : "API key";
+  const blocks: string[] = [
+    [
+      "| Tool | Sign-in | Summary |",
+      "|---|---|---|",
+      ...hosts.map((host) => `| **${host.name}** | ${authLabel(host.authMethod)} | ${host.summary} |`),
+    ].join("\n"),
+  ];
+  for (const host of hosts) {
+    const cliCommands: string[] = [];
+    const steps = host.installSteps.map((step, i) => {
+      const cmd = step.command ? formatCommand(step.command) : undefined;
+      if (cmd && cmd !== endpoint) cliCommands.push(cmd);
+      const inlineCommand = cmd ? ` \`${cmd}\`` : "";
+      return `${i + 1}. ${step.label}${inlineCommand}`;
+    });
+    blocks.push(`### ${host.name}`);
+    if (cliCommands.length) blocks.push("```bash\n" + cliCommands.join("\n") + "\n```");
+    blocks.push(steps.join("\n"));
+    const note = host.pluginRepoUrl
+      ? `${host.consentNote} Plugin and agent skills: [${host.pluginRepoUrl.replace(/^https?:\/\//, "")}](${host.pluginRepoUrl}).`
+      : host.consentNote;
+    blocks.push(note);
+  }
+  return blocks.join("\n\n");
+}
+
 export function buildPages(
   files: Record<string, string>,
   spec: Spec,
@@ -68,7 +104,11 @@ export function buildPages(
   plans: Plan[],
 ): { pages: Map<string, DocPage>; nav: NavSection[] } {
   const pages = new Map<string, DocPage>();
-  const includes: Record<string, string> = { plans: plansTable(plans), "api-overview": referenceOverview(spec) };
+  const includes: Record<string, string> = {
+    plans: plansTable(plans),
+    "api-overview": referenceOverview(spec),
+    "ai-hosts": aiHostsMarkdown(),
+  };
   for (const [name, source] of Object.entries(files)) {
     const { meta, body } = frontMatter(source);
     const slug = name === "index" ? "" : name;

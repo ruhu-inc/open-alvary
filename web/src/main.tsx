@@ -24,6 +24,8 @@ import "@fontsource/libre-caslon-display/latin-400.css";
 import "./style.css";
 import { AcceptableUse, Privacy, Terms } from "./legal";
 import { Security } from "./security";
+import { ConnectPage } from "./connect";
+import { hostListText, verifiedHosts } from "./ai-hosts";
 import {
   PageTitle,
   ProjectContext,
@@ -223,6 +225,7 @@ function App() {
   useEffect(() => {
     const title = [
       ...links,
+      ["/connect", "Connect AI tools"],
       ["/about", "About & contribute"],
       ["/privacy", "Privacy"],
       ["/terms", "Terms of service"],
@@ -289,6 +292,8 @@ function App() {
             </React.Suspense>
           ) : pathname === "/developers" ? (
             <Developers />
+          ) : pathname === "/connect" ? (
+            <ConnectPage />
           ) : import.meta.env.DEV && pathname === "/dev/reader" ? (
             <React.Suspense fallback={<p>Loading…</p>}>
               <DevReader />
@@ -1191,8 +1196,7 @@ function Developers() {
             Starter plan at once, with no card.
           </li>
           <li>
-            <b>Create an API key</b>, or connect Claude, ChatGPT, Claude Code or
-            Codex.
+            <b>Create an API key</b>, or connect {hostListText(verifiedHosts(), "or")}.
           </li>
           <li>
             <b>Make your first request</b>, as below.
@@ -1258,19 +1262,22 @@ function Developers() {
             that take a header can send a key instead.
           </p>
           <dl className="endpoints">
-            <dt>Claude</dt>
-            <dd>Settings → Connectors → Add custom connector, and paste the address.</dd>
-            <dt>Claude Code</dt>
-            <dd><code>claude mcp add --transport http open-alvary {API_ORIGIN}/mcp</code>, then <code>/mcp</code> and Authenticate.</dd>
-            <dt>Codex</dt>
-            <dd><code>codex mcp add open-alvary --url {API_ORIGIN}/mcp</code>, then <code>codex mcp login open-alvary</code>.</dd>
-            <dt>ChatGPT and other tools</dt>
-            <dd>The same address, in the tool's settings for MCP connectors.</dd>
+            {verifiedHosts().map((host) => (
+              <React.Fragment key={host.id}>
+                <dt>{host.name}</dt>
+                <dd>{host.summary}</dd>
+              </React.Fragment>
+            ))}
           </dl>
           <p>
             Thirteen read-only tools search records and published texts,
             retrieve and check evidence, resolve citations and read changes:{" "}
             <Link to="/docs/api/mcp">the MCP tools</Link>.
+          </p>
+          <p>
+            <Link className="text-link" to="/connect">
+              Connect AI tools <ArrowRight size={16} aria-hidden="true" />
+            </Link>
           </p>
           <Link className="text-link" to="/docs/console#apps">
             Connecting a tool, with pictures <ArrowRight size={16} aria-hidden="true" />
