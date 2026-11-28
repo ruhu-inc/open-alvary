@@ -28,6 +28,7 @@ from retrieval.verify import (
 from schema.models import (
     Citation,
     Corpus,
+    Language,
     RightsRecord,
     Source,
     SourceVersion,
@@ -307,7 +308,14 @@ def _build_test_catalogue(store, base_catalogue: Corpus) -> LegacyCatalogue:
     corpus = Corpus(
         jurisdictions=base_catalogue.jurisdictions,
         authorities=base_catalogue.authorities,
-        languages=base_catalogue.languages,
+        languages=[
+            *base_catalogue.languages,
+            *(
+                []
+                if any(lang.id == "fr" for lang in base_catalogue.languages)
+                else [Language(id="fr", name="French", tag="fr")]
+            ),
+        ],
     )
     auth_id = base_catalogue.authorities[0].id
 
@@ -608,6 +616,60 @@ def _build_test_catalogue(store, base_catalogue: Corpus) -> LegacyCatalogue:
         ]
     )
     corpus.rights.append(_make_rights("ng-multi-ver", [v1_hash, v2_hash]))
+
+    # 5b. One Act published in two languages (as Rwanda's are in three): the same section in each text
+    en_text = "1. Every person is equal before the law and enjoys equal protection of the law."
+    fr_text = "1. Toute personne est égale devant la loi et jouit d'une égale protection de la loi."
+    en_hash, fr_hash = sha256(en_text.encode()).hexdigest(), sha256(fr_text.encode()).hexdigest()
+    corpus.sources.append(
+        Source(
+            id="ng-two-lang",
+            jurisdiction_id="ng",
+            authority_id=auth_id,
+            document_type="act",
+            title="Two Languages Act",
+            citation="Two Languages Act",
+            year=2020,
+            language="en",
+            legal_status="current",
+            canonical_url="https://official.example.ng/two-lang",
+        )
+    )
+    for vid, lang, text_, digest in (
+        ("ver-lang-en", "en", en_text, en_hash),
+        ("ver-lang-fr", "fr", fr_text, fr_hash),
+    ):
+        corpus.versions.append(
+            SourceVersion(
+                id=vid,
+                source_id="ng-two-lang",
+                canonical_url=f"https://official.example.ng/two-lang-{lang}",
+                retrieved_at=NOW,
+                raw_hash=digest,
+                content_hash=digest,
+                canonical_text=text_,
+                parser="fixture",
+                language=lang,
+                verification_status="verified",
+                content_verifier="reviewer",
+                content_verified_at=NOW,
+            )
+        )
+        corpus.structure.append(
+            StructureNode(
+                id=f"anc-lang-{lang}-s1",
+                source_id="ng-two-lang",
+                version_id=vid,
+                kind="section",
+                locator="sec_1",
+                label="1",
+                order=0,
+                start_byte=0,
+                end_byte=len(text_.encode()),
+                source_hash=digest,
+            )
+        )
+    corpus.rights.append(_make_rights("ng-two-lang", [en_hash, fr_hash]))
 
     # 6. Replaced text (old version not approved; newer version has s. 1 but NOT s. 2)
     old_text = "1. Old wording of section one in replaced text.\n2. Section two that was deleted."
@@ -1281,6 +1343,66 @@ def test_the_quotes_words_decide_which_of_several_texts_is_checked(
         signer,
     )
     assert receipt.status == "ambiguous"
+
+
+def test_a_quote_in_no_text_is_answered_in_the_text_clearly_closest_to_it(
+    cat: LegacyCatalogue, signer: ReceiptSigner
+):
+    """Found live on 2026-11-28: a one-word slip in an English quote of a Rwandan article came back as a
+    choice among its three language texts. The text clearly closest to the quote is now read, so the
+    answer is "not found" there with the section's opening words, from which the page shows the slip."""
+    true = "Every person is equal before the law and enjoys equal protection of the law."
+    receipt = _assert_valid_response(
+        verify_claim(cat, {"citation": "Two Languages Act, s. 1", "quote": true}, signer=signer, today=TODAY),
+        signer,
+    )
+    assert receipt.findings.quote == "exact" and receipt.part.version_id == "ver-lang-en"
+    slipped = true.replace("equal protection", "special protection")
+    receipt = _assert_valid_response(
+        verify_claim(
+            cat, {"citation": "Two Languages Act, s. 1", "quote": slipped}, signer=signer, today=TODAY
+        ),
+        signer,
+    )
+    assert receipt.status == "wording_differs" and receipt.part.version_id == "ver-lang-en"
+    assert receipt.findings.quote == "absent" and "equal protection" in receipt.findings.opening_text
+    # The same slip in French is answered in the French text.
+    receipt = _assert_valid_response(
+        verify_claim(
+            cat,
+            {
+                "citation": "Two Languages Act, s. 1",
+                "quote": "Toute personne est égale devant la loi et jouit d'une protection spéciale.",
+            },
+            signer=signer,
+            today=TODAY,
+        ),
+        signer,
+    )
+    assert receipt.status == "wording_differs" and receipt.part.version_id == "ver-lang-fr"
+    # Two readings of one Act a quote is close to alike, or no quote at all: still a choice for the caller.
+    for claim in (
+        {
+            "citation": "Multi Version Act, s. 1",
+            "quote": "Amended 2022 wording of the Multi Version Act section two for testing.",
+        },
+        {"citation": "Two Languages Act, s. 1"},
+    ):
+        receipt = _assert_valid_response(verify_claim(cat, claim, signer=signer, today=TODAY), signer)
+        assert receipt.status == "ambiguous" and len(receipt.alternatives) == 2
+    receipt = _assert_valid_response(
+        verify_claim(
+            cat,
+            {
+                "citation": "Multi Version Act, s. 1",
+                "quote": "Wording found in neither text of the Multi Version Act at all.",
+            },
+            signer=signer,
+            today=TODAY,
+        ),
+        signer,
+    )
+    assert receipt.status == "ambiguous" and len(receipt.alternatives) == 2
 
 
 def test_the_same_words_in_two_texts_are_checked_in_the_one_in_force(

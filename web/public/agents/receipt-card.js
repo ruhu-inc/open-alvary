@@ -1291,12 +1291,18 @@ export class OaReceiptElement extends BaseElement {
       } else if (r.status === "ambiguous") {
         const p = document.createElement("p");
         p.className = "grey-note";
-        p.textContent = "Choose one of the matching entries below to check it:";
+        const alternatives = Array.isArray(r.alternatives) ? r.alternatives : [];
+        // One law's texts (Rwanda's three languages, two readings of an Act) look alike by name:
+        // say so once, and number them.
+        const texts = alternatives.length > 0 && alternatives.every((alt) => alt.reason === "several_texts");
+        p.textContent = texts
+          ? "This law is published in more than one text, such as one per language. Choose the text your quote comes from:"
+          : "More than one law has this name. Choose the one you mean:";
         greyArea.appendChild(p);
-        if (Array.isArray(r.alternatives) && r.alternatives.length > 0) {
+        if (alternatives.length > 0) {
           const ul = document.createElement("ul");
           ul.className = "alternatives";
-          for (const alt of r.alternatives) {
+          for (const [index, alt] of alternatives.entries()) {
             const li = document.createElement("li");
             li.className = "alt-row";
             const meta = document.createElement("div");
@@ -1306,7 +1312,12 @@ export class OaReceiptElement extends BaseElement {
             t.textContent = alt.pinpoint ? `${alt.title}, ${alt.pinpoint}` : alt.title;
             const reason = document.createElement("div");
             reason.className = "alt-reason";
-            reason.textContent = alt.reason || "";
+            reason.textContent =
+              alt.reason === "several_texts"
+                ? `Text ${index + 1} of ${alternatives.length}`
+                : alt.reason === "several_works"
+                  ? "Another law with this name"
+                  : "";
             meta.append(t, reason);
 
             const btn = document.createElement("button");

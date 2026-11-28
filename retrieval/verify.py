@@ -642,6 +642,42 @@ HOLDS_QUOTE = frozenset({"exact", "normalised", "with_omissions"})
 MAX_WORK_SPLITS = 4
 
 
+def _quote_words(text: str) -> set[str]:
+    return set(re.findall(r"[^\W_]+", normalize_quote(text).casefold()))
+
+
+def _closest_by_words(catalogue: LegacyCatalogue, candidates, quote: str):
+    """Where no text of one record holds ``quote``, the one text whose words are clearly the quote's own
+    language and passage: most of the quote's words are in it, and far more than in any other. An
+    English quote of one of Rwanda's articles is then answered "not found" in the English text, with
+    the words around it, rather than as a choice among three texts that look alike. None when no text
+    is clearly closest; the caller then lists them all, as before."""
+    wanted = _quote_words(quote)
+    if len(wanted) < 4:
+        return None
+    scored = []
+    for candidate in candidates:
+        row = catalogue.repository.node(candidate.anchor_id)
+        if row is None:
+            continue
+        node = NodeViewRecord.model_validate(row)
+        try:
+            version, _, _ = catalogue.version(node.version_id)
+        except SourceUnavailable:
+            continue
+        span_bytes, _ = catalogue._span(node, version)
+        if len(span_bytes) > MAX_PART_BYTES:
+            continue
+        share = len(wanted & _quote_words(span_bytes.decode("utf-8", errors="replace"))) / len(wanted)
+        scored.append((share, candidate))
+    if not scored:
+        return None
+    scored.sort(key=lambda pair: pair[0], reverse=True)
+    best_share, best = scored[0]
+    runner_up = scored[1][0] if len(scored) > 1 else 0.0
+    return best if best_share >= 0.6 and best_share - runner_up >= 0.25 else None
+
+
 def _choose_by_words(catalogue: LegacyCatalogue, candidates, quote: str, assessed_at: date):
     """The one candidate part whose published words hold ``quote``, where a citation names more than one
     part of a record (its texts in three languages, two readings of one Act): the words decide which part
@@ -902,6 +938,15 @@ def verify_claim(
                 if quote is not None and dated
                 else None
             )
+            # No text of the one record holds the quote: the text clearly closest to it is read, so the
+            # answer is "not found" there, with the words around it.
+            if (
+                chosen is None
+                and quote is not None
+                and prov.reason == "several_texts"
+                and len({c.source_id for c in dated}) == 1
+            ):
+                chosen = _closest_by_words(catalogue, dated, quote)
             if chosen is not None:
                 target_anchor_id = chosen.anchor_id
             elif prov.reason == "several_texts" and as_of is not None:
