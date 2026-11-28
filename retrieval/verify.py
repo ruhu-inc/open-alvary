@@ -721,18 +721,18 @@ def _choose_by_words(catalogue: LegacyCatalogue, candidates, quote: str, assesse
 
 def _names_a_record(
     catalogue: LegacyCatalogue, citation: str, allowed_source_ids, check_jurisdiction=None
-) -> bool:
-    """Whether the words before one of the citation's last commas name a public record ("Law n° 1/2016
-    …, Chapter One A"): the record is in the catalogue though its part was not read, so the part is not
-    found rather than the record missing."""
+) -> list:
+    """The public records the words before one of the citation's last commas name ("Law n° 1/2016 …,
+    Chapter One A"), or an empty list: the record is in the catalogue though its part was not read, so
+    the part is not found rather than the record missing (or its text not yet published)."""
     at = len(citation)
     for _ in range(MAX_WORK_SPLITS):
         at = citation.rfind(",", 0, at)
         if at <= 0:
-            return False
+            return []
         work = citation[:at].strip(" ,;")
         if not work:
-            return False
+            return []
         matches = catalogue.citations(work).matches
         if allowed_source_ids is not None:
             matches = [m for m in matches if m.id in allowed_source_ids]
@@ -740,8 +740,8 @@ def _names_a_record(
             if check_jurisdiction is not None:  # a record outside a plan is answered as any other is
                 for match in matches:
                     check_jurisdiction(match.jurisdiction_id)
-            return True
-    return False
+            return list(matches)
+    return []
 
 
 def verify_claim(
@@ -876,7 +876,12 @@ def verify_claim(
         # Row 1: no public record named. A record named with a part Law check cannot read is a part not
         # found: the record is in the catalogue.
         if not res.matches:
-            if _names_a_record(catalogue, citation, allowed_source_ids, check_jurisdiction):
+            named = _names_a_record(catalogue, citation, allowed_source_ids, check_jurisdiction)
+            if named:
+                # A record with no text published yet (a judgment under review, say) has no part to
+                # find: the text is not available, rather than its paragraph missing.
+                if not any(getattr(match, "has_full_text", True) for match in named):
+                    return finish("text_not_available")
                 return finish("part_not_found")
             return finish("not_in_catalogue")
 

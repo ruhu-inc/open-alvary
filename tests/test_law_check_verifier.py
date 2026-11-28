@@ -974,6 +974,12 @@ def test_all_13_status_rows(cat: LegacyCatalogue, signer: ReceiptSigner, monkeyp
         verify_claim(cat, {"citation": "Metadata Only Act 2020, s. 1"}, signer=signer, today=TODAY), signer
     )
     assert r3a.status == "text_not_available" and r3a.part is None
+    # A part the reader cannot place ("para. 3") of a record with no text yet: still no text, never a
+    # missing part (found live on a judgment under rights review, 2026-11-28).
+    r3c = _assert_valid_response(
+        verify_claim(cat, {"citation": "Metadata Only Act 2020, para. 3"}, signer=signer, today=TODAY), signer
+    )
+    assert r3c.status == "text_not_available" and r3c.part is None
     r3b = _assert_valid_response(
         verify_claim(cat, {"anchor_id": "anc-does-not-exist"}, signer=signer, today=TODAY), signer
     )
