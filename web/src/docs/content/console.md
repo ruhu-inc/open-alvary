@@ -55,7 +55,7 @@ Your request shows as **Being reviewed**, and we reply by email. Prices for paid
 
 ## Create an API key {#keys}
 
-A key lets your code call the REST API and MCP. Claude, Claude Code and Codex don't need one: they sign in themselves ([below](#apps)).
+A key lets your code call the REST API and MCP. Claude, Claude Code, Codex and Antigravity don't need one: they sign in themselves ([below](#apps)).
 
 > Note: On a paid or approved plan, owners and admins confirm a second factor before creating keys or connecting apps. Set one up first under [Security and profile](#security); on Starter it's recommended.
 

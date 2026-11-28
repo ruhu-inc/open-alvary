@@ -1,6 +1,6 @@
 ---
 title: Connect AI tools
-description: Connect Claude, Claude Code or Codex to the Open Alvary catalogue over MCP, with no API key.
+description: Connect Claude, Claude Code, Codex or Antigravity to the Open Alvary catalogue over MCP, with no API key.
 ---
 
 AI tools that speak MCP (the Model Context Protocol) can search and read the published Open Alvary catalogue for you. You add Open Alvary to the tool once, sign in in your browser, and approve it for your organisation; after that, ask questions in your own words and the tool calls Open Alvary when it needs to.
@@ -23,7 +23,7 @@ You need an Open Alvary account with active access (the free Starter plan is eno
 
 ![Connect an app, Claude tab: the steps and the MCP address with a Copy button](/guide/connect-claude.webp)
 
-For agent workflows in Claude Code and Codex, the public plugin and skills repository at [github.com/ruhu-inc/open-alvary-skills](https://github.com/ruhu-inc/open-alvary-skills) bundles the MCP configuration and guided legal-research skills.
+For agent workflows in Claude Code, Codex and Antigravity, the public plugin and skills repository at [github.com/ruhu-inc/open-alvary-skills](https://github.com/ruhu-inc/open-alvary-skills) bundles the MCP configuration and guided legal-research skills.
 
 ## Approve the tool
 

@@ -160,6 +160,6 @@ More answers in [Help](/docs/help).
 - [Retrieve evidence for AI answers](/docs/retrieval) Ranked, citable evidence for a question.
 - [Follow changes](/docs/changes) Keep up with what is added or corrected.
 - [Download and mirror the data](/docs/mirror) A whole release, checked, and kept current.
-- [Connect AI tools](/docs/ai-tools) Ask Claude, Claude Code or Codex about the catalogue.
+- [Connect AI tools](/docs/ai-tools) Ask Claude, Claude Code, Codex or Antigravity about the catalogue.
 - [API reference](/docs/api) Every route and field.
 :::

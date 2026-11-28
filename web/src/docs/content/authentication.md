@@ -45,7 +45,7 @@ Even so, send only what a search needs, and leave out names or other details tha
 
 ## Connected apps
 
-AI tools such as Claude, Claude Code and Codex don't use keys. When you add Open Alvary to one, it sends you to sign in and approve it for one of your organisations; it then holds an access token for that organisation only. See [Connect AI tools](/docs/ai-tools).
+AI tools such as Claude, Claude Code, Codex and Antigravity don't use keys. When you add Open Alvary to one, it sends you to sign in and approve it for one of your organisations; it then holds an access token for that organisation only. See [Connect AI tools](/docs/ai-tools).
 
 Owners, admins and members can connect apps. **Connected apps** in the console lists them; disconnecting one stops it at its next request. An app can only read the corpus (the scope `corpus:read`). It can't see your keys, change anything or act for another organisation.
 

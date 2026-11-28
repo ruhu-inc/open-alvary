@@ -45,13 +45,16 @@ export const AI_HOSTS: readonly AiHost[] = [
   {
     id: "claude",
     name: "Claude",
-    summary: "Settings → Connectors → Add custom connector, paste the MCP address, then sign in.",
+    summary: "Settings → Plugins → Browse plugins → Add custom connector, paste the MCP address, then sign in.",
     audience: "consumer",
     status: "verified",
     authMethod: "oauth_cimd",
     consentNote: "Shows Verified publisher on the Open Alvary approval page.",
     installSteps: [
-      { label: "In Claude, open Settings → Connectors and choose Add custom connector." },
+      {
+        label:
+          "In Claude, open Settings → Plugins → Browse plugins (or Customize → Connectors / claude.ai/settings/connectors) and choose Add custom connector.",
+      },
       { label: "Paste the Open Alvary MCP address and add it:", command: "{{mcpUrl}}", copyable: true },
       { label: "Choose Connect. Sign in to Open Alvary, pick your organisation, and approve." },
     ],
@@ -103,10 +106,10 @@ export const AI_HOSTS: readonly AiHost[] = [
     name: "Antigravity",
     summary: "Install the Open Alvary plugin with agy plugin install, then approve in your browser.",
     audience: "agent",
-    status: "deferred",
+    status: "verified",
     authMethod: "oauth_cimd",
     pluginRepoUrl: PLUGIN_REPO_URL,
-    consentNote: "Deferred pending live OAuth client verification and publisher pinning.",
+    consentNote: "Shows Verified publisher on the Open Alvary approval page.",
     installSteps: [
       {
         label: "Install the Open Alvary plugin (MCP server and legal research skills):",
