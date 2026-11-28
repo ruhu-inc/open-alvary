@@ -87,8 +87,9 @@ INSTRUCTIONS = (
 )
 
 
-def _annotations() -> dict[str, bool]:
+def _annotations(title: str) -> dict[str, bool | str]:
     return {
+        "title": title,
         "readOnlyHint": True,
         "destructiveHint": False,
         "idempotentHint": True,
@@ -156,7 +157,7 @@ TOOLS = [
             },
             "additionalProperties": False,
         },
-        "annotations": _annotations(),
+        "annotations": _annotations("Check a legal claim and issue a signed receipt"),
         "outputSchema": OUTPUT_SCHEMAS["check_claim"],
     },
     {
@@ -200,7 +201,7 @@ TOOLS = [
             "required": ["items"],
             "additionalProperties": False,
         },
-        "annotations": _annotations(),
+        "annotations": _annotations("Check cited parts"),
         "outputSchema": OUTPUT_SCHEMAS["check_currentness"],
     },
     {
@@ -225,7 +226,7 @@ TOOLS = [
             "required": ["anchor_id"],
             "additionalProperties": False,
         },
-        "annotations": _annotations(),
+        "annotations": _annotations("Get one part of a text exactly"),
         "outputSchema": OUTPUT_SCHEMAS["get_anchor"],
     },
     {
@@ -246,7 +247,7 @@ TOOLS = [
             "required": ["event_id"],
             "additionalProperties": False,
         },
-        "annotations": _annotations(),
+        "annotations": _annotations("Get one change"),
         "outputSchema": OUTPUT_SCHEMAS["get_change"],
     },
     {
@@ -255,7 +256,7 @@ TOOLS = [
         "description": "Counts of catalogued sources and of sources with openly redistributable full text. "
         "Call before making scope claims about what Open Alvary covers.",
         "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
-        "annotations": _annotations(),
+        "annotations": _annotations("Catalogue coverage"),
         "outputSchema": OUTPUT_SCHEMAS["get_coverage"],
     },
     {
@@ -308,7 +309,7 @@ TOOLS = [
             "required": ["source_id"],
             "additionalProperties": False,
         },
-        "annotations": _annotations(),
+        "annotations": _annotations("Get a source's history"),
         "outputSchema": OUTPUT_SCHEMAS["get_relationships"],
     },
     {
@@ -330,7 +331,7 @@ TOOLS = [
             "required": ["source_id"],
             "additionalProperties": False,
         },
-        "annotations": _annotations(),
+        "annotations": _annotations("Get one source"),
         "outputSchema": OUTPUT_SCHEMAS["get_source"],
     },
     {
@@ -406,7 +407,7 @@ TOOLS = [
             },
             "additionalProperties": False,
         },
-        "annotations": _annotations(),
+        "annotations": _annotations("List catalogue changes"),
         "outputSchema": OUTPUT_SCHEMAS["list_changes"],
     },
     {
@@ -431,7 +432,7 @@ TOOLS = [
             "required": ["source_id"],
             "additionalProperties": False,
         },
-        "annotations": _annotations(),
+        "annotations": _annotations("List a source's language editions"),
         "outputSchema": OUTPUT_SCHEMAS["list_expressions"],
     },
     {
@@ -465,7 +466,7 @@ TOOLS = [
             "required": ["citation"],
             "additionalProperties": False,
         },
-        "annotations": _annotations(),
+        "annotations": _annotations("Resolve a citation"),
         "outputSchema": OUTPUT_SCHEMAS["resolve_citation"],
     },
     {
@@ -543,7 +544,7 @@ TOOLS = [
             "required": ["query"],
             "additionalProperties": False,
         },
-        "annotations": _annotations(),
+        "annotations": _annotations("Retrieve legal evidence"),
         "outputSchema": OUTPUT_SCHEMAS["retrieve_evidence"],
     },
     {
@@ -581,7 +582,7 @@ TOOLS = [
             "required": ["query"],
             "additionalProperties": False,
         },
-        "annotations": _annotations(),
+        "annotations": _annotations("Search the catalogue"),
         "outputSchema": OUTPUT_SCHEMAS["search_catalogue"],
     },
     {
@@ -648,7 +649,7 @@ TOOLS = [
             "required": ["query"],
             "additionalProperties": False,
         },
-        "annotations": _annotations(),
+        "annotations": _annotations("Search published texts"),
         "outputSchema": OUTPUT_SCHEMAS["search_text"],
     },
 ]

@@ -50,6 +50,7 @@
       "additionalProperties": false
     },
     "annotations": {
+      "title": "Check a legal claim and issue a signed receipt",
       "readOnlyHint": true,
       "destructiveHint": false,
       "idempotentHint": true,
@@ -687,6 +688,7 @@
       "additionalProperties": false
     },
     "annotations": {
+      "title": "Check cited parts",
       "readOnlyHint": true,
       "destructiveHint": false,
       "idempotentHint": true,
@@ -1307,6 +1309,7 @@
       "additionalProperties": false
     },
     "annotations": {
+      "title": "Get one part of a text exactly",
       "readOnlyHint": true,
       "destructiveHint": false,
       "idempotentHint": true,
@@ -1915,6 +1918,7 @@
       "additionalProperties": false
     },
     "annotations": {
+      "title": "Get one change",
       "readOnlyHint": true,
       "destructiveHint": false,
       "idempotentHint": true,
@@ -2118,6 +2122,7 @@
       "additionalProperties": false
     },
     "annotations": {
+      "title": "Catalogue coverage",
       "readOnlyHint": true,
       "destructiveHint": false,
       "idempotentHint": true,
@@ -2245,6 +2250,7 @@
       "additionalProperties": false
     },
     "annotations": {
+      "title": "Get a source's history",
       "readOnlyHint": true,
       "destructiveHint": false,
       "idempotentHint": true,
@@ -2644,6 +2650,7 @@
       "additionalProperties": false
     },
     "annotations": {
+      "title": "Get one source",
       "readOnlyHint": true,
       "destructiveHint": false,
       "idempotentHint": true,
@@ -3298,6 +3305,7 @@
       "additionalProperties": false
     },
     "annotations": {
+      "title": "List catalogue changes",
       "readOnlyHint": true,
       "destructiveHint": false,
       "idempotentHint": true,
@@ -3538,6 +3546,7 @@
       "additionalProperties": false
     },
     "annotations": {
+      "title": "List a source's language editions",
       "readOnlyHint": true,
       "destructiveHint": false,
       "idempotentHint": true,
@@ -3820,6 +3829,7 @@
       "additionalProperties": false
     },
     "annotations": {
+      "title": "Resolve a citation",
       "readOnlyHint": true,
       "destructiveHint": false,
       "idempotentHint": true,
@@ -4704,6 +4714,7 @@
       "additionalProperties": false
     },
     "annotations": {
+      "title": "Retrieve legal evidence",
       "readOnlyHint": true,
       "destructiveHint": false,
       "idempotentHint": true,
@@ -6697,6 +6708,7 @@
       "additionalProperties": false
     },
     "annotations": {
+      "title": "Search the catalogue",
       "readOnlyHint": true,
       "destructiveHint": false,
       "idempotentHint": true,
@@ -7371,6 +7383,7 @@
       "additionalProperties": false
     },
     "annotations": {
+      "title": "Search published texts",
       "readOnlyHint": true,
       "destructiveHint": false,
       "idempotentHint": true,

@@ -54,6 +54,7 @@ export type Tool = {
     required?: string[];
   };
   annotations?: {
+    title?: string;
     readOnlyHint?: boolean;
     destructiveHint?: boolean;
     idempotentHint?: boolean;

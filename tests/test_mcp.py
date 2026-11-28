@@ -237,13 +237,18 @@ def test_2026_discover_ping_wire_errors_2025_03_26_and_paginated_tools_list(stor
     assert pages == 3 and len(collected_26) == 13
     names = [t["name"] for t in collected_26]
     assert names == sorted(names)
-    expected_annotations = {
+    expected_flags = {
         "readOnlyHint": True,
         "destructiveHint": False,
         "idempotentHint": True,
         "openWorldHint": False,
     }
-    assert all(t["annotations"] == expected_annotations for t in collected_26)
+    assert all(
+        t["annotations"] == {"title": t["title"], **expected_flags}
+        and isinstance(t["annotations"]["title"], str)
+        and t["annotations"]["title"]
+        for t in collected_26
+    )
     assert all("outputSchema" in t for t in collected_26)
 
     # Multi-page tools/list under 2025-06-18 omits nextCursor on last page and omits outputSchema
