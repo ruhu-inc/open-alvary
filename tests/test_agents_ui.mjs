@@ -16,6 +16,8 @@ import {
   listInWords,
   stripOuterQuotes,
   sentLength,
+  passagesInQuotes,
+  providerErrorNotice,
 } from "../web/public/agents/site.js";
 import { registerActions } from "../web/public/agents/site-actions.js";
 import {
@@ -664,6 +666,27 @@ describe("what a person testing the page found (2026-11-28)", () => {
     assert.equal(sectionHref("https://open.alvary.ai/sources/ng-foi-act-2011", "s. 1(1)"), "https://open.alvary.ai/sources/ng-foi-act-2011#section-1");
     assert.equal(sectionHref("https://open.alvary.ai/sources/x#part-3", "s. 1"), "https://open.alvary.ai/sources/x#part-3");
     assert.equal(sectionHref("javascript:alert(1)", "s. 1"), null);
+  });
+
+  it("pairs quotation marks in order, so the words between two short quotes are no passage", () => {
+    const answer =
+      'The memo says "any citizen", but FOI Act 2011, s. 1(1) (Nigeria) says "any person". It reads: "the right of any person to access or request information".';
+    assert.deepEqual(passagesInQuotes(answer), ["the right of any person to access or request information"]);
+    assert.deepEqual(passagesInQuotes("\u201cshort\u201d and \u201canother short one\u201d"), []);
+  });
+
+  it("says what went wrong with the AI provider in plain words, without its JSON", () => {
+    const busy = providerErrorNotice(
+      new Error('LLM HTTP 503: [{"error":{"code":503,"message":"The model is overloaded. Please try again later.","status":"UNAVAILABLE"}}]'),
+    );
+    assert.match(busy.text, /^Your AI provider is busy/);
+    assert.equal(busy.detail, "The model is overloaded. Please try again later.");
+    const quota = providerErrorNotice(new Error('LLM HTTP 429: [{"error":{"code":429,"message":"Quota exceeded. Please retry in 41.2s. trunc'));
+    assert.match(quota.text, /Wait about 42 seconds/);
+    assert.match(providerErrorNotice(new Error("LLM HTTP 429: GenerateRequestsPerDayPerProjectPerModel")).text, /today's allowance/);
+    assert.match(providerErrorNotice(new Error('LLM HTTP 401: {"error":{"message":"invalid x-api-key"}}')).text, /did not accept the key/);
+    assert.match(providerErrorNotice(new Error("LLM HTTP 404: model not found"), { model: "models/x-1" }).text, /\u201cx-1\u201d/);
+    assert.doesNotMatch(providerErrorNotice(new Error("LLM HTTP 500: {}")).text, /\{/);
   });
 
   it("never offers one provider's saved key to another", () => {

@@ -243,11 +243,23 @@ function shortenWords(text, max) {
   return words.length > max ? `${words.slice(0, max - 1).trimEnd()}\u2026` : words;
 }
 
-/** The passages a visitor's message puts in quotation marks, 40 characters or longer. */
-export function quotedInMessage(text) {
+/**
+ * The passages a text puts in quotation marks, 40 characters or longer. Marks are paired in order,
+ * so the words between two short quotes ("any citizen", but … says "any person") are never taken
+ * for a passage.
+ */
+export function passagesInQuotes(text) {
   const passages = [];
-  for (const m of String(text || "").matchAll(/["\u201c]([^"\u201c\u201d]{40,2000})["\u201d]/g)) passages.push(m[1].trim());
-  return passages.slice(0, 3);
+  for (const m of String(text || "").matchAll(/["\u201c]([^"\u201c\u201d]*)["\u201d]/g)) {
+    const passage = m[1].trim();
+    if (passage.length >= 40 && passage.length <= 2000) passages.push(passage);
+  }
+  return passages;
+}
+
+/** The passages a visitor's message puts in quotation marks: at most three are checked. */
+export function quotedInMessage(text) {
+  return passagesInQuotes(text).slice(0, 3);
 }
 
 export function installCheckClaimInterceptor({
@@ -566,9 +578,7 @@ function comparableWords(text) {
 // more, and every quote block.
 function quotedPassages(block) {
   if (block.tagName === "BLOCKQUOTE") return [block.textContent];
-  const passages = [];
-  for (const m of block.textContent.matchAll(/["\u201c]([^"\u201c\u201d]{40,})["\u201d]/g)) passages.push(m[1]);
-  return passages;
+  return passagesInQuotes(block.textContent);
 }
 
 const QUOTE_MARKS = {
@@ -2758,7 +2768,7 @@ class LawCheckController {
       // so a wrong quote of theirs gets its own card and not only the AI's correction.
       await this._checkVisitorQuotes(text, turn);
       const answer = cleanAnswerText(result.text) || "The AI gave no written answer.";
-      this._appendAi(answer, this._answerSummary(turn), { steps: turn.steps, quotes: turn.quotes });
+      this._appendAi(answer, this._answerSummary(turn, answer), { steps: turn.steps, quotes: turn.quotes });
       this._announce(
         turn.checked > 0
           ? `Answer ready. ${turn.checked} ${turn.checked === 1 ? "quote" : "quotes"} checked: ${turn.found} found, ${turn.notFound} not found.`
@@ -2834,9 +2844,14 @@ class LawCheckController {
     }
   }
 
-  _answerSummary(turn) {
+  _answerSummary(turn, answer = "") {
     if (turn.checked === 0 && turn.failed === 0) {
-      return { text: "Nothing in this answer was checked.", tone: "red" };
+      // A reply that quotes no law (a greeting, a question back) has nothing to check: said plainly,
+      // not as a warning. One that quotes a law unchecked is the warning.
+      const quotes = passagesInQuotes(answer).length > 0 || /^\s*>/m.test(answer);
+      return quotes
+        ? { text: "Nothing in this answer was checked.", tone: "red" }
+        : { text: "This answer quotes no law, so there was nothing to check.", tone: "" };
     }
     const parts = [`This answer: ${turn.checked} ${turn.checked === 1 ? "quote" : "quotes"} checked`];
     if (turn.checked > 0) parts.push(`${turn.found} found, ${turn.notFound} not found`);
