@@ -21,8 +21,11 @@ def test_vercel_snapshot_serves_prefixed_api_and_verified_downloads(tmp_path):
     assert client.post("/api/sources", json={}).status_code == 405
     # A website address answers with the website's page, never with data.
     assert client.get("/sources").text == "<h1>Open Alvary</h1>"
+    # The committed 2026-10-05 release was cut when three Nigerian records' status was "unknown"; the
+    # catalogue now says "current" (checkpoint 18290ac6), so the release no longer matches it and is not
+    # offered, as on the live site. A listed release's files must still match their hashes.
     releases = client.get("/api/releases").json()
-    assert releases
+    assert releases == []
     for release in releases:
         for filename, info in release["files"].items():
             response = client.get("/api" + release["download_base"] + "/" + filename)
