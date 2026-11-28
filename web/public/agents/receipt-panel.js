@@ -9,6 +9,7 @@ import {
   formatLongDate,
   recordLinesForReceipt,
   safeLinkHref,
+  sectionHref,
   wordsLineForReceipt,
 } from "./receipt-card.js";
 
@@ -102,7 +103,7 @@ function receiptTab(card) {
 
   const lines = el("ul", "rp-lines");
   if (r.part) {
-    lines.append(el("li", null, wordsLineForReceipt(r).text));
+    lines.append(el("li", null, wordsLineForReceipt(r, c).text));
     for (const line of recordLinesForReceipt(r))
       lines.append(el("li", line.secondary ? "secondary" : null, line.text));
     tab.append(lines);
@@ -175,7 +176,7 @@ function receiptTab(card) {
   tab.append(meta);
 
   const links = el("div", "rp-links");
-  const recordHref = safeLinkHref(r.part?.record_url);
+  const recordHref = sectionHref(r.part?.record_url, r.part?.pinpoint);
   if (recordHref) links.append(newTabLink(recordHref, "Open the section ↗"));
   const officialHref = safeLinkHref(r.part?.official_url);
   if (officialHref) links.append(newTabLink(officialHref, "Official source ↗"));

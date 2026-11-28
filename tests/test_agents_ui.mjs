@@ -14,6 +14,8 @@ import {
   stepLineForEvent,
   pickClaimScope,
   listInWords,
+  stripOuterQuotes,
+  sentLength,
 } from "../web/public/agents/site.js";
 import { registerActions } from "../web/public/agents/site-actions.js";
 import {
@@ -23,6 +25,9 @@ import {
   bandHeadlineForReceipt,
   safeLinkHref,
   wordDifference,
+  marksOnlyDifference,
+  sectionHash,
+  sectionHref,
 } from "../web/public/agents/receipt-card.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -607,5 +612,62 @@ describe("every published text, not a short list (owner, 2026-11-27)", () => {
       assert.doesNotMatch(net, /Nigerian/, file);
       assert.doesNotMatch(net, /language \(\\"en\\"\)/, file);
     }
+  });
+});
+
+describe("what a person testing the page found (2026-11-28)", () => {
+  const siteSrc = fs.readFileSync(path.join(repoRoot, "web/public/agents/site.js"), "utf8");
+  const section =
+    "(1) Notwithstanding anything contained in any other Act, law or regulation, the right of any person to access or request information, whether or not contained in any written form, which is in the custody or possession of any public official, agency or institution howsoever described, is established.";
+
+  it("takes off quotation marks wrapped around a pasted quote, and only those", () => {
+    assert.equal(stripOuterQuotes('"the right of any person to access"'), "the right of any person to access");
+    assert.equal(stripOuterQuotes("\u201cthe right of any person\u201d."), "the right of any person");
+    assert.equal(stripOuterQuotes("\u00abdroit de toute personne\u00bb"), "droit de toute personne");
+    assert.equal(stripOuterQuotes("the right \u201cof\u201d any person"), "the right \u201cof\u201d any person");
+    assert.equal(stripOuterQuotes('"person" means any "citizen"'), '"person" means any "citizen"');
+    assert.equal(stripOuterQuotes("  plain words  "), "plain words");
+  });
+
+  it("counts a field's length the same way in the counter and the error", () => {
+    assert.equal(sentLength("  word  "), 4);
+    assert.match(siteSrc, /const len = sentLength\(input\.value\)/);
+    assert.doesNotMatch(siteSrc, /That is \$\{\[\.\.\.input\.value\]\.length\}/);
+  });
+
+  it("says when only capital letters or punctuation differ, with the section's own words", () => {
+    const quote = "The right of any person to access or request information, whether.";
+    assert.equal(wordDifference(quote, section), null);
+    assert.equal(
+      marksOnlyDifference(quote, section),
+      "the right of any person to access or request information, whether",
+    );
+    assert.equal(marksOnlyDifference(quote.replace("person", "citizen"), section), null);
+    const receipt = { findings: { quote: "absent", opening_text: section }, part: { pinpoint: "s. 1(1)" } };
+    assert.equal(
+      wordsLineForReceipt(receipt, { quote }).text,
+      "Not found exactly as quoted in s. 1(1): the capital letters or punctuation differ",
+    );
+    assert.equal(
+      wordsLineForReceipt(receipt, { quote: quote.replace("person", "citizen") }).text,
+      "These words are not in s. 1(1) of the published text",
+    );
+    assert.equal(marksOnlyDifference("too short", section), null);
+  });
+
+  it("links a receipt to its section's place on the law's page", () => {
+    assert.equal(sectionHash("s. 1(1)"), "#section-1");
+    assert.equal(sectionHash("ss. 12A(3)"), "#section-12A");
+    assert.equal(sectionHash("art. 5"), "#article-5");
+    assert.equal(sectionHash("Article 27"), "#article-27");
+    assert.equal(sectionHash("Schedule 2"), "");
+    assert.equal(sectionHref("https://open.alvary.ai/sources/ng-foi-act-2011", "s. 1(1)"), "https://open.alvary.ai/sources/ng-foi-act-2011#section-1");
+    assert.equal(sectionHref("https://open.alvary.ai/sources/x#part-3", "s. 1"), "https://open.alvary.ai/sources/x#part-3");
+    assert.equal(sectionHref("javascript:alert(1)", "s. 1"), null);
+  });
+
+  it("never offers one provider's saved key to another", () => {
+    assert.match(siteSrc, /const profileForChoice = \(\) =>/);
+    assert.doesNotMatch(siteSrc, /const existing = byok\.getSelectedByokProfile\(\);/);
   });
 });

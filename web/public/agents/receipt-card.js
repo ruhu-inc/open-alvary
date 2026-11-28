@@ -109,7 +109,25 @@ export function safeLinkHref(value) {
   }
 }
 
-export function wordsLineForReceipt(receipt) {
+// Where a pinpoint is on the law's page: "s. 1(1)" at #section-1, "art. 5" at #article-5, as the
+// site's reader names them. A pinpoint it cannot place gives no address, and the page opens at its top.
+export function sectionHash(pinpoint) {
+  const text = String(pinpoint || "").trim();
+  const section = /^(?:ss?|secs?|sect|sections?)\.?\s*(\d+[A-Za-z]*)\b/i.exec(text);
+  if (section) return `#section-${section[1]}`;
+  const article = /^(?:arts?|articles?)\.?\s*(\d+[A-Za-z]*)\b/i.exec(text);
+  if (article) return `#article-${article[1]}`;
+  return "";
+}
+
+// The record's address with the part's own place on the page, when the address has none.
+export function sectionHref(recordUrl, pinpoint) {
+  const href = safeLinkHref(recordUrl);
+  if (!href || href.includes("#")) return href;
+  return href + sectionHash(pinpoint);
+}
+
+export function wordsLineForReceipt(receipt, claim = null) {
   const quoteFinding = receipt?.findings?.quote;
   const pinpoint = receipt?.part?.pinpoint || "this section";
   switch (quoteFinding) {
@@ -119,6 +137,17 @@ export function wordsLineForReceipt(receipt) {
     case "with_omissions":
       return { icon: "exclamation", text: "Quoted words found, with words left out" };
     case "absent":
+      // Every word is there, in order: only capital letters or punctuation differ.
+      if (
+        typeof claim?.quote === "string" &&
+        typeof receipt?.findings?.opening_text === "string" &&
+        marksOnlyDifference(claim.quote, receipt.findings.opening_text)
+      ) {
+        return {
+          icon: "cross",
+          text: `Not found exactly as quoted in ${pinpoint}: the capital letters or punctuation differ`,
+        };
+      }
       return { icon: "cross", text: `These words are not in ${pinpoint} of the published text` };
     case "not_given":
     default:
@@ -256,6 +285,27 @@ export function wordDifference(quote, sectionText) {
   };
 }
 
+// A quote that was not found although every one of its words is in the section, in order: only
+// capital letters or punctuation differ ("The right…" for "the right…", a full stop for a comma).
+// Returns the section's own words for that stretch, or null.
+export function marksOnlyDifference(quote, sectionText) {
+  if (typeof quote !== "string" || typeof sectionText !== "string") return null;
+  const split = (t) => t.trim().split(/\s+/).filter(Boolean);
+  const norm = (w) => w.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+  const q = split(quote).map(norm).filter(Boolean);
+  const words = split(sectionText);
+  const s = words.map(norm);
+  if (q.length < 4) return null;
+  for (let i = 0; i + q.length <= s.length; i++) {
+    if (q.every((w, k) => w === s[i + k])) {
+      const found = words.slice(i, i + q.length);
+      const shown = found.length > 40 ? [...found.slice(0, 40), "…"] : found;
+      return shown.join(" ");
+    }
+  }
+  return null;
+}
+
 function createSvgIcon(kind, size = 18) {
   const svg = document.createElementNS(SVG_NS, "svg");
   svg.setAttribute("viewBox", "0 0 20 20");
@@ -391,6 +441,12 @@ const CARD_CSS = `
     color: #1a1a1a;
     text-decoration: none;
     padding: 0 2px;
+  }
+  .diff-note {
+    display: block;
+    margin-bottom: 4px;
+    font: 13px/1.5 "DM Sans", system-ui, -apple-system, sans-serif;
+    color: #4a4a4a;
   }
   /* Beside the receipt panel, the card is the verdict; the passage, the quote and the signature
      details are in the panel. */
@@ -575,6 +631,11 @@ const CARD_CSS = `
     text-wrap: pretty;
   }
   .nearest-box {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 12px;
     padding: 10px 12px;
     background: #fafafa;
     border: 1px solid #f0f0f0;
@@ -843,7 +904,7 @@ function getCardTemplate() {
         <div class="body" data-ref="body">
           <ul class="lines" data-ref="lines" hidden></ul>
           <div class="diff" data-ref="diff" hidden>
-            <p class="section-label">Where your quote differs from the section</p>
+            <p class="section-label" data-ref="diff-label">Where your quote differs from the section</p>
             <p class="diff-text" data-ref="diff-text" dir="auto"></p>
           </div>
           <div data-ref="grey-area" hidden></div>
@@ -889,7 +950,7 @@ export class OaReceiptElement extends BaseElement {
     this._receipt = null;
     this._claim = null;
     this._verification = null;
-    this._source = "form"; // "form" | "agent" | "recheck"
+    this._source = "form"; // "form" | "agent" | "yours" (the visitor's quote, on the AI's section) | "recheck"
     this._collapsed = false;
     this._wasDetailsOpenBeforePrint = false;
     this._readerLinks = [];
@@ -1023,7 +1084,7 @@ export class OaReceiptElement extends BaseElement {
   addReaderLink(sourceId, pinpoint) {
     if (!this._els) return;
     const container = this._els["reader-links"];
-    const href = `/sources/${encodeURIComponent(sourceId)}`;
+    const href = `/sources/${encodeURIComponent(sourceId)}${sectionHash(pinpoint)}`;
     const label = pinpoint ? `Open ${pinpoint} in the reader ↗` : "Open in the reader ↗";
     if (this._readerLinks.some((l) => l.href === href && l.label === label)) return;
     this._readerLinks.push({ href, label });
@@ -1104,7 +1165,7 @@ export class OaReceiptElement extends BaseElement {
     this._els["band-text"].textContent = `${bandHeadlineForReceipt(r)} · Checked ${assessedDate}`;
 
     // Title
-    this._els["ai-suggested"].hidden = this._source !== "agent";
+    this._els["ai-suggested"].hidden = this._source !== "agent" && this._source !== "yours";
     if (r.part) {
       this._els.title.textContent = `${r.part.title}, ${r.part.pinpoint}`;
     } else if (c?.citation) {
@@ -1118,7 +1179,7 @@ export class OaReceiptElement extends BaseElement {
     linesEl.replaceChildren();
     if (!isGrey) {
       linesEl.hidden = false;
-      const wl = wordsLineForReceipt(r);
+      const wl = wordsLineForReceipt(r, c);
       linesEl.appendChild(this._makeFindingLi(wl.icon, wl.text, false));
       for (const rl of recordLinesForReceipt(r)) {
         linesEl.appendChild(this._makeFindingLi(rl.icon, rl.text, Boolean(rl.secondary)));
@@ -1130,12 +1191,23 @@ export class OaReceiptElement extends BaseElement {
     // Where a quote that was not found departs from the section's opening words
     const diffBox = this._els.diff;
     const diffText = this._els["diff-text"];
+    const diffLabel = this._els["diff-label"];
     diffText.replaceChildren();
-    const difference =
-      r.status === "wording_differs" && c?.quote && r.findings?.opening_text
-        ? wordDifference(c.quote, r.findings.opening_text)
-        : null;
-    if (difference) {
+    if (diffLabel) diffLabel.textContent = "Where your quote differs from the section";
+    const canCompare = r.status === "wording_differs" && c?.quote && r.findings?.opening_text;
+    const difference = canCompare ? wordDifference(c.quote, r.findings.opening_text) : null;
+    const marksOnly = canCompare && !difference ? marksOnlyDifference(c.quote, r.findings.opening_text) : null;
+    if (marksOnly) {
+      // The words are all there: say so, and show how the section writes them.
+      diffBox.hidden = false;
+      if (diffLabel) diffLabel.textContent = "Your words are in the section, written differently";
+      if (r.part?.language) diffText.setAttribute("lang", r.part.language);
+      const note = document.createElement("span");
+      note.className = "diff-note";
+      note.textContent =
+        "The check compares capital letters and punctuation exactly. The section writes these words: ";
+      diffText.append(note, document.createTextNode(`\u201c${marksOnly}\u201d`));
+    } else if (difference) {
       diffBox.hidden = false;
       if (r.part?.language) diffText.setAttribute("lang", r.part.language);
       const add = (node) => diffText.appendChild(node);
@@ -1194,7 +1266,26 @@ export class OaReceiptElement extends BaseElement {
         if (r.nearest) {
           const box = document.createElement("div");
           box.className = "nearest-box";
-          box.textContent = `Nearest enclosing section: ${r.nearest.title}, ${r.nearest.pinpoint}`;
+          const words = document.createElement("span");
+          words.textContent = `Nearest enclosing section: ${r.nearest.title}, ${r.nearest.pinpoint}`;
+          box.appendChild(words);
+          if (c?.quote && (r.nearest.anchor_id || r.nearest.pinpoint)) {
+            // The same words, checked against the section that holds the one named.
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "alt-btn";
+            btn.textContent = `Check ${r.nearest.pinpoint || "this section"} instead`;
+            btn.addEventListener("click", () => {
+              this.dispatchEvent(
+                new CustomEvent("oa-check-alternative", {
+                  bubbles: true,
+                  composed: true,
+                  detail: { alternative: r.nearest, receipt: r, claim: c },
+                }),
+              );
+            });
+            box.appendChild(btn);
+          }
           greyArea.appendChild(box);
         }
       } else if (r.status === "ambiguous") {
@@ -1340,7 +1431,7 @@ export class OaReceiptElement extends BaseElement {
     // Actions bar
     const actionsEl = this._els.actions;
     actionsEl.replaceChildren();
-    const recordHref = safeLinkHref(r.part?.record_url);
+    const recordHref = sectionHref(r.part?.record_url, r.part?.pinpoint);
     if (recordHref) {
       actionsEl.appendChild(this._makeNewTabLink(recordHref, "Open the section ↗"));
     }
@@ -1484,7 +1575,10 @@ export class OaReceiptElement extends BaseElement {
     const lines = [
       title,
       `Checked: ${formatLongDate(r.claim?.assessed_at || r.issued_at)}`,
-      `Result: ${[bandHeadlineForReceipt(r), ...recordLinesForReceipt(r).map((l) => l.text)].join(". ")}`,
+      `Result: ${[bandHeadlineForReceipt(r), ...recordLinesForReceipt(r).map((l) => l.text)]
+        .map((t) => String(t).trim().replace(/[.\s]+$/, ""))
+        .filter(Boolean)
+        .join(". ")}.`,
     ];
     if (c?.quote) lines.push(`Quote: "${c.quote}"`);
     if (r.statement) lines.push(r.statement);
