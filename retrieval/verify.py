@@ -48,6 +48,16 @@ _ELLIPSIS_SPLIT = re.compile(r"(?:…|\.\.\.)+")
 _CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 
 
+class InvalidClaimArguments(ValueError):
+    """check_claim's arguments are wrong. The message says which one and how, and is safe to send back."""
+
+
+# Optional arguments that mean "not sent" when they arrive empty. Some AI models send every argument a
+# tool lists, with "" or null for the ones they have no value for (Gemini through its OpenAI-compatible
+# endpoint does), and refusing those would fail their first check every time.
+BLANK_MEANS_ABSENT = frozenset({"citation", "anchor_id", "as_of", "jurisdiction", "language"})
+
+
 class VerifyToolError(Exception):
     """Structured tool-level error returned as an MCP tool error (never an uncaught exception)."""
 
@@ -328,36 +338,43 @@ def match_quote(part_text: str, quote: str) -> dict:
 def _validate_arguments(arguments: dict, today: date) -> tuple[dict, dict]:
     """Validate check_claim arguments per §7. Returns ``(parsed, echoed_claim)``."""
     if not isinstance(arguments, dict):
-        raise ValueError("Arguments must be a JSON object")
+        raise InvalidClaimArguments("Arguments must be a JSON object")
     unknown = set(arguments) - ALLOWED_ARGUMENTS
     if unknown:
-        raise ValueError(f"Unknown argument(s): {', '.join(sorted(unknown))}")
+        raise InvalidClaimArguments(f"Unknown argument(s): {', '.join(sorted(unknown))}")
+    arguments = {
+        name: value
+        for name, value in arguments.items()
+        if not (
+            name in BLANK_MEANS_ABSENT and (value is None or (isinstance(value, str) and not value.strip()))
+        )
+    }
 
     citation = arguments.get("citation")
     anchor_id = arguments.get("anchor_id")
     if citation is None and anchor_id is None:
-        raise ValueError("One of citation or anchor_id is required")
+        raise InvalidClaimArguments("One of citation or anchor_id is required")
     if "citation" in arguments and "anchor_id" in arguments:
         # With both, the part is found by anchor_id and the citation would be digested unchecked: a
         # receipt for one section could then be shown beside a claim naming another.
-        raise ValueError("Send citation or anchor_id, not both")
+        raise InvalidClaimArguments("Send citation or anchor_id, not both")
 
     echoed: dict[str, object] = {}
 
     if "citation" in arguments:
         if not isinstance(citation, str) or not (1 <= len(citation) <= 600) or not citation.strip():
-            raise ValueError("citation must be a non-empty string of 1 to 600 characters")
+            raise InvalidClaimArguments("citation must be a non-empty string of 1 to 600 characters")
         echoed["citation"] = citation
 
     if "anchor_id" in arguments:
         if not isinstance(anchor_id, str) or not (1 <= len(anchor_id) <= 160) or not anchor_id.strip():
-            raise ValueError("anchor_id must be a non-empty string of 1 to 160 characters")
+            raise InvalidClaimArguments("anchor_id must be a non-empty string of 1 to 160 characters")
         echoed["anchor_id"] = anchor_id
 
     quote = arguments.get("quote")
     if "quote" in arguments:
         if not isinstance(quote, str) or not (1 <= len(quote) <= 2000):
-            raise ValueError("quote must be a string of 1 to 2,000 characters")
+            raise InvalidClaimArguments("quote must be a string of 1 to 2,000 characters")
         echoed["quote"] = quote
 
     as_of: date | None = None
@@ -370,12 +387,12 @@ def _validate_arguments(arguments: dict, today: date) -> tuple[dict, dict]:
             try:
                 as_of = date.fromisoformat(raw_as_of)
             except ValueError as exc:
-                raise ValueError("as_of must be a valid ISO date (YYYY-MM-DD)") from exc
+                raise InvalidClaimArguments("as_of must be a valid ISO date (YYYY-MM-DD)") from exc
             echoed["as_of"] = raw_as_of
         else:
-            raise ValueError("as_of must be an ISO date string (YYYY-MM-DD)")
+            raise InvalidClaimArguments("as_of must be an ISO date string (YYYY-MM-DD)")
         if as_of > today:
-            raise ValueError("as_of must not be after today in UTC")
+            raise InvalidClaimArguments("as_of must not be after today in UTC")
 
     jurisdiction = arguments.get("jurisdiction")
     if "jurisdiction" in arguments:
@@ -384,7 +401,7 @@ def _validate_arguments(arguments: dict, today: date) -> tuple[dict, dict]:
             or not (2 <= len(jurisdiction) <= 40)
             or not JURISDICTION_RE.fullmatch(jurisdiction)
         ):
-            raise ValueError("jurisdiction must be a valid jurisdiction code (e.g. 'ng')")
+            raise InvalidClaimArguments("jurisdiction must be a valid jurisdiction code (e.g. 'ng')")
         echoed["jurisdiction"] = jurisdiction
 
     language = arguments.get("language")
@@ -394,13 +411,13 @@ def _validate_arguments(arguments: dict, today: date) -> tuple[dict, dict]:
             or not (2 <= len(language) <= 20)
             or not LANGUAGE_RE.fullmatch(language)
         ):
-            raise ValueError("language must be a valid language tag (e.g. 'en')")
+            raise InvalidClaimArguments("language must be a valid language tag (e.g. 'en')")
         echoed["language"] = language
 
     reading = arguments.get("reading")
     if "reading" in arguments:
         if not isinstance(reading, str) or len(reading) > 600:
-            raise ValueError("reading must be a string of up to 600 characters")
+            raise InvalidClaimArguments("reading must be a string of up to 600 characters")
         echoed["reading"] = reading
 
     parsed = {

@@ -18,7 +18,13 @@ from api.receipts import (
     verify_receipt,
 )
 from api.repositories import LegacyRepository
-from retrieval.verify import VerifyToolError, match_quote, normalize_quote, verify_claim
+from retrieval.verify import (
+    InvalidClaimArguments,
+    VerifyToolError,
+    match_quote,
+    normalize_quote,
+    verify_claim,
+)
 from schema.models import (
     Citation,
     Corpus,
@@ -811,6 +817,33 @@ def test_input_validation_and_missing_signer(cat: LegacyCatalogue, signer: Recei
     with pytest.raises(VerifyToolError) as exc:
         verify_claim(cat, {"citation": "Freedom of Information Act 2011, s. 1"}, signer=None, today=TODAY)
     assert exc.value.code == "temporarily_unavailable"
+
+
+def test_blank_optional_arguments_count_as_not_sent(cat: LegacyCatalogue, signer: ReceiptSigner):
+    # Gemini sends every argument a tool lists, with "" for the ones it has no value for.
+    plain = verify_claim(cat, {"citation": "Freedom of Information Act 2011"}, signer=signer, today=TODAY)
+    blanks = verify_claim(
+        cat,
+        {
+            "citation": "Freedom of Information Act 2011",
+            "anchor_id": "",
+            "as_of": "",
+            "language": " ",
+            "jurisdiction": None,
+        },
+        signer=signer,
+        today=TODAY,
+    )
+    assert blanks["claim"] == plain["claim"] == {"citation": "Freedom of Information Act 2011"}
+    assert blanks["receipt"]["status"] == plain["receipt"]["status"]
+    # Blank on both sides still names no part, and the message says so.
+    with pytest.raises(InvalidClaimArguments, match="citation or anchor_id"):
+        verify_claim(cat, {"citation": "", "anchor_id": ""}, signer=signer, today=TODAY)
+    # A blank quote is not optional: it stays an error.
+    with pytest.raises(InvalidClaimArguments, match="quote"):
+        verify_claim(
+            cat, {"citation": "Freedom of Information Act 2011", "quote": ""}, signer=signer, today=TODAY
+        )
 
 
 def test_allowed_source_ids_enforced_before_signing(cat: LegacyCatalogue, signer: ReceiptSigner):
